@@ -1,5 +1,6 @@
 import httpx
 import hashlib
+import hmac
 import json
 import logging
 
@@ -53,7 +54,10 @@ class PlisioClient:
         data_str = json.dumps(filtered, separators=(",", ":"), sort_keys=True)
         # MD5 is required by the Plisio IPN specification — not our choice.
         # See: https://plisio.net/documentation/endpoints/callbacks
-        expected = hashlib.md5(
-            (self.secret_key + data_str).encode("utf-8")
+        # usedforsecurity=False tells static-analysis tools this is a
+        # protocol-mandated checksum, not a password/secrets hash.
+        expected = hashlib.md5(  # noqa: S324
+            (self.secret_key + data_str).encode("utf-8"),
+            usedforsecurity=False,
         ).hexdigest()
-        return expected == verify_hash
+        return hmac.compare_digest(expected, verify_hash)

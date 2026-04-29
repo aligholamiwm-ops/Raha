@@ -162,7 +162,8 @@ async def update_ticket_status(
 ) -> TicketModel:
     update_data = payload.to_dict()
     if "status" in update_data:
-        update_data["status"] = update_data["status"].value if hasattr(update_data["status"], "value") else update_data["status"]
+        status_val = update_data["status"]
+        update_data["status"] = status_val.value if hasattr(status_val, "value") else status_val
     update_data["updated_at"] = datetime.now(timezone.utc)
     result = await db.tickets.find_one_and_update(
         {"ticket_id": ticket_id},

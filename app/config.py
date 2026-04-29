@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     PLISIO_API_KEY: str = ""
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 60
+    # Free trial
+    FREE_TRIAL_GB: float = 0.2  # 200 MB
 
     model_config = {
         "env_file": ".env",

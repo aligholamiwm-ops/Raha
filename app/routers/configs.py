@@ -12,11 +12,10 @@ from app.dependencies import get_current_user, require_admin
 from app.models.user import UserModel
 from app.models.vpn_config import VpnConfigModel, VpnConfigResponse, VpnConfigUpdate, ConfigStatus
 from app.integrations.xui_api import AsyncXUIClient
+from app.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-FREE_TRIAL_GB = 0.2  # 200 MB
 
 
 class PurchaseRequest(BaseModel):
@@ -149,6 +148,7 @@ async def purchase_config(
     payload: PurchaseRequest,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
 ) -> VpnConfigResponse:
     # ------------------------------------------------------------------
     # Resolve plan
@@ -166,7 +166,7 @@ async def purchase_config(
     # ------------------------------------------------------------------
     if not current_user.has_used_free_trial and price_usd == 0:
         is_free_trial = True
-        traffic_gb = FREE_TRIAL_GB
+        traffic_gb = settings.FREE_TRIAL_GB
         price_usd = 0.0
     elif not current_user.has_used_free_trial and price_usd > 0:
         # They haven't used trial yet but are purchasing — that's fine
@@ -200,9 +200,18 @@ async def purchase_config(
             )
 
     # ------------------------------------------------------------------
-    # Pick a server (round-robin: pick server with fewest active configs)
+    # Pick a server (pick server with fewest active configs for load balancing)
     # ------------------------------------------------------------------
-    server_doc = await db.servers.find_one({})
+    best_server = None
+    best_count = float("inf")
+    async for srv in db.servers.find({}):
+        count = await db.vpn_configs.count_documents(
+            {"server_name": srv["server_name"], "status": "active"}
+        )
+        if count < best_count:
+            best_count = count
+            best_server = srv
+    server_doc = best_server
     if not server_doc:
         raise HTTPException(status_code=503, detail="No servers available")
 
