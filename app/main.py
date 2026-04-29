@@ -1,0 +1,88 @@
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from app.database import connect_db, close_db
+from app.dependencies import limiter
+from app.routers import (
+    users_router,
+    servers_router,
+    configs_router,
+    clean_ips_router,
+    plans_router,
+    tickets_router,
+    discounts_router,
+    payments_router,
+    admin_router,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Connecting to MongoDB…")
+    await connect_db()
+    logger.info("Database connected and indexes ensured.")
+    yield
+    logger.info("Closing database connection…")
+    await close_db()
+
+
+app = FastAPI(
+    title="Raha VPN Backend",
+    description=(
+        "Production-ready Telegram Mini App backend for VPN configuration management. "
+        "Supports user wallet, plans, XUI panel integration, crypto payments via Plisio, "
+        "support tickets, referral system, and admin dashboard."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://t.me", "https://web.telegram.org"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+API_PREFIX = "/api/v1"
+
+app.include_router(users_router, prefix=f"{API_PREFIX}/users", tags=["Users"])
+app.include_router(servers_router, prefix=f"{API_PREFIX}/servers", tags=["Servers"])
+app.include_router(configs_router, prefix=f"{API_PREFIX}/configs", tags=["VPN Configs"])
+app.include_router(clean_ips_router, prefix=f"{API_PREFIX}/clean-ips", tags=["Clean IPs"])
+app.include_router(plans_router, prefix=f"{API_PREFIX}/plans", tags=["Plans"])
+app.include_router(tickets_router, prefix=f"{API_PREFIX}/tickets", tags=["Tickets"])
+app.include_router(discounts_router, prefix=f"{API_PREFIX}/discounts", tags=["Discounts"])
+app.include_router(payments_router, prefix=f"{API_PREFIX}/payments", tags=["Payments"])
+app.include_router(admin_router, prefix=f"{API_PREFIX}/admin", tags=["Admin"])
+
+
+@app.get("/health", tags=["Health"])
+async def health_check() -> dict:
+    return {"status": "ok", "service": "Raha VPN Backend"}
