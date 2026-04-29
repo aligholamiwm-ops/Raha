@@ -202,7 +202,7 @@ async def purchase_config(
     # ------------------------------------------------------------------
     # Pick a server (pick server with fewest active configs for load balancing)
     # ------------------------------------------------------------------
-    best_server = None
+    server_doc = None
     best_count = float("inf")
     async for srv in db.servers.find({}):
         count = await db.vpn_configs.count_documents(
@@ -210,8 +210,7 @@ async def purchase_config(
         )
         if count < best_count:
             best_count = count
-            best_server = srv
-    server_doc = best_server
+            server_doc = srv
     if not server_doc:
         raise HTTPException(status_code=503, detail="No servers available")
 
