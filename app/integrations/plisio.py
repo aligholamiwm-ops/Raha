@@ -51,6 +51,8 @@ class PlisioClient:
 
         filtered = {k: v for k, v in data.items() if k != "verify_hash"}
         data_str = json.dumps(filtered, separators=(",", ":"), sort_keys=True)
+        # MD5 is required by the Plisio IPN specification — not our choice.
+        # See: https://plisio.net/documentation/endpoints/callbacks
         expected = hashlib.md5(
             (self.secret_key + data_str).encode("utf-8")
         ).hexdigest()

@@ -110,7 +110,11 @@ def sync_config_statuses() -> dict:
                 try:
                     clients = await xui.get_client_info()
                 except Exception as exc:
-                    errors.append(f"{server_doc['server_name']}: {exc}")
+                    errors.append(f"{server_doc['server_name']}: connection or parse error")
+                    logger.warning(
+                        "sync_config_statuses error for %s: %s",
+                        server_doc["server_name"], exc,
+                    )
                     continue
 
                 now = datetime.now(timezone.utc)

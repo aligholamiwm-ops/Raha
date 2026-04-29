@@ -70,13 +70,10 @@ def _substitute_clean_ip(vless_uri: str, clean_ip: str) -> str:
         if host_rest.startswith("["):
             # IPv6
             bracket_end = host_rest.index("]")
-            port_and_rest = host_rest[bracket_end + 1:]
+            port_and_rest = host_rest[bracket_end + 1:]  # ":port?params#name"
         else:
             colon_idx = host_rest.index(":")
-            port_and_rest = host_rest[colon_idx:]
-
-        colon_idx = port_and_rest.index(":")
-        port_and_rest = port_and_rest[colon_idx:]  # ":port?params#name"
+            port_and_rest = host_rest[colon_idx:]  # ":port?params#name"
 
         return f"vless://{user_part}@{clean_ip}{port_and_rest}"
     except Exception:

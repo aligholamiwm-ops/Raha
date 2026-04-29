@@ -81,7 +81,8 @@ async def sync_configs(
         try:
             clients = await xui.get_client_info()
         except Exception as exc:
-            errors.append(f"{server_doc['server_name']}: {exc}")
+            errors.append(f"{server_doc['server_name']}: connection or parse error")
+            logger.warning("sync_configs error for %s: %s", server_doc["server_name"], exc)
             continue
 
         servers_updated += 1

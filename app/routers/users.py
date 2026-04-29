@@ -30,7 +30,6 @@ async def update_my_profile(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> UserModel:
     # Users can only update non-privileged fields
-    allowed = {}
     if update.wallet_balance_usd is not None:
         raise HTTPException(status_code=403, detail="Cannot set wallet balance directly")
     if update.role is not None:
