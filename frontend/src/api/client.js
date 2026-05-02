@@ -10,6 +10,10 @@ api.interceptors.request.use((config) => {
   if (initData) {
     config.headers['Authorization'] = `tma ${initData}`
   }
+  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+  if (startParam) {
+    config.headers['X-Referrer-Id'] = startParam
+  }
   return config
 })
 
