@@ -87,20 +87,29 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
 
 
 async def get_current_user(
-    authorization: str = Header(..., description="Telegram Mini App auth header: tma <initData>"),
+    authorization: Optional[str] = Header(None, description="Telegram Mini App auth header: tma <initData>"),
+    init_data: Optional[str] = Header(None, alias="init-data", description="Telegram Mini App init_data"),
     x_referrer_id: Optional[str] = Header(None, description="Referrer's Telegram ID (from bot start_param)"),
     db=Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> UserModel:
     """Validate Telegram init_data and return (or auto-create) the UserModel."""
-    if not authorization.startswith("tma ") or len(authorization) <= 4:
+    parsed_auth_init_data: Optional[str] = None
+    if authorization and authorization.startswith("tma ") and len(authorization) > 4:
+        parsed_auth_init_data = authorization[4:]
+
+    if parsed_auth_init_data and init_data and parsed_auth_init_data != init_data:
+        raise HTTPException(status_code=403, detail="Conflicting Telegram init_data headers")
+
+    parsed_init_data: Optional[str] = parsed_auth_init_data or init_data
+
+    if not parsed_init_data:
         raise HTTPException(
             status_code=403,
-            detail="Invalid Authorization header format, expected: tma <initData>",
+            detail="Missing Telegram init_data. Expected Authorization: tma <initData> or init-data header",
         )
-    init_data = authorization[4:]
 
-    user_data = validate_telegram_init_data(init_data, settings.BOT_TOKEN)
+    user_data = validate_telegram_init_data(parsed_init_data, settings.BOT_TOKEN)
 
     telegram_id: int = user_data.get("id")
     if not telegram_id:

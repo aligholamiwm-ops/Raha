@@ -11,6 +11,7 @@ api.interceptors.request.use((config) => {
 
   if (initData) {
     config.headers['Authorization'] = `tma ${initData}`
+    config.headers['init-data'] = initData
   } else {
     console.warn(
       '[Raha] window.Telegram.WebApp.initData is empty. ' +
