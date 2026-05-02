@@ -51,7 +51,8 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     refreshAll()
-  }, [refreshAll])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <AppContext.Provider

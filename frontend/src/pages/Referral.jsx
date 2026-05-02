@@ -41,6 +41,7 @@ export default function Referral() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
+      // Fallback for Telegram WebApp environments where clipboard API may be restricted
       const ta = document.createElement('textarea')
       ta.value = referralCode
       document.body.appendChild(ta)

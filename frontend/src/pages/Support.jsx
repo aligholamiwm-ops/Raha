@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { getMyTickets, createTicket, getTicket, replyTicket } from '../api/client'
 
 const CATEGORIES = ['Technical Issue', 'Billing', 'Order', 'General']
@@ -134,7 +134,7 @@ function TicketThread({ ticketId, onBack }) {
   const [error, setError] = useState(null)
   const messagesEndRef = useRef(null)
 
-  const loadTicket = async () => {
+  const loadTicket = useCallback(async () => {
     try {
       const data = await getTicket(ticketId)
       setTicket(data)
@@ -143,11 +143,11 @@ function TicketThread({ ticketId, onBack }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [ticketId])
 
   useEffect(() => {
     loadTicket()
-  }, [ticketId])
+  }, [loadTicket])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
