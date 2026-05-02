@@ -94,11 +94,14 @@ async def get_current_user(
     settings: Settings = Depends(get_settings),
 ) -> UserModel:
     """Validate Telegram init_data and return (or auto-create) the UserModel."""
-    parsed_init_data: Optional[str] = None
+    parsed_auth_init_data: Optional[str] = None
     if authorization and authorization.startswith("tma ") and len(authorization) > 4:
-        parsed_init_data = authorization[4:]
-    elif init_data:
-        parsed_init_data = init_data
+        parsed_auth_init_data = authorization[4:]
+
+    if parsed_auth_init_data and init_data and parsed_auth_init_data != init_data:
+        raise HTTPException(status_code=403, detail="Conflicting Telegram init_data headers")
+
+    parsed_init_data: Optional[str] = parsed_auth_init_data or init_data
 
     if not parsed_init_data:
         raise HTTPException(

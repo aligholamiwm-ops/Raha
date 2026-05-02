@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -109,12 +110,12 @@ if _frontend_dist.exists():
             return await call_next(request)
 
         user_agent = request.headers.get("user-agent", "").lower()
-        referer = request.headers.get("referer", "").lower()
+        referer = request.headers.get("referer", "")
+        referer_host = urlparse(referer).hostname or ""
         query_keys = {k.lower() for k in request.query_params.keys()}
         is_telegram_request = (
             "telegram" in user_agent
-            or "t.me" in referer
-            or "web.telegram.org" in referer
+            or referer_host in {"t.me", "web.telegram.org"}
             or bool(query_keys & {"tgwebappdata", "tgwebappversion", "tgwebappplatform", "startapp"})
         )
         if not is_telegram_request:
