@@ -51,6 +51,12 @@ export function AppProvider({ children }) {
 
   // Run once on mount; refreshAll is stable (useCallback with stable deps)
   useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg?.initData) {
+      setError('Please open this app from Telegram.')
+      setLoading(false)
+      return
+    }
     refreshAll()
   }, [refreshAll])
 
