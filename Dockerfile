@@ -25,7 +25,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source
 COPY app/ ./app/
-COPY bot.py .
 
 # Copy the built frontend assets from Stage 1
 COPY --from=frontend-build /frontend/dist ./frontend/dist

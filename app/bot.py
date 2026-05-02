@@ -1,6 +1,6 @@
 """
 Telegram bot entrypoint for Raha VPN Mini App.
-Run with:  python bot.py
+Run with:  python -m app.bot
 """
 import logging
 from urllib.parse import quote
