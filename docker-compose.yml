@@ -56,6 +56,21 @@ services:
       - mongodb
 
   # -------------------------------------------------------------------------
+  # Telegram Bot (polling)
+  # -------------------------------------------------------------------------
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raha_bot
+    restart: unless-stopped
+    env_file: .env
+    command: python bot.py
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
   # MongoDB
   # -------------------------------------------------------------------------
   mongodb:

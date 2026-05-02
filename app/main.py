@@ -1,11 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.config import get_settings
 from app.database import connect_db, close_db
 from app.dependencies import limiter
 from app.routers import (
@@ -53,9 +56,16 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
+_settings = get_settings()
+_origins = ["https://t.me", "https://web.telegram.org"]
+if _settings.MINI_APP_URL:
+    _origins.append(_settings.MINI_APP_URL.rstrip("/"))
+if _settings.FRONTEND_ORIGIN and _settings.FRONTEND_ORIGIN not in _origins:
+    _origins.append(_settings.FRONTEND_ORIGIN.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://t.me", "https://web.telegram.org"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,3 +96,9 @@ app.include_router(admin_router, prefix=f"{API_PREFIX}/admin", tags=["Admin"])
 @app.get("/health", tags=["Health"])
 async def health_check() -> dict:
     return {"status": "ok", "service": "Raha VPN Backend"}
+
+
+# Must be last: catch-all static mount for the built React frontend
+_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if _frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")

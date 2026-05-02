@@ -6,14 +6,24 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  const initData = window.Telegram?.WebApp?.initData || ''
+  const tg = window.Telegram?.WebApp
+  const initData = tg?.initData || ''
+
   if (initData) {
     config.headers['Authorization'] = `tma ${initData}`
+  } else {
+    console.warn(
+      '[Raha] window.Telegram.WebApp.initData is empty. ' +
+      'Make sure the app is opened via a web_app button inside Telegram, not a plain URL.'
+    )
   }
-  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+
+  // Referral: read start_param set by bot /start deeplink
+  const startParam = tg?.initDataUnsafe?.start_param
   if (startParam) {
     config.headers['X-Referrer-Id'] = startParam
   }
+
   return config
 })
 
