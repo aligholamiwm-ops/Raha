@@ -50,15 +50,7 @@ export default function QRModal({ uuid, configName, onClose }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for Telegram WebApp environments where clipboard API may be restricted
-      const ta = document.createElement('textarea')
-      ta.value = uri
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setError('Unable to copy — please copy the URI manually')
     }
   }
 

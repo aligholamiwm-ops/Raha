@@ -49,10 +49,10 @@ export function AppProvider({ children }) {
     setLoading(false)
   }, [fetchUser, fetchConfigs, fetchPlans])
 
+  // Run once on mount; refreshAll is stable (useCallback with stable deps)
   useEffect(() => {
     refreshAll()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshAll])
 
   return (
     <AppContext.Provider
