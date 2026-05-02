@@ -44,11 +44,12 @@ const dashboardData = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function remainingPct(used, total) {
-  return Math.round(((total - used) / total) * 100);
+  if (!total) return 0;
+  return Math.max(0, Math.round(((total - used) / total) * 100));
 }
 
 function remainingGB(used, total) {
-  return (total - used).toFixed(1);
+  return Math.max(0, total - used).toFixed(1);
 }
 
 // ─── SVG Icons ───────────────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ function renderConfigCard(cfg, idx) {
         <div class="expiry-block">
           <span class="cal-icon">${Icons.calendar}</span>
           <div class="expiry-days">${cfg.daysLeft} روز</div>
-          <div class="expiry-label">تا انفضا</div>
+          <div class="expiry-label">تا انقضا</div>
         </div>
 
         <div class="divider-v"></div>
