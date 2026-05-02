@@ -104,24 +104,45 @@ async def health_check() -> dict:
 _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
     @app.middleware("http")
-    async def enforce_telegram_frontend_access(request: Request, call_next):
+    async def enforce_telegram_access(request: Request, call_next):
+        """
+        Enforce that both frontend and API requests come from Telegram.
+        Exempt: health check, docs, webhook endpoints, and admin endpoints (protected by auth).
+        """
         path = request.url.path
-        if path.startswith("/api/") or path in {"/health", "/docs", "/redoc", "/openapi.json"}:
+        
+        # Allow these paths without Telegram check
+        public_paths = {"/health", "/docs", "/redoc", "/openapi.json"}
+        # Webhook endpoints should bypass this check (they use signature verification)
+        webhook_prefixes = ("/api/v1/payments/webhook",)
+        # Admin endpoints are protected by require_admin dependency
+        admin_prefixes = ("/api/v1/admin/",)
+        
+        if path in public_paths or any(path.startswith(prefix) for prefix in webhook_prefixes + admin_prefixes):
             return await call_next(request)
 
+        # Check for Telegram indicators
         user_agent = request.headers.get("user-agent", "").lower()
         referer = request.headers.get("referer", "")
         referer_host = urlparse(referer).hostname or ""
         query_keys = {k.lower() for k in request.query_params.keys()}
+        
+        # For API requests, check for init-data or authorization header with Telegram init_data
+        is_api_request = path.startswith("/api/")
+        authorization = request.headers.get("authorization", "")
+        init_data_header = request.headers.get("init-data", "")
+        
         is_telegram_request = (
             "telegram" in user_agent
             or referer_host in {"t.me", "web.telegram.org"}
             or bool(query_keys & {"tgwebappdata", "tgwebappversion", "tgwebappplatform", "startapp"})
+            or (is_api_request and (authorization.startswith("tma ") or init_data_header))
         )
+        
         if not is_telegram_request:
             return JSONResponse(
                 status_code=403,
-                content={"detail": "Mini App is only accessible from Telegram"},
+                content={"detail": "This service is only accessible from Telegram"},
             )
 
         return await call_next(request)

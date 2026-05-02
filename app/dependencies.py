@@ -43,11 +43,13 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
     """
     try:
         params = dict(parse_qsl(init_data, keep_blank_values=True))
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to parse init_data: {e}")
         raise HTTPException(status_code=403, detail="Malformed init_data")
 
     received_hash = params.pop("hash", None)
     if not received_hash:
+        logger.warning("Missing hash in init_data")
         raise HTTPException(status_code=403, detail="Missing hash in init_data")
 
     # Build the data-check string
@@ -66,16 +68,20 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
     ).hexdigest()
 
     if not hmac.compare_digest(expected_hash, received_hash):
+        logger.warning("Invalid init_data signature - hash mismatch")
         raise HTTPException(status_code=403, detail="Invalid init_data signature")
 
     # Parse user object
     user_json = params.get("user")
     if not user_json:
+        logger.warning("Missing user field in init_data")
         raise HTTPException(status_code=403, detail="Missing user in init_data")
 
     try:
         user_data = json.loads(unquote(user_json))
-    except json.JSONDecodeError:
+        logger.debug(f"Validated init_data for user: {user_data.get('id')}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid user JSON in init_data: {e}")
         raise HTTPException(status_code=403, detail="Invalid user JSON in init_data")
 
     return user_data
@@ -99,11 +105,13 @@ async def get_current_user(
         parsed_auth_init_data = authorization[4:]
 
     if parsed_auth_init_data and init_data and parsed_auth_init_data != init_data:
+        logger.warning("Conflicting init_data in Authorization and init-data headers")
         raise HTTPException(status_code=403, detail="Conflicting Telegram init_data headers")
 
     parsed_init_data: Optional[str] = parsed_auth_init_data or init_data
 
     if not parsed_init_data:
+        logger.warning("Missing Telegram init_data in request headers")
         raise HTTPException(
             status_code=403,
             detail="Missing Telegram init_data. Expected Authorization: tma <initData> or init-data header",
@@ -113,10 +121,12 @@ async def get_current_user(
 
     telegram_id: int = user_data.get("id")
     if not telegram_id:
+        logger.error("Failed to extract telegram_id from validated init_data")
         raise HTTPException(status_code=403, detail="Cannot determine telegram_id")
 
     doc = await db.users.find_one({"telegram_id": telegram_id})
     if doc is None:
+        logger.info(f"Creating new user with telegram_id={telegram_id}")
         referrer_id: Optional[int] = None
         if x_referrer_id:
             try:
@@ -125,18 +135,25 @@ async def get_current_user(
                     ref_doc = await db.users.find_one({"telegram_id": candidate})
                     if ref_doc:
                         referrer_id = candidate
+                        logger.info(f"New user {telegram_id} referred by {referrer_id}")
             except (ValueError, TypeError):
-                pass
+                logger.warning(f"Invalid x-referrer-id header value: {x_referrer_id}")
 
         new_user = UserModel(
             telegram_id=telegram_id,
             referrer_id=referrer_id,
             created_at=datetime.now(timezone.utc),
         )
-        await db.users.insert_one(new_user.to_dict())
+        try:
+            await db.users.insert_one(new_user.to_dict())
+            logger.info(f"Successfully created user {telegram_id}")
+        except Exception as e:
+            logger.error(f"Failed to insert new user {telegram_id} into database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create user record")
         return new_user
 
     doc.pop("_id", None)
+    logger.debug(f"Found existing user with telegram_id={telegram_id}")
     return UserModel(**doc)
 
 
