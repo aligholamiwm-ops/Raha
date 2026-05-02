@@ -2,8 +2,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -101,4 +102,27 @@ async def health_check() -> dict:
 # Must be last: catch-all static mount for the built React frontend
 _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
+    @app.middleware("http")
+    async def enforce_telegram_frontend_access(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api/") or path in {"/health", "/docs", "/redoc", "/openapi.json"}:
+            return await call_next(request)
+
+        user_agent = request.headers.get("user-agent", "").lower()
+        referer = request.headers.get("referer", "").lower()
+        query_keys = {k.lower() for k in request.query_params.keys()}
+        is_telegram_request = (
+            "telegram" in user_agent
+            or "t.me" in referer
+            or "web.telegram.org" in referer
+            or bool(query_keys & {"tgwebappdata", "tgwebappversion", "tgwebappplatform", "startapp"})
+        )
+        if not is_telegram_request:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Mini App is only accessible from Telegram"},
+            )
+
+        return await call_next(request)
+
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
