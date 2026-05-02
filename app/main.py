@@ -34,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    
+    # Validate critical configuration
+    if not settings.BOT_TOKEN:
+        logger.error("CRITICAL: BOT_TOKEN is not set in environment variables!")
+        logger.error("User authentication will fail. Please set BOT_TOKEN in .env file")
+    
+    if not settings.MINI_APP_URL:
+        logger.warning("WARNING: MINI_APP_URL is not set. The bot /start command may not work properly.")
+    
     logger.info("Connecting to MongoDB…")
     await connect_db()
     logger.info("Database connected and indexes ensured.")

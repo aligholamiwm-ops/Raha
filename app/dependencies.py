@@ -100,6 +100,12 @@ async def get_current_user(
     settings: Settings = Depends(get_settings),
 ) -> UserModel:
     """Validate Telegram init_data and return (or auto-create) the UserModel."""
+    
+    # Check if BOT_TOKEN is configured
+    if not settings.BOT_TOKEN:
+        logger.error("BOT_TOKEN is not configured in environment variables")
+        raise HTTPException(status_code=500, detail="Server configuration error: BOT_TOKEN not set")
+    
     parsed_auth_init_data: Optional[str] = None
     if authorization and authorization.startswith("tma ") and len(authorization) > 4:
         parsed_auth_init_data = authorization[4:]
