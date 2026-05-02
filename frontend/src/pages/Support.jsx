@@ -169,10 +169,7 @@ function TicketThread({ ticketId, onBack }) {
     }
   }
 
-  const messages = ticket?.messages || (ticket?.replies ? [
-    { id: 0, text: ticket.initial_message || '', sender: 'user', created_at: ticket.created_at },
-    ...ticket.replies.map((r) => ({ ...r, sender: r.is_admin ? 'admin' : 'user' })),
-  ] : [])
+  const messages = ticket?.messages || []
 
   return (
     <div className="flex flex-col h-full">
@@ -183,7 +180,7 @@ function TicketThread({ ticketId, onBack }) {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-white font-semibold text-sm truncate">
-            Ticket #{ticketId}
+            Ticket #{typeof ticketId === 'string' ? ticketId.slice(0, 8) : ticketId}
           </p>
           {ticket && <StatusBadge status={ticket.status} />}
         </div>
@@ -206,7 +203,7 @@ function TicketThread({ ticketId, onBack }) {
           <p className="text-slate-500 text-sm text-center py-8">No messages</p>
         ) : (
           messages.map((msg, idx) => {
-            const isUser = msg.sender === 'user' || msg.is_user || (!msg.is_admin)
+            const isUser = msg.sender_role === 'user' || msg.sender === 'user'
             return (
               <div key={msg.id ?? idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div
@@ -219,7 +216,7 @@ function TicketThread({ ticketId, onBack }) {
                   {!isUser && (
                     <p className="text-xs font-semibold text-emerald-400">Support</p>
                   )}
-                  <p className="text-sm leading-relaxed">{msg.text || msg.message || ''}</p>
+                  <p className="text-sm leading-relaxed">{msg.text || ''}</p>
                   <p className={`text-xs ${isUser ? 'text-blue-300' : 'text-slate-500'} text-right`}>
                     {formatDate(msg.created_at)}
                   </p>
@@ -294,7 +291,7 @@ export default function Support() {
   }, [])
 
   const handleTicketCreated = (ticket) => {
-    setSelectedTicketId(ticket.id)
+    setSelectedTicketId(ticket.ticket_id)
     setView('thread')
     loadTickets()
   }
@@ -359,17 +356,16 @@ export default function Support() {
           </div>
         ) : (
           tickets.map((ticket) => {
-            const preview = ticket.initial_message
-              ? ticket.initial_message.replace(/^\[.*?\]\s*/, '').slice(0, 80)
-              : 'No message'
+            const firstMsg = ticket.messages?.[0]?.text || ''
+            const preview = firstMsg.replace(/^\[.*?\]\s*/, '').slice(0, 80) || 'No message'
             return (
               <button
-                key={ticket.id}
-                onClick={() => { setSelectedTicketId(ticket.id); setView('thread') }}
+                key={ticket.ticket_id}
+                onClick={() => { setSelectedTicketId(ticket.ticket_id); setView('thread') }}
                 className="w-full text-left bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-4 space-y-2 transition-all"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-white font-medium text-sm">Ticket #{ticket.id}</span>
+                  <span className="text-white font-medium text-sm">Ticket #{ticket.ticket_id?.slice(0, 8)}</span>
                   <StatusBadge status={ticket.status} />
                 </div>
                 <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{preview}</p>
