@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     # Free trial
     FREE_TRIAL_GB: float = 0.2  # 200 MB
+    # Frontend / Mini App
+    MINI_APP_URL: str = ""       # e.g. https://yourdomain.com
+    FRONTEND_ORIGIN: str = ""    # same value, or a different CDN domain
 
     model_config = {
         "env_file": ".env",

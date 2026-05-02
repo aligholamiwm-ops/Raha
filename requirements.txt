@@ -10,3 +10,5 @@ slowapi>=0.1.9
 python-multipart>=0.0.9
 python-dotenv>=1.0.0
 cryptography>=42.0.0
+python-telegram-bot>=20.0
+aiofiles>=23.0

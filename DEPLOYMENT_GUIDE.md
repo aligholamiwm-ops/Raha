@@ -338,11 +338,32 @@ KEYS *
 
 ## 12. Updating the Application
 
+### Docker Compose deployment (recommended)
+
 ```bash
 cd /home/raha/raha
 git pull origin main
+docker compose down
+docker compose up -d --build   # rebuilds ALL images including frontend
+```
+
+### Bare-metal / systemd deployment
+
+```bash
+cd /home/raha/raha
+git pull origin main
+
+# Rebuild the frontend
+cd frontend
+npm ci
+npm run build
+cd ..
+
+# Reinstall Python deps if requirements.txt changed
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Restart all services
 sudo systemctl restart raha-api raha-worker raha-beat
 ```
 
