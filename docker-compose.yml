@@ -65,7 +65,7 @@ services:
     container_name: raha_bot
     restart: unless-stopped
     env_file: .env
-    command: python bot.py
+    command: python -m app.bot
     depends_on:
       app:
         condition: service_healthy
