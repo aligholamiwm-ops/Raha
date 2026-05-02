@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+from typing import Optional
 from urllib.parse import unquote, parse_qsl
 from datetime import datetime, timezone
 
@@ -86,11 +87,19 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
 
 
 async def get_current_user(
-    init_data: str = Header(..., description="Telegram Mini App initData"),
+    authorization: str = Header(..., description="Telegram Mini App auth header: tma <initData>"),
+    x_referrer_id: Optional[str] = Header(None, description="Referrer's Telegram ID (from bot start_param)"),
     db=Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> UserModel:
     """Validate Telegram init_data and return (or auto-create) the UserModel."""
+    if not authorization.startswith("tma ") or len(authorization) <= 4:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid Authorization header format, expected: tma <initData>",
+        )
+    init_data = authorization[4:]
+
     user_data = validate_telegram_init_data(init_data, settings.BOT_TOKEN)
 
     telegram_id: int = user_data.get("id")
@@ -99,8 +108,20 @@ async def get_current_user(
 
     doc = await db.users.find_one({"telegram_id": telegram_id})
     if doc is None:
+        referrer_id: Optional[int] = None
+        if x_referrer_id:
+            try:
+                candidate = int(x_referrer_id)
+                if candidate != telegram_id:
+                    ref_doc = await db.users.find_one({"telegram_id": candidate})
+                    if ref_doc:
+                        referrer_id = candidate
+            except (ValueError, TypeError):
+                pass
+
         new_user = UserModel(
             telegram_id=telegram_id,
+            referrer_id=referrer_id,
             created_at=datetime.now(timezone.utc),
         )
         await db.users.insert_one(new_user.to_dict())
