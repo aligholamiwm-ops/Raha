@@ -123,14 +123,23 @@ Fill in **all** values:
 ```dotenv
 APP_ENV=production
 SECRET_KEY=<generate with: python3 -c "import secrets; print(secrets.token_hex(32))">
-BOT_TOKEN=<your Telegram bot token>
+BOT_TOKEN=<your Telegram bot token from @BotFather>
+MINI_APP_URL=https://yourdomain.com
+FRONTEND_ORIGIN=https://yourdomain.com
 MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=raha_vpn
 REDIS_URL=redis://localhost:6379/0
 PLISIO_SECRET_KEY=<from Plisio dashboard>
 PLISIO_API_KEY=<from Plisio dashboard>
 RATE_LIMIT_PER_MINUTE=60
+FREE_TRIAL_GB=0.2
 ```
+
+**Important Notes:**
+- `BOT_TOKEN`: Get this from [@BotFather](https://t.me/BotFather) on Telegram
+- `MINI_APP_URL`: **Must** be the public URL where your app is accessible (e.g., `https://yourdomain.com`)
+- `FRONTEND_ORIGIN`: Usually same as MINI_APP_URL
+- `SECRET_KEY`: Generate a secure random string for internal signing
 
 ---
 
