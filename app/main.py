@@ -15,6 +15,7 @@ from app.routers import (
     discounts,
     clean_ips,
     tickets,
+    servers,
 )
 
 logging.basicConfig(
@@ -78,6 +79,7 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(discounts.router, prefix="/api/v1/discounts", tags=["Discounts"])
 app.include_router(clean_ips.router, prefix="/api/v1/clean-ips", tags=["Clean IPs"])
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["Tickets"])
+app.include_router(servers.router, prefix="/api/v1/admin/servers", tags=["Servers"])
 
 @app.get("/health")
 async def health_check():

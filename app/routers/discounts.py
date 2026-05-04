@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
 from app.models.user import UserModel
@@ -8,12 +7,7 @@ from app.models.discount import DiscountModel, DiscountCreate, DiscountUpdate
 
 router = APIRouter()
 
-
-@router.get(
-    "/",
-    response_model=list[DiscountModel],
-    summary="List all discount codes (admin)",
-)
+@router.get("/", response_model=list[DiscountModel], summary="List all discount codes (admin)")
 async def list_discounts(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -24,13 +18,7 @@ async def list_discounts(
         results.append(DiscountModel(**doc))
     return results
 
-
-@router.post(
-    "/",
-    response_model=DiscountModel,
-    status_code=201,
-    summary="Create discount code (admin)",
-)
+@router.post("/", response_model=DiscountModel, status_code=201, summary="Create discount code (admin)")
 async def create_discount(
     payload: DiscountCreate,
     _admin: UserModel = Depends(require_admin),
@@ -43,12 +31,27 @@ async def create_discount(
     await db.discounts.insert_one(discount.to_dict())
     return discount
 
+@router.put("/{code}", response_model=DiscountModel, summary="Update discount code (admin)")
+async def update_discount(
+    code: str,
+    payload: DiscountUpdate,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> DiscountModel:
+    update_data = payload.to_dict()
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = await db.discounts.find_one_and_update(
+        {"code": code},
+        {"": update_data},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Discount code not found")
+    result.pop("_id", None)
+    return DiscountModel(**result)
 
-@router.delete(
-    "/{code}",
-    status_code=204,
-    summary="Delete discount code (admin)",
-)
+@router.delete("/{code}", status_code=204, summary="Delete discount code (admin)")
 async def delete_discount(
     code: str,
     _admin: UserModel = Depends(require_admin),
@@ -58,12 +61,7 @@ async def delete_discount(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Discount code not found")
 
-
-@router.get(
-    "/validate/{code}",
-    summary="Validate a discount code (user)",
-    description="Returns discount details if the code is valid and not yet used by the current user.",
-)
+@router.get("/validate/{code}", summary="Validate a discount code (user)")
 async def validate_discount(
     code: str,
     current_user: UserModel = Depends(get_current_user),
