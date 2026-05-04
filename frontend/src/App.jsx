@@ -6,10 +6,10 @@ import Dashboard from './pages/Dashboard'
 import Store from './pages/Store'
 import Referral from './pages/Referral'
 import Support from './pages/Support'
+import Admin from './pages/Admin'
 
 function AppShell() {
   const { error, user } = useApp()
-
   if (error && !user) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-900 text-white p-8" style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -19,16 +19,16 @@ function AppShell() {
       </div>
     )
   }
-
   return (
     <HashRouter>
       <div className="flex flex-col h-full bg-slate-900" style={{ maxWidth: 480, margin: '0 auto', position: 'relative' }}>
-        <main className="flex-1 overflow-y-auto pb-20 pt-safe">
+        <div style={{background:"red",color:"white",padding:"10px",textAlign:"center",fontWeight:"bold",zIndex:9999,position:"relative"}}>DEBUG: SERVER CONNECTED</div><main className="flex-1 overflow-y-auto pb-20 pt-safe">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/store" element={<Store />} />
             <Route path="/referral" element={<Referral />} />
             <Route path="/support" element={<Support />} />
+            {user?.role?.toLowerCase() === 'admin' && <Route path="/admin" element={<Admin />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -37,7 +37,6 @@ function AppShell() {
     </HashRouter>
   )
 }
-
 export default function App() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -48,7 +47,6 @@ export default function App() {
       if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a')
     }
   }, [])
-
   return (
     <AppProvider>
       <AppShell />
