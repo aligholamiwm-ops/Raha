@@ -55,7 +55,7 @@ async def update_server(
         raise HTTPException(status_code=400, detail='No fields to update')
     result = await db.servers.find_one_and_update(
         {'server_name': server_name},
-        {"$set": update_data},
+        {'$set': update_data},
         return_document=True,
     )
     if not result:
@@ -83,13 +83,10 @@ async def regenerate_cookie(
     if not server_doc:
         raise HTTPException(status_code=404, detail='Server not found')
     
-    # Build base_url with port if available
-    ip_address = server_doc['ip_address'].rstrip('/')
-    panel_port = server_doc.get('panel_port')
-    if panel_port and str(panel_port) not in ip_address:
-        base_url = f'{ip_address}:{panel_port}'
-    else:
-        base_url = ip_address
+    # Use ip_address and panel_port directly from database
+    base_url = f"{server_doc['ip_address']}:{server_doc['panel_port']}"
+    
+    logger.info(f"Regenerating cookie for {server_name} using base_url: {base_url}")
     
     xui = AsyncXUIClient(
         base_url=base_url,

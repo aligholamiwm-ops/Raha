@@ -95,7 +95,7 @@ def sync_config_statuses() -> dict:
         try:
             async for server_doc in db.servers.find({}):
                 server_doc.pop("_id", None)
-                base_url = f"http://{server_doc['ip_address']}:{server_doc['panel_port']}"
+                base_url = f"{server_doc['ip_address']}:{server_doc['panel_port']}"
                 xui = AsyncXUIClient(
                     base_url=base_url,
                     username=server_doc["username"],

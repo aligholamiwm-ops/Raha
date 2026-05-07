@@ -4,7 +4,6 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-
 from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel, UserRole
@@ -71,7 +70,10 @@ async def sync_configs(
     errors = []
     async for server_doc in db.servers.find({}):
         server_doc.pop("_id", None)
-        base_url = f"http://{server_doc['ip_address']}:{server_doc['panel_port']}"
+        
+        # Use ip_address and panel_port directly from database
+        base_url = f"{server_doc['ip_address']}:{server_doc['panel_port']}"
+            
         xui = AsyncXUIClient(
             base_url=base_url,
             username=server_doc["username"],
