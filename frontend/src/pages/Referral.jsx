@@ -117,7 +117,7 @@ export default function Referral() {
 
         {!hasBotUsername && (
           <p className="text-amber-300 text-xs">
-            Referral sharing is unavailable until <code className="font-mono">VITE_BOT_USERNAME</code> is set in your frontend env file (for example <code className="font-mono">frontend/.env</code> or <code className="font-mono">frontend/.env.local</code>).
+            Referral sharing is temporarily unavailable. Please contact support if this problem continues.
           </p>
         )}
       </div>
