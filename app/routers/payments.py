@@ -148,21 +148,20 @@ async def payment_webhook(
                     layer = 1
                     
                     while current_referrer_id and layer <= 10:  # Max 10 layers
-                        percentage = referral_percentages.get(str(layer), 0.0)
+                        percentage = referral_percentages.get(layer, 0.0)  # Use integer key
                         if percentage <= 0:
                             break  # No more layers defined
                         
                         bonus_amount = (amount_usd * percentage) / 100.0
                         
-                        # Credit referral bonus
+                        # Credit referral bonus - only increment total_referred_usd_purchased for layer 1
+                        update_fields = {"referral_bonus_usd": bonus_amount}
+                        if layer == 1:
+                            update_fields["total_referred_usd_purchased"] = amount_usd
+                        
                         await db.users.update_one(
                             {"telegram_id": current_referrer_id},
-                            {
-                                "$inc": {
-                                    "referral_bonus_usd": bonus_amount,
-                                    "total_referred_usd_purchased": amount_usd if layer == 1 else 0,
-                                }
-                            },
+                            {"$inc": update_fields},
                         )
                         logger.info(
                             "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
