@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from enum import Enum
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
@@ -13,16 +12,12 @@ from app.models.ticket import (
     TicketReply,
     TicketStatus,
     TicketCategory,
+    SortField,
     TicketMessage,
     SenderRole,
 )
 
 router = APIRouter()
-
-
-class SortField(str, Enum):
-    created_at = "created_at"
-    updated_at = "updated_at"
 
 
 @router.post(

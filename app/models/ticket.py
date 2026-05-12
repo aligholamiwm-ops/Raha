@@ -18,6 +18,11 @@ class TicketCategory(str, Enum):
     cooperation = "cooperation"
 
 
+class SortField(str, Enum):
+    created_at = "created_at"
+    updated_at = "updated_at"
+
+
 class SenderRole(str, Enum):
     user = "user"
     admin = "admin"
