@@ -11,9 +11,17 @@ class TicketStatus(str, Enum):
     closed = "closed"
 
 
+class TicketCategory(str, Enum):
+    connection = "connection"
+    help = "help"
+    withdrawal = "withdrawal"
+    cooperation = "cooperation"
+
+
 class SenderRole(str, Enum):
     user = "user"
     admin = "admin"
+    support = "support"
 
 
 class TicketMessage(BaseModel):
@@ -29,6 +37,8 @@ class TicketModel(BaseModel):
 
     ticket_id: str = Field(default_factory=lambda: str(_uuid.uuid4()))
     telegram_id: int
+    title: str = Field(..., description="Ticket title")
+    category: TicketCategory = Field(..., description="Ticket category")
     status: TicketStatus = Field(default=TicketStatus.open)
     messages: List[TicketMessage] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -41,6 +51,8 @@ class TicketModel(BaseModel):
 class TicketCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    title: str = Field(..., description="Ticket title")
+    category: TicketCategory = Field(..., description="Ticket category")
     initial_message: str = Field(..., description="First message text")
 
 

@@ -8,6 +8,7 @@ from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel, UserRole
 from app.models.vpn_config import ConfigStatus
+from app.models.ticket import TicketModel
 from app.integrations.xui_api import AsyncXUIClient
 
 logger = logging.getLogger(__name__)
@@ -54,11 +55,23 @@ async def change_user_role(
 ):
     result = await db.users.update_one(
         {"telegram_id": telegram_id},
-        {"$set": {"role": payload.role}}
+        {"$set": {"role": payload.role.value}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"status": "success", "message": f"User role updated to {payload.role}"}
+    return {"status": "success", "message": f"User role updated to {payload.role.value}"}
+
+@router.get("/users/{telegram_id}/tickets", response_model=list[TicketModel], summary="Get user's tickets (admin)")
+async def get_user_tickets(
+    telegram_id: int,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> list[TicketModel]:
+    results = []
+    async for doc in db.tickets.find({"telegram_id": telegram_id}):
+        doc.pop("_id", None)
+        results.append(TicketModel(**doc))
+    return results
 
 @router.post("/sync-configs", summary="Sync config statuses from XUI panels")
 async def sync_configs(
