@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 const CopyIcon = () => (
@@ -26,18 +27,30 @@ const ShareIcon = () => (
   </svg>
 )
 
+const WithdrawIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <polyline points="19 12 12 19 5 12" />
+  </svg>
+)
+
 export default function Referral() {
   const { user, loading } = useApp()
+  const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
 
-  const referralCode = user?.telegram_id ? String(user.telegram_id) : '—'
-  const referredGB = user?.total_referred_gb_purchased || 0
-  const giftedGB = referredGB * 0.1
+  // Bot username from environment with fallback (must match production bot)
+  const botUsername = import.meta.env.VITE_BOT_USERNAME || 'RahaVPN'
+  const referralLink = user?.telegram_id 
+    ? `https://t.me/${botUsername}?start=${user.telegram_id}` 
+    : '—'
+  const referralBonus = user?.referral_bonus_usd || 0
+  const totalReferred = user?.total_referred_usd_purchased || 0
 
   const handleCopy = async () => {
     if (!user?.telegram_id) return
     try {
-      await navigator.clipboard.writeText(referralCode)
+      await navigator.clipboard.writeText(referralLink)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -47,12 +60,17 @@ export default function Referral() {
 
   const handleShare = () => {
     const tg = window.Telegram?.WebApp
-    const shareText = `Join Raha VPN and get premium VPN service! Use my referral code: ${referralCode}`
+    const shareText = `Join Raha VPN and get premium VPN service!`
+    const shareUrl = `https://t.me/${botUsername}?start=${user?.telegram_id || ''}`
     if (tg?.openTelegramLink) {
-      tg.openTelegramLink(`https://t.me/share/url?url=https://t.me/RahaVPN&text=${encodeURIComponent(shareText)}`)
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)
     } else {
-      window.open(`https://t.me/share/url?url=https://t.me/RahaVPN&text=${encodeURIComponent(shareText)}`, '_blank')
+      window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`, '_blank')
     }
+  }
+
+  const handleWithdraw = () => {
+    navigate('/support', { state: { createWithdrawal: true } })
   }
 
   return (
@@ -60,22 +78,22 @@ export default function Referral() {
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-white">Referral Program</h1>
-        <p className="text-slate-400 text-sm">Earn bonus traffic by inviting friends</p>
+        <p className="text-slate-400 text-sm">Earn USDT bonus by inviting friends</p>
       </div>
 
-      {/* Referral code card */}
+      {/* Referral link card */}
       <div className="bg-gradient-to-br from-emerald-900/60 to-teal-900/60 rounded-2xl ring-1 ring-emerald-700/40 p-5 space-y-4">
         <div className="flex items-center gap-2 text-emerald-400">
           <GiftIcon />
-          <span className="font-semibold text-sm">Your Referral Code</span>
+          <span className="font-semibold text-sm">Your Referral Link</span>
         </div>
 
         {loading ? (
           <div className="skeleton h-14 w-full rounded-xl" />
         ) : (
           <div className="flex items-center gap-3 bg-slate-900/60 rounded-xl px-4 py-3">
-            <span className="flex-1 text-white font-mono font-bold text-2xl tracking-widest">
-              {referralCode}
+            <span className="flex-1 text-white font-mono text-xs break-all">
+              {referralLink}
             </span>
             <button
               onClick={handleCopy}
@@ -97,65 +115,31 @@ export default function Referral() {
         </button>
       </div>
 
-      {/* Info banner */}
-      <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 px-4 py-3">
-        <p className="text-slate-300 text-xs leading-relaxed text-center">
-          🎁 Share your code with friends to earn <span className="text-emerald-400 font-semibold">10%</span> of their purchased GB as bonus traffic
+      {/* Bonus display */}
+      <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-slate-400 text-xs">Your Referral Bonus</p>
+            {loading ? (
+              <div className="skeleton h-8 w-24" />
+            ) : (
+              <p className="text-emerald-400 font-bold text-3xl">
+                ${referralBonus.toFixed(2)} <span className="text-lg font-medium">USDT</span>
+              </p>
+            )}
+          </div>
+          <button
+            onClick={handleWithdraw}
+            disabled={referralBonus <= 0}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <WithdrawIcon />
+            Withdraw
+          </button>
+        </div>
+        <p className="text-slate-500 text-xs mt-2">
+          Total referred purchases: ${totalReferred.toFixed(2)} USDT
         </p>
-      </div>
-
-      {/* Stats cards */}
-      <div className="space-y-3">
-        <h2 className="text-slate-300 font-semibold text-sm">Your Stats</h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-1">
-            <p className="text-slate-400 text-xs">Referred Users</p>
-            {loading ? (
-              <div className="skeleton h-7 w-16" />
-            ) : (
-              <p className="text-white font-bold text-2xl">N/A</p>
-            )}
-            <p className="text-slate-500 text-xs">Not tracked</p>
-          </div>
-
-          <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-1">
-            <p className="text-slate-400 text-xs">GB Purchased</p>
-            {loading ? (
-              <div className="skeleton h-7 w-16" />
-            ) : (
-              <p className="text-emerald-400 font-bold text-2xl">{referredGB.toFixed(1)}</p>
-            )}
-            <p className="text-slate-500 text-xs">by referrals</p>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-slate-400 text-xs">Gifted Traffic (10%)</p>
-              {loading ? (
-                <div className="skeleton h-8 w-24" />
-              ) : (
-                <p className="text-emerald-400 font-bold text-3xl">
-                  {giftedGB.toFixed(2)} <span className="text-lg font-medium">GB</span>
-                </p>
-              )}
-            </div>
-            <div className="w-14 h-14 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center">
-              <GiftIcon />
-            </div>
-          </div>
-          <div className="mt-3 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all"
-              style={{ width: referredGB > 0 ? `${Math.min((giftedGB / referredGB) * 100, 100)}%` : '0%' }}
-            />
-          </div>
-          <p className="text-slate-500 text-xs mt-1">
-            {referredGB > 0 ? `${giftedGB.toFixed(2)} GB of ${referredGB.toFixed(1)} GB total` : 'No referral purchases yet'}
-          </p>
-        </div>
       </div>
 
       {/* How it works */}
@@ -163,10 +147,10 @@ export default function Referral() {
         <h3 className="text-slate-300 font-semibold text-sm">How It Works</h3>
         <div className="space-y-2">
           {[
-            { step: '1', text: 'Share your referral code with friends' },
-            { step: '2', text: 'Friends use your code when signing up' },
-            { step: '3', text: 'Earn 10% of their purchased GB as bonus' },
-            { step: '4', text: 'Use bonus traffic across your configs' },
+            { step: '1', text: 'Share your referral link with friends' },
+            { step: '2', text: 'Friends start the bot using your link (automatic assignment)' },
+            { step: '3', text: 'Earn bonus USDT when they purchase plans' },
+            { step: '4', text: 'Withdraw your bonus via support ticket (provide USDT wallet & network)' },
           ].map(({ step, text }) => (
             <div key={step} className="flex items-center gap-3">
               <span className="w-6 h-6 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0">

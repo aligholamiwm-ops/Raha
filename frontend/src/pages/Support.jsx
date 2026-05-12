@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus } from '../api/client'
 
@@ -43,20 +44,46 @@ const SendIcon = () => (
 )
 
 // ─── New Ticket Form ─────────────────────────────────────────────────────────
-function NewTicketForm({ onCreated, onCancel }) {
-  const [category, setCategory] = useState(CATEGORIES[0])
+function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
+  const [category, setCategory] = useState(initialCategory || CATEGORIES[0])
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
+  const [usdtAddress, setUsdtAddress] = useState('')
+  const [usdtNetwork, setUsdtNetwork] = useState('TRC20')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!message.trim() || !title.trim()) return
+    
+    // Validate withdrawal fields
+    if (category === 'withdrawal') {
+      if (!usdtAddress.trim()) {
+        setError('USDT address is required for withdrawal tickets')
+        return
+      }
+      if (!usdtNetwork) {
+        setError('USDT network is required for withdrawal tickets')
+        return
+      }
+    }
+    
     setSubmitting(true)
     setError(null)
     try {
-      const ticket = await createTicket({ title: title.trim(), category, initial_message: message.trim() })
+      const payload = {
+        title: title.trim(),
+        category,
+        initial_message: message.trim(),
+      }
+      
+      if (category === 'withdrawal') {
+        payload.usdt_address = usdtAddress.trim()
+        payload.usdt_network = usdtNetwork
+      }
+      
+      const ticket = await createTicket(payload)
       onCreated(ticket)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create ticket')
@@ -99,12 +126,49 @@ function NewTicketForm({ onCreated, onCancel }) {
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 capitalize"
+            disabled={initialCategory !== null}
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c} className="capitalize">{c}</option>
             ))}
           </select>
         </div>
+
+        {category === 'withdrawal' && (
+          <>
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">USDT Wallet Address *</label>
+              <input
+                type="text"
+                value={usdtAddress}
+                onChange={(e) => setUsdtAddress(e.target.value)}
+                placeholder="Your USDT wallet address"
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">USDT Network *</label>
+              <select
+                value={usdtNetwork}
+                onChange={(e) => setUsdtNetwork(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
+                required
+              >
+                <option value="TRC20">TRC20 (Tron)</option>
+                <option value="BEP-20">BEP-20 (BSC)</option>
+                <option value="TON">TON</option>
+              </select>
+            </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3">
+              <p className="text-blue-300 text-xs">
+                ℹ️ Please double-check your wallet address and network. Incorrect information may result in loss of funds.
+              </p>
+            </div>
+          </>
+        )}
 
         <div>
           <label className="block text-slate-400 text-xs mb-1.5 font-medium">Message</label>
@@ -305,11 +369,13 @@ function TicketThread({ ticketId, onBack, isStaff }) {
 // ─── Main Support Page ────────────────────────────────────────────────────────
 export default function Support() {
   const { user } = useApp()
+  const location = useLocation()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('list') // 'list' | 'new' | 'thread'
   const [selectedTicketId, setSelectedTicketId] = useState(null)
+  const [initialCategory, setInitialCategory] = useState(null)
 
   // Support staff filters
   const isStaff = useMemo(() => user?.role === 'admin' || user?.role === 'support', [user?.role])
@@ -317,6 +383,14 @@ export default function Support() {
   const [filterCategory, setFilterCategory] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
+
+  // Check if we should open withdrawal ticket creation
+  useEffect(() => {
+    if (location.state?.createWithdrawal) {
+      setInitialCategory('withdrawal')
+      setView('new')
+    }
+  }, [location.state])
 
   const loadTickets = useCallback(async () => {
     setLoading(true)
@@ -349,6 +423,7 @@ export default function Support() {
   const handleTicketCreated = (ticket) => {
     setSelectedTicketId(ticket.ticket_id)
     setView('thread')
+    setInitialCategory(null) // Reset initial category
     loadTickets()
   }
 
@@ -356,7 +431,11 @@ export default function Support() {
     return (
       <NewTicketForm
         onCreated={handleTicketCreated}
-        onCancel={() => setView('list')}
+        onCancel={() => {
+          setView('list')
+          setInitialCategory(null)
+        }}
+        initialCategory={initialCategory}
       />
     )
   }

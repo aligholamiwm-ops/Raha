@@ -33,8 +33,6 @@ export default function Dashboard() {
 
   const totalUsedGB = configs.reduce((sum, c) => sum + bytesToGB(c.usage_up + c.usage_down), 0)
   const totalGB = configs.reduce((sum, c) => sum + (c.total_gb || 0), 0)
-  const referredGB = user?.total_referred_gb_purchased || 0
-  const giftedGB = referredGB * 0.1
 
   const handleCharge = () => navigate('/store')
 
@@ -58,12 +56,6 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold text-white">Raha VPN</h1>
           <p className="text-slate-400 text-sm">Your secure connection</p>
         </div>
-        <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-3 py-2 text-right">
-          <p className="text-xs text-emerald-400 font-medium">Wallet</p>
-          <p className="text-emerald-300 font-bold text-sm">
-            ${(user?.wallet_balance_usd || 0).toFixed(2)}
-          </p>
-        </div>
       </div>
 
       {/* Error toast */}
@@ -73,37 +65,22 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Gauge Charts */}
+      {/* Traffic Usage Gauge */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
-        <h2 className="text-slate-300 font-semibold text-sm mb-4">Usage Overview</h2>
-        <div className="flex items-start justify-around">
+        <h2 className="text-slate-300 font-semibold text-sm mb-4">Traffic Usage</h2>
+        <div className="flex items-start justify-center">
           {loading ? (
-            <>
-              <div className="flex flex-col items-center gap-2">
-                <div className="skeleton w-28 h-20 rounded-lg" />
-                <div className="skeleton h-3 w-20" />
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="skeleton w-28 h-20 rounded-lg" />
-                <div className="skeleton h-3 w-20" />
-              </div>
-            </>
+            <div className="flex flex-col items-center gap-2">
+              <div className="skeleton w-28 h-20 rounded-lg" />
+              <div className="skeleton h-3 w-20" />
+            </div>
           ) : (
-            <>
-              <GaugeChart
-                value={totalUsedGB}
-                max={totalGB || 1}
-                label="Traffic Usage"
-                color="#10b981"
-              />
-              <div className="w-px bg-slate-700 self-stretch" />
-              <GaugeChart
-                value={giftedGB}
-                max={referredGB || 1}
-                label="Referral Gift"
-                color="#6366f1"
-              />
-            </>
+            <GaugeChart
+              value={totalUsedGB}
+              max={totalGB || 1}
+              label="Traffic Usage"
+              color="#10b981"
+            />
           )}
         </div>
       </div>
