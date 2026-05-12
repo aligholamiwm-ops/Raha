@@ -15,6 +15,10 @@ from app.integrations.plisio import PlisioClient
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Referral system constants
+FIRST_REFERRAL_LAYER = 1
+MAX_REFERRAL_LAYERS = 10
+
 
 class CreateInvoiceRequest(BaseModel):
     plan_name: str
@@ -145,9 +149,9 @@ async def payment_webhook(
                 if referral_percentages:
                     # Calculate and distribute referral bonuses
                     current_referrer_id = user_doc.get("referrer_id")
-                    layer = 1
+                    layer = FIRST_REFERRAL_LAYER
                     
-                    while current_referrer_id and layer <= 10:  # Max 10 layers
+                    while current_referrer_id and layer <= MAX_REFERRAL_LAYERS:
                         percentage = referral_percentages.get(layer, 0.0)  # Use integer key
                         if percentage <= 0:
                             break  # No more layers defined
@@ -156,7 +160,7 @@ async def payment_webhook(
                         
                         # Credit referral bonus - only increment total_referred_usd_purchased for layer 1
                         update_fields = {"referral_bonus_usd": bonus_amount}
-                        if layer == 1:
+                        if layer == FIRST_REFERRAL_LAYER:
                             update_fields["total_referred_usd_purchased"] = amount_usd
                         
                         await db.users.update_one(

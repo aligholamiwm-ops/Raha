@@ -96,11 +96,11 @@ export default function Store() {
 
     // Create a descriptive plan name for custom deposits with timestamp
     const timestamp = Date.now()
-    const tempPlan = {
+    const customDepositPlan = {
       plan_name: `CustomDeposit_${timestamp}`,
       price_usd: amount
     }
-    handleBuy(tempPlan)
+    handleBuy(customDepositPlan)
   }
 
   const handleWithdrawal = () => {
