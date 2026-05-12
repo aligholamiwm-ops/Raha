@@ -34,6 +34,12 @@ class SenderRole(str, Enum):
     support = "support"
 
 
+class USDTNetwork(str, Enum):
+    trc20 = "TRC20"
+    bep20 = "BEP-20"
+    ton = "TON"
+
+
 class TicketMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -51,6 +57,9 @@ class TicketModel(BaseModel):
     category: TicketCategory = Field(..., description="Ticket category")
     status: TicketStatus = Field(default=TicketStatus.open)
     messages: List[TicketMessage] = Field(default_factory=list)
+    # Withdrawal-specific fields
+    usdt_address: Optional[str] = Field(default=None, description="USDT wallet address for withdrawal tickets")
+    usdt_network: Optional[USDTNetwork] = Field(default=None, description="USDT network for withdrawal tickets")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -64,6 +73,9 @@ class TicketCreate(BaseModel):
     title: str = Field(..., description="Ticket title")
     category: TicketCategory = Field(..., description="Ticket category")
     initial_message: str = Field(..., description="First message text")
+    # Optional withdrawal fields - required when category is withdrawal
+    usdt_address: Optional[str] = Field(default=None, description="USDT wallet address (required for withdrawal)")
+    usdt_network: Optional[USDTNetwork] = Field(default=None, description="USDT network (required for withdrawal)")
 
 
 class TicketUpdate(BaseModel):
