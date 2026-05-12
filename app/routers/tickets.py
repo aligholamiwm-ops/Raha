@@ -1,16 +1,19 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
-from app.models.user import UserModel
+from app.models.user import UserModel, UserRole
 from app.models.ticket import (
     TicketModel,
     TicketCreate,
     TicketUpdate,
     TicketReply,
     TicketStatus,
+    TicketCategory,
+    SortField,
+    SortOrder,
     TicketMessage,
     SenderRole,
 )
@@ -32,6 +35,8 @@ async def create_ticket(
     now = datetime.now(timezone.utc)
     ticket = TicketModel(
         telegram_id=current_user.telegram_id,
+        title=payload.title,
+        category=payload.category,
         messages=[
             TicketMessage(
                 sender_role=SenderRole.user,
@@ -65,18 +70,33 @@ async def list_my_tickets(
 @router.get(
     "/",
     response_model=list[TicketModel],
-    summary="List all tickets (admin)",
+    summary="List all tickets (admin/support)",
 )
 async def list_all_tickets(
     status: TicketStatus | None = None,
+    category: TicketCategory | None = None,
+    sort_by: SortField = Query(SortField.created_at, description="Sort by field"),
+    sort_order: SortOrder = Query(SortOrder.desc, description="Sort order"),
     skip: int = 0,
     limit: int = 50,
-    _admin: UserModel = Depends(require_admin),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[TicketModel]:
-    query = {"status": status.value} if status else {}
+    # Allow both admin and support to view all tickets
+    if current_user.role not in [UserRole.admin, UserRole.support]:
+        raise HTTPException(status_code=403, detail="Admin or support access required")
+    
+    query = {}
+    if status:
+        query["status"] = status.value
+    if category:
+        query["category"] = category.value
+    
+    # Determine sort order
+    sort_direction = -1 if sort_order == SortOrder.desc else 1
+    
     results = []
-    async for doc in db.tickets.find(query).skip(skip).limit(limit):
+    async for doc in db.tickets.find(query).sort(sort_by.value, sort_direction).skip(skip).limit(limit):
         doc.pop("_id", None)
         results.append(TicketModel(**doc))
     return results
@@ -95,9 +115,9 @@ async def get_ticket(
     doc = await db.tickets.find_one({"ticket_id": ticket_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    # Non-admins can only view their own tickets
+    # Non-admins and non-support can only view their own tickets
     if (
-        current_user.role != "admin"
+        current_user.role not in [UserRole.admin, UserRole.support]
         and doc["telegram_id"] != current_user.telegram_id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -108,7 +128,7 @@ async def get_ticket(
 @router.post(
     "/{ticket_id}/reply",
     response_model=TicketModel,
-    summary="Reply to a ticket (user or admin)",
+    summary="Reply to a ticket (user, admin, or support)",
 )
 async def reply_to_ticket(
     ticket_id: str,
@@ -120,7 +140,7 @@ async def reply_to_ticket(
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket not found")
     if (
-        current_user.role != "admin"
+        current_user.role not in [UserRole.admin, UserRole.support]
         and doc["telegram_id"] != current_user.telegram_id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -128,14 +148,21 @@ async def reply_to_ticket(
         raise HTTPException(status_code=400, detail="Cannot reply to a closed ticket")
 
     now = datetime.now(timezone.utc)
-    sender = SenderRole.admin if current_user.role == "admin" else SenderRole.user
+    # Determine sender role
+    if current_user.role == UserRole.admin:
+        sender = SenderRole.admin
+    elif current_user.role == UserRole.support:
+        sender = SenderRole.support
+    else:
+        sender = SenderRole.user
+    
     new_message = TicketMessage(sender_role=sender, text=payload.text, timestamp=now)
 
-    new_status = (
-        TicketStatus.waiting_for_user.value
-        if current_user.role == "admin"
-        else TicketStatus.open.value
-    )
+    # Update status based on who replied
+    if current_user.role in [UserRole.admin, UserRole.support]:
+        new_status = TicketStatus.waiting_for_user.value
+    else:
+        new_status = TicketStatus.open.value
 
     result = await db.tickets.find_one_and_update(
         {"ticket_id": ticket_id},
@@ -152,14 +179,18 @@ async def reply_to_ticket(
 @router.put(
     "/{ticket_id}/status",
     response_model=TicketModel,
-    summary="Update ticket status (admin)",
+    summary="Update ticket status (admin or support)",
 )
 async def update_ticket_status(
     ticket_id: str,
     payload: TicketUpdate,
-    _admin: UserModel = Depends(require_admin),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> TicketModel:
+    # Allow both admin and support to update ticket status
+    if current_user.role not in [UserRole.admin, UserRole.support]:
+        raise HTTPException(status_code=403, detail="Admin or support access required")
+    
     update_data = payload.to_dict()
     if "status" in update_data:
         status_val = update_data["status"]

@@ -115,6 +115,7 @@ export default function Admin() {
 
   const [userSearch, setUserSearch] = useState("");
   const [foundUser, setFoundUser] = useState(null);
+  const [userTickets, setUserTickets] = useState([]);
   const [chargeAmount, setChargeAmount] = useState(0);
   const [inboundLogs, setInboundLogs] = useState(null);
 
@@ -230,7 +231,14 @@ export default function Admin() {
     try {
       const res = await client.get(`/api/v1/users/${userSearch}`);
       setFoundUser(res.data);
-    } catch (err) { alert("User not found"); setFoundUser(null); }
+      // Fetch user's tickets
+      const ticketsRes = await client.get(`/api/v1/admin/users/${userSearch}/tickets`);
+      setUserTickets(ticketsRes.data || []);
+    } catch (err) { 
+      alert("User not found"); 
+      setFoundUser(null); 
+      setUserTickets([]);
+    }
     setLoading(false);
   };
 
@@ -247,7 +255,7 @@ export default function Admin() {
       await client.put(`/api/v1/admin/users/${foundUser.telegram_id}/role`, { role: newRole });
       alert("Role updated!");
       handleUserSearch();
-    } catch (err) { alert("Error updating role"); }
+    } catch (err) { alert("Error updating role: " + (err.response?.data?.detail || err.message)); }
   };
 
   const handlePlanSubmit = async (e) => {
@@ -480,18 +488,43 @@ export default function Admin() {
               </div>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-2">Quick Actions</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" onClick={() => handleRoleChange("admin")} disabled={foundUser.role === "admin"}>Set as Admin</Button>
-                    <Button variant="outline" onClick={() => handleRoleChange("user")} disabled={foundUser.role === "user"}>Set as User</Button>
-                  </div>
+                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
+                  <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">User Role</div>
+                  <Select 
+                    label="Change Role" 
+                    value={foundUser.role} 
+                    onChange={(e) => handleRoleChange(e.target.value)}
+                    options={[
+                      { value: "user", label: "User" },
+                      { value: "support", label: "Support" },
+                      { value: "admin", label: "Admin" }
+                    ]}
+                  />
                 </div>
 
                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
                   <Input label="Add Balance ($)" type="number" value={chargeAmount} onChange={e => setChargeAmount(parseFloat(e.target.value))} />
                   <Button onClick={handleCharge} className="w-full" variant="primary">Add Balance</Button>
                 </div>
+
+                {userTickets.length > 0 && (
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
+                    <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">User Tickets ({userTickets.length})</div>
+                    {userTickets.map(ticket => (
+                      <div key={ticket.ticket_id} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-white">{ticket.title || `Ticket #${ticket.ticket_id.slice(0, 8)}`}</span>
+                          <Badge variant={ticket.status === 'open' ? 'danger' : ticket.status === 'closed' ? 'info' : 'warning'}>
+                            {ticket.status}
+                          </Badge>
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Category: {ticket.category} | Created: {new Date(ticket.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

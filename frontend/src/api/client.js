@@ -33,11 +33,13 @@ export const getPlans = () => api.get('/api/v1/plans/').then((r) => r.data)
 export const createInvoice = (plan_name, currency = 'USDT') =>
   api.post('/api/v1/payments/create-invoice', { plan_name, currency }).then((r) => r.data)
 export const getMyTickets = () => api.get('/api/v1/tickets/my').then((r) => r.data)
-export const createTicket = (initial_message) =>
-  api.post('/api/v1/tickets/', { initial_message }).then((r) => r.data)
+export const createTicket = (payload) =>
+  api.post('/api/v1/tickets/', payload).then((r) => r.data)
 export const replyTicket = (id, text) =>
   api.post('/api/v1/tickets/' + id + '/reply', { text }).then((r) => r.data)
 export const getTicket = (id) => api.get('/api/v1/tickets/' + id).then((r) => r.data)
+export const getAllTickets = (params) => api.get('/api/v1/tickets/', { params }).then((r) => r.data)
+export const updateTicketStatus = (id, status) => api.put('/api/v1/tickets/' + id + '/status', { status }).then((r) => r.data)
 
 // Admin API Methods
 export const getAdminStats = () => api.get('/api/v1/admin/stats').then((r) => r.data)
