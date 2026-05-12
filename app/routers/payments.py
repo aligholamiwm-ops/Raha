@@ -137,6 +137,44 @@ async def payment_webhook(
                 {"telegram_id": telegram_id},
                 {"$inc": {"wallet_balance_usd": amount_usd}},
             )
+            
+            # Process multi-layer referral bonuses
+            user_doc = await db.users.find_one({"telegram_id": telegram_id})
+            if user_doc and user_doc.get("referrer_id"):
+                referral_percentages = plan_doc.get("referral_percentages", {})
+                if referral_percentages:
+                    # Calculate and distribute referral bonuses
+                    current_referrer_id = user_doc.get("referrer_id")
+                    layer = 1
+                    
+                    while current_referrer_id and layer <= 10:  # Max 10 layers
+                        percentage = referral_percentages.get(str(layer), 0.0)
+                        if percentage <= 0:
+                            break  # No more layers defined
+                        
+                        bonus_amount = (amount_usd * percentage) / 100.0
+                        
+                        # Credit referral bonus
+                        await db.users.update_one(
+                            {"telegram_id": current_referrer_id},
+                            {
+                                "$inc": {
+                                    "referral_bonus_usd": bonus_amount,
+                                    "total_referred_usd_purchased": amount_usd if layer == 1 else 0,
+                                }
+                            },
+                        )
+                        logger.info(
+                            "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
+                            layer, bonus_amount, current_referrer_id, telegram_id
+                        )
+                        
+                        # Move to next layer
+                        referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
+                        if not referrer_doc or not referrer_doc.get("referrer_id"):
+                            break
+                        current_referrer_id = referrer_doc.get("referrer_id")
+                        layer += 1
 
         await db.payments.update_one(
             {"payment_id": order_number},

@@ -16,6 +16,7 @@ from app.models.ticket import (
     SortOrder,
     TicketMessage,
     SenderRole,
+    USDTNetwork,
 )
 
 router = APIRouter()
@@ -32,11 +33,21 @@ async def create_ticket(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> TicketModel:
+    # Validate withdrawal ticket fields
+    if payload.category == TicketCategory.withdrawal:
+        if not payload.usdt_address or not payload.usdt_network:
+            raise HTTPException(
+                status_code=400,
+                detail="USDT address and network are required for withdrawal tickets"
+            )
+    
     now = datetime.now(timezone.utc)
     ticket = TicketModel(
         telegram_id=current_user.telegram_id,
         title=payload.title,
         category=payload.category,
+        usdt_address=payload.usdt_address,
+        usdt_network=payload.usdt_network,
         messages=[
             TicketMessage(
                 sender_role=SenderRole.user,
