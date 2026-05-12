@@ -117,7 +117,7 @@ export default function Referral() {
 
         {!hasBotUsername && (
           <p className="text-amber-300 text-xs">
-            Referral sharing is not configured right now. Please contact support.
+            Referral sharing is unavailable because this app is not fully configured. Please contact support.
           </p>
         )}
       </div>
