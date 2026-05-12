@@ -59,7 +59,7 @@ cd Raha
 cp .env.example .env
 cp frontend/.env.example frontend/.env
 # Edit .env — fill in BOT_TOKEN, PLISIO_*, SECRET_KEY
-# Edit frontend/.env — set VITE_BOT_USERNAME for referral links
+# Edit frontend/.env (or frontend/.env.local) — set VITE_BOT_USERNAME for referral links
 ```
 
 ### 2. Run with Docker Compose
@@ -100,7 +100,7 @@ docker exec raha_mongodb mongosh raha_vpn --eval 'db.users.updateOne({telegram_i
 | `MINI_APP_URL` | ✅ | — | The public URL where your Mini App is hosted |
 
 ### Frontend environment variables
-Create `frontend/.env` from `frontend/.env.example` before building the UI.
+Create `frontend/.env` from `frontend/.env.example` before building the UI. You can also use `frontend/.env.local` for machine-specific overrides.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
