@@ -57,7 +57,9 @@ Raha is a modern, high-performance VPN management system built for Telegram Mini
 git clone https://github.com/aligholamiwm-ops/Raha.git
 cd Raha
 cp .env.example .env
+cp frontend/.env.example frontend/.env
 # Edit .env — fill in BOT_TOKEN, PLISIO_*, SECRET_KEY
+# Edit frontend/.env (or frontend/.env.local) — set VITE_BOT_USERNAME for referral links
 ```
 
 ### 2. Run with Docker Compose
@@ -96,6 +98,14 @@ docker exec raha_mongodb mongosh raha_vpn --eval 'db.users.updateOne({telegram_i
 | `PLISIO_API_KEY` | ✅ | — | Plisio API key |
 | `PLISIO_SECRET_KEY` | ✅ | — | Plisio secret key (webhook verification) |
 | `MINI_APP_URL` | ✅ | — | The public URL where your Mini App is hosted |
+
+### Frontend environment variables
+Create `frontend/.env` from `frontend/.env.example` before building the UI. You can also use `frontend/.env.local` for machine-specific overrides; when both files exist, values in `frontend/.env.local` override the same variables from `frontend/.env`.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `VITE_API_BASE_URL` | | — | Optional API base URL for the frontend |
+| `VITE_BOT_USERNAME` | ✅ | — | Telegram bot username used to build referral/share links |
 
 ---
 
