@@ -23,6 +23,11 @@ class SortField(str, Enum):
     updated_at = "updated_at"
 
 
+class SortOrder(str, Enum):
+    asc = "asc"
+    desc = "desc"
+
+
 class SenderRole(str, Enum):
     user = "user"
     admin = "admin"

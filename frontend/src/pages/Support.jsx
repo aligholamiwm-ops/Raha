@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus } from '../api/client'
 
@@ -312,13 +312,13 @@ export default function Support() {
   const [selectedTicketId, setSelectedTicketId] = useState(null)
 
   // Support staff filters
-  const isStaff = user?.role === 'admin' || user?.role === 'support'
+  const isStaff = useMemo(() => user?.role === 'admin' || user?.role === 'support', [user?.role])
   const [filterStatus, setFilterStatus] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -340,11 +340,11 @@ export default function Support() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder])
 
   useEffect(() => {
     loadTickets()
-  }, [filterStatus, filterCategory, sortBy, sortOrder, user?.role])
+  }, [loadTickets])
 
   const handleTicketCreated = (ticket) => {
     setSelectedTicketId(ticket.ticket_id)

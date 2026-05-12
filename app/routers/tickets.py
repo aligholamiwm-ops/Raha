@@ -13,6 +13,7 @@ from app.models.ticket import (
     TicketStatus,
     TicketCategory,
     SortField,
+    SortOrder,
     TicketMessage,
     SenderRole,
 )
@@ -75,7 +76,7 @@ async def list_all_tickets(
     status: TicketStatus | None = None,
     category: TicketCategory | None = None,
     sort_by: SortField = Query(SortField.created_at, description="Sort by field"),
-    sort_order: str = Query("desc", description="Sort order (asc or desc)"),
+    sort_order: SortOrder = Query(SortOrder.desc, description="Sort order"),
     skip: int = 0,
     limit: int = 50,
     current_user: UserModel = Depends(get_current_user),
@@ -92,7 +93,7 @@ async def list_all_tickets(
         query["category"] = category.value
     
     # Determine sort order
-    sort_direction = -1 if sort_order == "desc" else 1
+    sort_direction = -1 if sort_order == SortOrder.desc else 1
     
     results = []
     async for doc in db.tickets.find(query).sort(sort_by.value, sort_direction).skip(skip).limit(limit):
