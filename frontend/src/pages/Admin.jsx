@@ -234,7 +234,11 @@ export default function Admin() {
       // Fetch user's tickets
       const ticketsRes = await client.get(`/api/v1/admin/users/${userSearch}/tickets`);
       setUserTickets(ticketsRes.data || []);
-    } catch (err) { alert("User not found"); setFoundUser(null); setUserTickets([]; }
+    } catch (err) { 
+      alert("User not found"); 
+      setFoundUser(null); 
+      setUserTickets([]);
+    }
     setLoading(false);
   };
 
