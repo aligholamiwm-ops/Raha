@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { getMyTickets, createTicket, getTicket, replyTicket } from '../api/client'
+import { useApp } from '../context/AppContext'
+import { getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus } from '../api/client'
 
-const CATEGORIES = ['Technical Issue', 'Billing', 'Order', 'General']
+const CATEGORIES = ['connection', 'help', 'withdrawal', 'cooperation']
 
 function formatDate(d) {
   if (!d) return ''
@@ -13,12 +14,11 @@ function StatusBadge({ status }) {
   const styles = {
     open: 'bg-emerald-500/20 text-emerald-400',
     closed: 'bg-slate-600/50 text-slate-400',
-    pending: 'bg-yellow-500/20 text-yellow-400',
-    answered: 'bg-blue-500/20 text-blue-400',
+    waiting_for_user: 'bg-yellow-500/20 text-yellow-400',
   }
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || styles.open}`}>
-      {status || 'open'}
+      {status.replace('_', ' ')}
     </span>
   )
 }
@@ -45,18 +45,18 @@ const SendIcon = () => (
 // ─── New Ticket Form ─────────────────────────────────────────────────────────
 function NewTicketForm({ onCreated, onCancel }) {
   const [category, setCategory] = useState(CATEGORIES[0])
+  const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!message.trim()) return
+    if (!message.trim() || !title.trim()) return
     setSubmitting(true)
     setError(null)
     try {
-      const fullMessage = `[${category}] ${message.trim()}`
-      const ticket = await createTicket(fullMessage)
+      const ticket = await createTicket({ title: title.trim(), category, initial_message: message.trim() })
       onCreated(ticket)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create ticket')
@@ -82,14 +82,26 @@ function NewTicketForm({ onCreated, onCancel }) {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
+          <label className="block text-slate-400 text-xs mb-1.5 font-medium">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Brief description of your issue"
+            className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
+            required
+          />
+        </div>
+
+        <div>
           <label className="block text-slate-400 text-xs mb-1.5 font-medium">Category</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 capitalize"
           >
             {CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c} className="capitalize">{c}</option>
             ))}
           </select>
         </div>
@@ -108,7 +120,7 @@ function NewTicketForm({ onCreated, onCancel }) {
 
         <button
           type="submit"
-          disabled={submitting || !message.trim()}
+          disabled={submitting || !message.trim() || !title.trim()}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
         >
           {submitting ? (
@@ -126,7 +138,7 @@ function NewTicketForm({ onCreated, onCancel }) {
 }
 
 // ─── Ticket Thread View ───────────────────────────────────────────────────────
-function TicketThread({ ticketId, onBack }) {
+function TicketThread({ ticketId, onBack, isStaff }) {
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(true)
   const [replyText, setReplyText] = useState('')
@@ -169,6 +181,16 @@ function TicketThread({ ticketId, onBack }) {
     }
   }
 
+  const handleCloseTicket = async () => {
+    if (!window.confirm('Close this ticket?')) return
+    try {
+      await updateTicketStatus(ticketId, 'closed')
+      await loadTicket()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to close ticket')
+    }
+  }
+
   const messages = ticket?.messages || []
 
   return (
@@ -180,13 +202,27 @@ function TicketThread({ ticketId, onBack }) {
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-white font-semibold text-sm truncate">
-            Ticket #{typeof ticketId === 'string' ? ticketId.slice(0, 8) : ticketId}
+            {ticket?.title || `Ticket #${typeof ticketId === 'string' ? ticketId.slice(0, 8) : ticketId}`}
           </p>
-          {ticket && <StatusBadge status={ticket.status} />}
+          <div className="flex items-center gap-2 mt-1">
+            {ticket && <StatusBadge status={ticket.status} />}
+            {ticket?.category && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">
+                {ticket.category}
+              </span>
+            )}
+          </div>
         </div>
-        <button onClick={loadTicket} className="text-emerald-400 text-xs hover:text-emerald-300">
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isStaff && ticket?.status !== 'closed' && (
+            <button onClick={handleCloseTicket} className="text-rose-400 text-xs hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10">
+              Close
+            </button>
+          )}
+          <button onClick={loadTicket} className="text-emerald-400 text-xs hover:text-emerald-300">
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -214,7 +250,9 @@ function TicketThread({ ticketId, onBack }) {
                   }`}
                 >
                   {!isUser && (
-                    <p className="text-xs font-semibold text-emerald-400">Support</p>
+                    <p className="text-xs font-semibold text-emerald-400">
+                      {msg.sender_role === 'support' ? 'Support' : 'Admin'}
+                    </p>
                   )}
                   <p className="text-sm leading-relaxed">{msg.text || ''}</p>
                   <p className={`text-xs ${isUser ? 'text-blue-300' : 'text-slate-500'} text-right`}>
@@ -266,17 +304,35 @@ function TicketThread({ ticketId, onBack }) {
 
 // ─── Main Support Page ────────────────────────────────────────────────────────
 export default function Support() {
+  const { user } = useApp()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('list') // 'list' | 'new' | 'thread'
   const [selectedTicketId, setSelectedTicketId] = useState(null)
 
+  // Support staff filters
+  const isStaff = user?.role === 'admin' || user?.role === 'support'
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState('desc')
+
   const loadTickets = async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getMyTickets()
+      let data
+      if (isStaff) {
+        const params = {}
+        if (filterStatus) params.status = filterStatus
+        if (filterCategory) params.category = filterCategory
+        params.sort_by = sortBy
+        params.sort_order = sortOrder
+        data = await getAllTickets(params)
+      } else {
+        data = await getMyTickets()
+      }
       setTickets(Array.isArray(data) ? data : [])
     } catch {
       setError('Failed to load tickets')
@@ -288,7 +344,7 @@ export default function Support() {
 
   useEffect(() => {
     loadTickets()
-  }, [])
+  }, [filterStatus, filterCategory, sortBy, sortOrder])
 
   const handleTicketCreated = (ticket) => {
     setSelectedTicketId(ticket.ticket_id)
@@ -311,6 +367,7 @@ export default function Support() {
         <TicketThread
           ticketId={selectedTicketId}
           onBack={() => setView('list')}
+          isStaff={isStaff}
         />
       </div>
     )
@@ -321,17 +378,76 @@ export default function Support() {
     <div className="px-4 py-5 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Support</h1>
-          <p className="text-slate-400 text-sm">We're here to help</p>
+          <h1 className="text-xl font-bold text-white">{isStaff ? 'Support Dashboard' : 'Support'}</h1>
+          <p className="text-slate-400 text-sm">{isStaff ? 'Manage support tickets' : "We're here to help"}</p>
         </div>
-        <button
-          onClick={() => setView('new')}
-          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-        >
-          <PlusIcon />
-          New Ticket
-        </button>
+        {!isStaff && (
+          <button
+            onClick={() => setView('new')}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          >
+            <PlusIcon />
+            New Ticket
+          </button>
+        )}
       </div>
+
+      {isStaff && (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Status</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">All</option>
+                <option value="open">Open</option>
+                <option value="waiting_for_user">Waiting for User</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Category</label>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500 capitalize"
+              >
+                <option value="">All</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c} className="capitalize">{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Sort By</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="created_at">Created</option>
+                <option value="updated_at">Updated</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Order</label>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="desc">Newest First</option>
+                <option value="asc">Oldest First</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
@@ -347,17 +463,17 @@ export default function Support() {
         ) : tickets.length === 0 ? (
           <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-8 text-center space-y-3">
             <p className="text-slate-400 text-sm">No tickets yet</p>
-            <button
-              onClick={() => setView('new')}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Open a Ticket
-            </button>
+            {!isStaff && (
+              <button
+                onClick={() => setView('new')}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                Open a Ticket
+              </button>
+            )}
           </div>
         ) : (
           tickets.map((ticket) => {
-            const firstMsg = ticket.messages?.[0]?.text || ''
-            const preview = firstMsg.replace(/^\[.*?\]\s*/, '').slice(0, 80) || 'No message'
             return (
               <button
                 key={ticket.ticket_id}
@@ -365,11 +481,20 @@ export default function Support() {
                 className="w-full text-left bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-4 space-y-2 transition-all"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-white font-medium text-sm">Ticket #{ticket.ticket_id?.slice(0, 8)}</span>
+                  <span className="text-white font-medium text-sm">{ticket.title || `Ticket #${ticket.ticket_id?.slice(0, 8)}`}</span>
                   <StatusBadge status={ticket.status} />
                 </div>
-                <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{preview}</p>
-                <p className="text-slate-500 text-xs">{formatDate(ticket.created_at)}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">
+                    {ticket.category}
+                  </span>
+                  <span className="text-slate-500 text-xs">{formatDate(ticket.created_at)}</span>
+                </div>
+                {ticket.messages?.[0]?.text && (
+                  <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">
+                    {ticket.messages[0].text.slice(0, 100)}
+                  </p>
+                )}
               </button>
             )
           })
