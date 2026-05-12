@@ -100,7 +100,7 @@ docker exec raha_mongodb mongosh raha_vpn --eval 'db.users.updateOne({telegram_i
 | `MINI_APP_URL` | ✅ | — | The public URL where your Mini App is hosted |
 
 ### Frontend environment variables
-Create `frontend/.env` from `frontend/.env.example` before building the UI. You can also use `frontend/.env.local` for machine-specific overrides.
+Create `frontend/.env` from `frontend/.env.example` before building the UI. You can also use `frontend/.env.local` for machine-specific overrides; when both files exist, `frontend/.env.local` takes precedence.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
