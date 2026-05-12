@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from enum import Enum
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
@@ -17,6 +18,11 @@ from app.models.ticket import (
 )
 
 router = APIRouter()
+
+
+class SortField(str, Enum):
+    created_at = "created_at"
+    updated_at = "updated_at"
 
 
 @router.post(
@@ -73,7 +79,7 @@ async def list_my_tickets(
 async def list_all_tickets(
     status: TicketStatus | None = None,
     category: TicketCategory | None = None,
-    sort_by: str = Query("created_at", description="Sort by field (created_at or updated_at)"),
+    sort_by: SortField = Query(SortField.created_at, description="Sort by field"),
     sort_order: str = Query("desc", description="Sort order (asc or desc)"),
     skip: int = 0,
     limit: int = 50,
@@ -92,10 +98,9 @@ async def list_all_tickets(
     
     # Determine sort order
     sort_direction = -1 if sort_order == "desc" else 1
-    sort_field = sort_by if sort_by in ["created_at", "updated_at"] else "created_at"
     
     results = []
-    async for doc in db.tickets.find(query).sort(sort_field, sort_direction).skip(skip).limit(limit):
+    async for doc in db.tickets.find(query).sort(sort_by.value, sort_direction).skip(skip).limit(limit):
         doc.pop("_id", None)
         results.append(TicketModel(**doc))
     return results

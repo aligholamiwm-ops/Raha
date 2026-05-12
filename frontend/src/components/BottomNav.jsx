@@ -47,7 +47,6 @@ export default function BottomNav() {
 
   // Case-insensitive check for admin role
   const isAdmin = user?.role?.toLowerCase() === 'admin';
-  const isSupport = user?.role?.toLowerCase() === 'support';
 
   if (isAdmin) {
     tabs.push({ to: '/admin', label: 'Admin', Icon: ShieldIcon });

@@ -344,7 +344,7 @@ export default function Support() {
 
   useEffect(() => {
     loadTickets()
-  }, [filterStatus, filterCategory, sortBy, sortOrder])
+  }, [filterStatus, filterCategory, sortBy, sortOrder, isStaff])
 
   const handleTicketCreated = (ticket) => {
     setSelectedTicketId(ticket.ticket_id)
