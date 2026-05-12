@@ -106,7 +106,12 @@ export default function Admin() {
   const [ipForm, setIpForm] = useState({ isp_name: "MCI", ip_address: "" });
 
   const [showPlanForm, setShowPlanForm] = useState(false);
-  const [planForm, setPlanForm] = useState({ plan_name: "", traffic_gb: 10, price_usd: 5 });
+  const [planForm, setPlanForm] = useState({ 
+    plan_name: "", 
+    traffic_gb: 10, 
+    price_usd: 5,
+    referral_percentages: {} // e.g., {1: 10, 2: 5, 3: 2}
+  });
   const [editingPlan, setEditingPlan] = useState(null);
 
   const [showDiscountForm, setShowDiscountForm] = useState(false);
@@ -267,7 +272,7 @@ export default function Admin() {
         await client.post("/api/v1/plans/", planForm);
       }
       alert("Plan saved!");
-      setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5 });
+      setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5, referral_percentages: {} });
       setEditingPlan(null);
       setShowPlanForm(false);
       fetchPlans();
@@ -542,7 +547,38 @@ export default function Admin() {
                   <Input label="Traffic (GB)" type="number" value={planForm.traffic_gb} onChange={e => setPlanForm({...planForm, traffic_gb: parseFloat(e.target.value)})} required />
                   <Input label="Price ($)" type="number" value={planForm.price_usd} onChange={e => setPlanForm({...planForm, price_usd: parseFloat(e.target.value)})} required />
                 </div>
-                <div className="flex gap-2">
+                
+                <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-600">
+                  <div className="text-xs font-medium text-slate-400 mb-2">Referral Percentages (Layer → %)</div>
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4, 5].map(layer => (
+                      <div key={layer} className="grid grid-cols-3 gap-2 items-center">
+                        <span className="text-xs text-slate-400">Layer {layer}:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={planForm.referral_percentages?.[layer] || 0}
+                          onChange={e => setPlanForm({
+                            ...planForm, 
+                            referral_percentages: {
+                              ...planForm.referral_percentages,
+                              [layer]: parseFloat(e.target.value) || 0
+                            }
+                          })}
+                          className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
+                          placeholder="0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 italic">
+                    Leave at 0 to disable that layer. Layer 1 = direct referral, Layer 2 = 2nd level, etc.
+                  </p>
+                </div>
+                
+                <div className="flex gap-2 mt-3">
                   <Button type="submit" className="flex-1">{editingPlan ? "Update" : "Create"} Plan</Button>
                   <Button type="button" variant="outline" onClick={() => setShowPlanForm(false)}>Cancel</Button>
                 </div>
@@ -554,6 +590,14 @@ export default function Admin() {
                   <div>
                     <div className="text-sm font-bold text-white">{p.plan_name}</div>
                     <div className="text-[10px] text-slate-500">{p.traffic_gb} GB | ${p.price_usd}</div>
+                    {p.referral_percentages && Object.keys(p.referral_percentages).length > 0 && (
+                      <div className="text-[10px] text-emerald-400 mt-1">
+                        Referral: {Object.entries(p.referral_percentages)
+                          .filter(([_, v]) => v > 0)
+                          .map(([layer, pct]) => `L${layer}:${pct}%`)
+                          .join(', ')}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => { setEditingPlan(p.plan_name); setPlanForm(p); setShowPlanForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
