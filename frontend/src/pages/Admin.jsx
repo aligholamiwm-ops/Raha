@@ -560,13 +560,16 @@ export default function Admin() {
                           max="100"
                           step="0.1"
                           value={planForm.referral_percentages?.[layer] || 0}
-                          onChange={e => setPlanForm({
-                            ...planForm, 
-                            referral_percentages: {
-                              ...planForm.referral_percentages,
-                              [layer]: parseFloat(e.target.value) || 0
-                            }
-                          })}
+                          onChange={e => {
+                            const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
+                            setPlanForm({
+                              ...planForm, 
+                              referral_percentages: {
+                                ...planForm.referral_percentages,
+                                [layer]: value
+                              }
+                            })
+                          }}
                           className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
                           placeholder="0"
                         />

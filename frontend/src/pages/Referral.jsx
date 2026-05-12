@@ -39,7 +39,8 @@ export default function Referral() {
   const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
 
-  const botUsername = import.meta.env.VITE_BOT_USERNAME || 'RahaVPN' // Use env var with fallback
+  // Bot username from environment with fallback (must match production bot)
+  const botUsername = import.meta.env.VITE_BOT_USERNAME || 'RahaVPN'
   const referralLink = user?.telegram_id 
     ? `https://t.me/${botUsername}?start=${user.telegram_id}` 
     : '—'

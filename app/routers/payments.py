@@ -147,14 +147,14 @@ async def payment_webhook(
             if user_doc and user_doc.get("referrer_id"):
                 referral_percentages = plan_doc.get("referral_percentages", {})
                 if referral_percentages:
-                    # Calculate and distribute referral bonuses
+                    # Calculate and distribute referral bonuses across layers
                     current_referrer_id = user_doc.get("referrer_id")
                     layer = FIRST_REFERRAL_LAYER
                     
                     while current_referrer_id and layer <= MAX_REFERRAL_LAYERS:
-                        percentage = referral_percentages.get(layer, 0.0)  # Use integer key
+                        percentage = referral_percentages.get(layer, 0.0)
                         if percentage <= 0:
-                            break  # No more layers defined
+                            break  # No percentage defined for this layer
                         
                         bonus_amount = (amount_usd * percentage) / 100.0
                         

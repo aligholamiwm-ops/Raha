@@ -94,10 +94,10 @@ export default function Store() {
       return
     }
 
-    // Create a descriptive plan name for custom deposits with timestamp
-    const timestamp = Date.now()
+    // Create a plan object for custom deposits
+    // Note: handleBuy only uses plan_name and price_usd for invoice creation
     const customDepositPlan = {
-      plan_name: `CustomDeposit_${timestamp}`,
+      plan_name: `CustomDeposit_${Date.now()}`,
       price_usd: amount
     }
     handleBuy(customDepositPlan)
