@@ -39,16 +39,16 @@ export default function Referral() {
   const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
 
-  // Bot username from environment with fallback (must match production bot)
-  const botUsername = import.meta.env.VITE_BOT_USERNAME || 'RahaVPN'
-  const referralLink = user?.telegram_id 
+  const botUsername = import.meta.env.VITE_BOT_USERNAME?.trim()
+  const hasBotUsername = Boolean(botUsername)
+  const referralLink = user?.telegram_id && hasBotUsername
     ? `https://t.me/${botUsername}?start=${user.telegram_id}` 
     : '—'
   const referralBonus = user?.referral_bonus_usd || 0
   const totalReferred = user?.total_referred_usd_purchased || 0
 
   const handleCopy = async () => {
-    if (!user?.telegram_id) return
+    if (!user?.telegram_id || !hasBotUsername) return
     try {
       await navigator.clipboard.writeText(referralLink)
       setCopied(true)
@@ -59,9 +59,10 @@ export default function Referral() {
   }
 
   const handleShare = () => {
+    if (!user?.telegram_id || !hasBotUsername) return
     const tg = window.Telegram?.WebApp
     const shareText = `Join Raha VPN and get premium VPN service!`
-    const shareUrl = `https://t.me/${botUsername}?start=${user?.telegram_id || ''}`
+    const shareUrl = `https://t.me/${botUsername}?start=${user.telegram_id}`
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)
     } else {
@@ -107,12 +108,18 @@ export default function Referral() {
 
         <button
           onClick={handleShare}
-          disabled={!user?.telegram_id}
+          disabled={!user?.telegram_id || !hasBotUsername}
           className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
         >
           <ShareIcon />
           Share with Friends
         </button>
+
+        {!hasBotUsername && (
+          <p className="text-amber-300 text-xs">
+            Referral sharing is unavailable until <code className="font-mono">VITE_BOT_USERNAME</code> is set in <code className="font-mono">frontend/.env</code>.
+          </p>
+        )}
       </div>
 
       {/* Bonus display */}

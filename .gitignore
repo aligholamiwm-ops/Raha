@@ -2,6 +2,8 @@ app/__pycache__
 __pycache__
 *.pyc
 .env
+frontend/.env
+frontend/.env.local
 
 # Frontend
 frontend/node_modules/
