@@ -7,9 +7,9 @@ from pydantic import BaseModel
 from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel, UserRole
-from app.models.vpn_config import ConfigStatus
 from app.models.ticket import TicketModel
-from app.integrations.xui_api import AsyncXUIClient
+from app.integrations.xui_api import build_xui_client
+from app.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,10 +21,9 @@ class UserRoleUpdate(BaseModel):
 async def get_stats(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
     total_users = await db.users.count_documents({})
-    active_configs = await db.vpn_configs.count_documents({"status": ConfigStatus.active.value})
-    expired_configs = await db.vpn_configs.count_documents({"status": ConfigStatus.expired.value})
     
     pipeline = [
         {"$match": {"status": "completed"}},
@@ -36,11 +35,23 @@ async def get_stats(
     
     total_tickets = await db.tickets.count_documents({})
     open_tickets = await db.tickets.count_documents({"status": "open"})
+
+    # Count configs live from XUI
+    total_configs = 0
+    active_configs = 0
+    for server in settings.get_enabled_servers():
+        try:
+            xui = build_xui_client(server)
+            clients = await xui.get_client_info()
+            total_configs += len(clients)
+            active_configs += sum(1 for c in clients if c.get("enable", True))
+        except Exception as exc:
+            logger.warning("Stats: could not reach server %s: %s", server.get("name"), exc)
     
     return {
         "total_users": total_users,
         "active_configs": active_configs,
-        "expired_configs": expired_configs,
+        "total_configs": total_configs,
         "total_revenue_usd": round(total_revenue, 2),
         "total_tickets": total_tickets,
         "open_tickets": open_tickets,
@@ -108,53 +119,31 @@ async def get_user_tickets(
         results.append(TicketModel(**doc))
     return results
 
-@router.post("/sync-configs", summary="Sync config statuses from XUI panels")
+@router.post("/sync-configs", summary="Test connectivity to all XUI servers and return status")
 async def sync_configs(
     _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
-    servers_updated = 0
-    configs_updated = 0
+    servers_ok = 0
+    servers_failed = 0
+    total_clients = 0
     errors = []
-    async for server_doc in db.servers.find({}):
-        server_doc.pop("_id", None)
-        
-        # Use ip_address and panel_port directly from database
-        base_url = f"{server_doc['ip_address']}:{server_doc['panel_port']}"
-            
-        xui = AsyncXUIClient(
-            base_url=base_url,
-            username=server_doc["username"],
-            password=server_doc["password"],
-            inbound_id=server_doc["inbound_id"],
-            server_name=server_doc["server_name"],
-            db=db,
-        )
-        if server_doc.get("cookie"):
-            xui.set_cookie(server_doc["cookie"])
+
+    for server in settings.get_server_list():
+        server_name = server.get("name", server.get("server_name", ""))
         try:
+            xui = build_xui_client(server)
             clients = await xui.get_client_info()
+            total_clients += len(clients)
+            servers_ok += 1
         except Exception as exc:
-            errors.append(f"{server_doc['server_name']}: connection or parse error")
-            logger.warning("sync_configs error for %s: %s", server_doc["server_name"], exc)
-            continue
-        servers_updated += 1
-        now = datetime.now(timezone.utc)
-        for client in clients:
-            c_uuid = client.get("uuid")
-            if not c_uuid: continue
-            expiry_ms = client.get("expiry_time_ms", 0)
-            expiry_date = datetime.fromtimestamp(expiry_ms / 1000.0, tz=timezone.utc) if expiry_ms > 0 else None
-            usage_up = client.get("usage_up", 0)
-            usage_down = client.get("usage_down", 0)
-            total_gb = client.get("total_gb", 0)
-            used_gb = (usage_up + usage_down) / (1024**3)
-            status = ConfigStatus.active.value
-            if not client.get("enable", True) or (total_gb > 0 and used_gb >= total_gb) or (expiry_date and expiry_date < now):
-                status = ConfigStatus.expired.value
-            update_result = await db.vpn_configs.update_one(
-                {"uuid": c_uuid},
-                {"$set": {"usage_up": usage_up, "usage_down": usage_down, "status": status, "expiry_date": expiry_date}}
-            )
-            if update_result.modified_count: configs_updated += 1
-    return {"servers_synced": servers_updated, "configs_updated": configs_updated, "errors": errors}
+            servers_failed += 1
+            errors.append(f"{server_name}: connection failed")
+            logger.warning("sync_configs error for %s: %s", server_name, exc)
+
+    return {
+        "servers_ok": servers_ok,
+        "servers_failed": servers_failed,
+        "total_clients": total_clients,
+        "errors": errors,
+    }

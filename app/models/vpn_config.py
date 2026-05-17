@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ConfigStatus(str, Enum):
     active = "active"
     expired = "expired"
+    disabled = "disabled"
 
 
 class VpnConfigModel(BaseModel):
@@ -15,7 +16,9 @@ class VpnConfigModel(BaseModel):
     uuid: str = Field(..., description="XUI client UUID")
     telegram_id: int
     server_name: str
-    email: str = Field(..., description="Unique email label in XUI panel")
+    email: str = Field(..., description="Unique email label in XUI panel (format: {telegram_id}-{name})")
+    name: str = Field(default="", description="User-defined config name")
+    enable: bool = Field(default=True, description="Whether config is enabled in XUI")
     status: ConfigStatus = Field(default=ConfigStatus.active)
     total_gb: float = Field(..., description="Total traffic limit in GB")
     usage_up: float = Field(default=0.0, ge=0.0, description="Upload usage in bytes")
@@ -23,7 +26,6 @@ class VpnConfigModel(BaseModel):
     expiry_date: Optional[datetime] = Field(default=None)
     is_online: bool = Field(default=False)
     domain_name: str = Field(default="")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return self.model_dump()
@@ -32,25 +34,18 @@ class VpnConfigModel(BaseModel):
 class VpnConfigCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    telegram_id: int
-    server_name: str
-    email: str
-    uuid: str
-    total_gb: float
-    expiry_date: Optional[datetime] = None
-    domain_name: str = ""
+    name: str = Field(..., min_length=1, max_length=32, description="Config name (used in email)")
+    total_gb: float = Field(..., gt=0, description="Total traffic in GB to allocate")
+    duration_days: int = Field(default=0, ge=0, description="Config duration in days (0 = unlimited)")
+    server_name: Optional[str] = Field(default=None, description="Preferred server name (optional)")
 
 
 class VpnConfigUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    status: Optional[ConfigStatus] = None
-    total_gb: Optional[float] = None
-    usage_up: Optional[float] = None
-    usage_down: Optional[float] = None
-    expiry_date: Optional[datetime] = None
-    is_online: Optional[bool] = None
-    domain_name: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=32)
+    total_gb: Optional[float] = Field(default=None, gt=0)
+    duration_days: Optional[int] = Field(default=None, ge=0)
 
     def to_dict(self) -> dict:
         return self.model_dump(exclude_none=True)
@@ -63,6 +58,8 @@ class VpnConfigResponse(BaseModel):
     telegram_id: int
     server_name: str
     email: str
+    name: str = ""
+    enable: bool = True
     status: ConfigStatus
     total_gb: float
     usage_up: float
@@ -70,4 +67,3 @@ class VpnConfigResponse(BaseModel):
     expiry_date: Optional[datetime]
     is_online: bool
     domain_name: str
-    created_at: datetime

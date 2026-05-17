@@ -1,5 +1,9 @@
+import json
+import logging
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -23,11 +27,28 @@ class Settings(BaseSettings):
     # Frontend / Mini App
     MINI_APP_URL: str = ""       # e.g. https://yourdomain.com
     FRONTEND_ORIGIN: str = ""    # same value, or a different CDN domain
+    # Servers — JSON array of server config objects, stored in .env
+    # Example: [{"name":"s1","ip":"1.2.3.4","port":2053,"username":"admin","password":"secret","inbound_id":1,"status":"enabled"}]
+    SERVERS: str = "[]"
 
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
     }
+
+    def get_server_list(self) -> list[dict]:
+        """Parse SERVERS JSON string and return list of server config dicts."""
+        try:
+            servers = json.loads(self.SERVERS)
+            if isinstance(servers, list):
+                return servers
+        except (json.JSONDecodeError, TypeError):
+            logger.error("Failed to parse SERVERS env var as JSON list")
+        return []
+
+    def get_enabled_servers(self) -> list[dict]:
+        """Return only servers with status='enabled'."""
+        return [s for s in self.get_server_list() if s.get("status", "enabled") == "enabled"]
 
 
 @lru_cache()

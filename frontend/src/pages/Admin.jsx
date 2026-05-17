@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import client from '../api/client';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
-  FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo 
+  FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap
 } from 'react-icons/fi';
 
 const Card = ({ children, className = "" }) => (
@@ -85,6 +85,8 @@ const Badge = ({ children, variant = "info" }) => {
   );
 };
 
+const REFERRAL_PCT_OPTIONS = [0,1,2,3,5,7,10,12,15,20,25,30];
+
 export default function Admin() {
   const { user } = useApp();
   const [activeTab, setActiveTab] = useState("stats");
@@ -96,22 +98,16 @@ export default function Admin() {
   const [cleanIps, setCleanIps] = useState([]);
   const [plans, setPlans] = useState([]);
   const [discounts, setDiscounts] = useState([]);
-  
-  // Forms
-  const [showServerForm, setShowServerForm] = useState(false);
-  const [serverForm, setServerForm] = useState({ server_name: "", ip_address: "", panel_port: 2053, username: "", password: "", inbound_id: 1, status: "enabled" });
-  const [editingServer, setEditingServer] = useState(null);
+  const [referralConfig, setReferralConfig] = useState({ layer_1: 0, layer_2: 0, layer_3: 0, layer_4: 0, layer_5: 0 });
+  const [savingReferral, setSavingReferral] = useState(false);
+  const [testingServer, setTestingServer] = useState(null);
+  const [serverTestResult, setServerTestResult] = useState(null);
 
   const [showIpForm, setShowIpForm] = useState(false);
   const [ipForm, setIpForm] = useState({ isp_name: "MCI", ip_address: "" });
 
   const [showPlanForm, setShowPlanForm] = useState(false);
-  const [planForm, setPlanForm] = useState({ 
-    plan_name: "", 
-    traffic_gb: 10, 
-    price_usd: 5,
-    referral_percentages: {} // e.g., {1: 10, 2: 5, 3: 2}
-  });
+  const [planForm, setPlanForm] = useState({ plan_name: "", traffic_gb: 10, price_usd: 5 });
   const [editingPlan, setEditingPlan] = useState(null);
 
   const [showDiscountForm, setShowDiscountForm] = useState(false);
@@ -127,12 +123,11 @@ export default function Admin() {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanNote, setLoanNote] = useState('');
   const [allocatingLoan, setAllocatingLoan] = useState(false);
-  const [inboundLogs, setInboundLogs] = useState(null);
 
   useEffect(() => {
     if (activeTab === "stats") fetchStats();
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
-    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); }
+    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralConfig(); }
   }, [activeTab]);
 
   const fetchStats = async () => {
@@ -170,50 +165,32 @@ export default function Admin() {
     } catch (err) { console.error("Failed to fetch discounts", err); }
   };
 
-  const handleServerSubmit = async (e) => {
-    e.preventDefault();
+  const fetchReferralConfig = async () => {
     try {
-      if (editingServer) {
-        await client.put(`/api/v1/admin/servers/${editingServer}`, serverForm);
-        alert("Server updated!");
-      } else {
-        await client.post("/api/v1/admin/servers/", serverForm);
-        alert("Server added!");
-      }
-      setServerForm({ server_name: "", ip_address: "", panel_port: 2053, username: "", password: "", inbound_id: 1, status: "enabled" });
-      setEditingServer(null);
-      setShowServerForm(false);
-      fetchServers();
-    } catch (err) { alert("Error: " + (err.response?.data?.detail || err.message)); }
+      const res = await client.get("/api/v1/referral-config/");
+      setReferralConfig(res.data);
+    } catch (err) { console.error("Failed to fetch referral config", err); }
   };
 
-  const handleRegenerateCookie = async (serverName) => {
-    setLoading(true);
+  const handleSaveReferralConfig = async () => {
+    setSavingReferral(true);
     try {
-      const res = await client.post(`/api/v1/admin/servers/${serverName}/regenerate-cookie`);
-      setInboundLogs(res.data.inbound_info);
-      alert("Cookie regenerated successfully!");
-    } catch (err) { 
-      alert("Error: " + (err.response?.data?.detail || err.message));
-      setInboundLogs({ error: err.response?.data?.detail || err.message });
+      await client.put("/api/v1/referral-config/", referralConfig);
+      alert("Referral config saved!");
+    } catch (err) { alert("Error saving referral config: " + (err.response?.data?.detail || err.message)); }
+    setSavingReferral(false);
+  };
+
+  const handleTestServer = async (serverName) => {
+    setTestingServer(serverName);
+    setServerTestResult(null);
+    try {
+      const res = await client.post(`/api/v1/admin/servers/${encodeURIComponent(serverName)}/test`);
+      setServerTestResult({ name: serverName, ...res.data });
+    } catch (err) {
+      setServerTestResult({ name: serverName, status: "failed", error: err.response?.data?.detail || err.message });
     }
-    setLoading(false);
-  };
-
-  const toggleServerStatus = async (server) => {
-    try {
-      const newStatus = server.status === "enabled" ? "disabled" : "enabled";
-      await client.put(`/api/v1/admin/servers/${server.server_name}`, { status: newStatus });
-      fetchServers();
-    } catch (err) { alert("Error toggling status"); }
-  };
-
-  const deleteServer = async (name) => {
-    if (!window.confirm("Delete server?")) return;
-    try {
-      await client.delete(`/api/v1/admin/servers/${name}`);
-      fetchServers();
-    } catch (err) { alert("Error deleting server"); }
+    setTestingServer(null);
   };
 
   const handleIpSubmit = async (e) => {
@@ -243,11 +220,9 @@ export default function Admin() {
     setUserTickets([]);
     setUserLoans([]);
     try {
-      // Use search endpoint (searches nickname, username, phone, id, name)
       const res = await client.get(`/api/v1/admin/users/search?q=${encodeURIComponent(userSearch)}`);
       const results = res.data || [];
       if (results.length === 1) {
-        // Direct match: load full details
         await loadUserDetails(results[0]);
       } else if (results.length > 1) {
         setFoundUsers(results);
@@ -316,16 +291,16 @@ export default function Admin() {
     e.preventDefault();
     try {
       if (editingPlan) {
-        await client.put(`/api/v1/plans/${editingPlan}`, planForm);
+        await client.put(`/api/v1/plans/${editingPlan}`, { traffic_gb: planForm.traffic_gb, price_usd: planForm.price_usd });
       } else {
-        await client.post("/api/v1/plans/", planForm);
+        await client.post("/api/v1/plans/", { plan_name: planForm.plan_name, traffic_gb: planForm.traffic_gb, price_usd: planForm.price_usd });
       }
       alert("Plan saved!");
-      setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5, referral_percentages: {} });
+      setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5 });
       setEditingPlan(null);
       setShowPlanForm(false);
       fetchPlans();
-    } catch (err) { alert("Error saving plan"); }
+    } catch (err) { alert("Error saving plan: " + (err.response?.data?.detail || err.message)); }
   };
 
   const deletePlan = async (name) => {
@@ -398,9 +373,9 @@ export default function Admin() {
           <Card><div className="text-xs text-slate-400">Active Configs</div><div className="text-xl font-bold text-blue-400">{stats.active_configs}</div></Card>
           <Card><div className="text-xs text-slate-400">Open Tickets</div><div className="text-xl font-bold text-rose-400">{stats.open_tickets}</div></Card>
           <div className="col-span-2">
-            <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(() => alert("Sync started!"))} className="w-full" icon={FiRefreshCw}>Sync All Configs</Button>
+            <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(res => alert(`Servers OK: ${res.data.servers_ok}, Failed: ${res.data.servers_failed}, Clients: ${res.data.total_clients}`))} className="w-full" icon={FiRefreshCw}>Test Server Connectivity</Button>
             <p className="text-[10px] text-slate-500 mt-2 text-center italic">
-              * Sync All Configs updates usage and status for all users from all connected XUI panels.
+              * Tests connectivity to all XUI servers and returns live config counts.
             </p>
           </div>
         </div>
@@ -409,60 +384,50 @@ export default function Admin() {
       {activeTab === "servers" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <Card>
-            <SectionHeader 
-              title="Servers" 
-              icon={FiServer} 
-              onAdd={() => { setShowServerForm(!showServerForm); setEditingServer(null); }} 
-            />
-            
-            {showServerForm && (
-              <form onSubmit={handleServerSubmit} className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700 animate-in zoom-in-95 duration-200">
-                <Input label="Server Name" value={serverForm.server_name} onChange={e => setServerForm({...serverForm, server_name: e.target.value})} required disabled={!!editingServer} />
-                <Input label="IP Address" value={serverForm.ip_address} onChange={e => setServerForm({...serverForm, ip_address: e.target.value})} required />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="Panel Port" type="number" value={serverForm.panel_port} onChange={e => setServerForm({...serverForm, panel_port: parseInt(e.target.value)})} required />
-                  <Input label="Inbound ID" type="number" value={serverForm.inbound_id} onChange={e => setServerForm({...serverForm, inbound_id: parseInt(e.target.value)})} required />
-                </div>
-                <Input label="Username" value={serverForm.username} onChange={e => setServerForm({...serverForm, username: e.target.value})} required />
-                <Input label="Password" type="password" value={serverForm.password} onChange={e => setServerForm({...serverForm, password: e.target.value})} required />
-                <Select label="Status" value={serverForm.status} onChange={e => setServerForm({...serverForm, status: e.target.value})} options={["enabled", "disabled"]} />
-                <div className="flex gap-2">
-                  <Button type="submit" className="flex-1">{editingServer ? "Update" : "Add"} Server</Button>
-                  <Button type="button" variant="outline" onClick={() => setShowServerForm(false)}>Cancel</Button>
-                </div>
-              </form>
-            )}
-
+            <SectionHeader title="XUI Servers" icon={FiServer} />
+            <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+              <p className="text-xs text-amber-400">
+                🔒 Server credentials are stored securely in the <code className="bg-slate-900 px-1 rounded">.env</code> file.
+                Edit the <code className="bg-slate-900 px-1 rounded">SERVERS</code> variable and restart the server to make changes.
+                Sensitive fields (username, password) are not shown here.
+              </p>
+            </div>
             <div className="space-y-2">
+              {servers.length === 0 && (
+                <p className="text-slate-500 text-sm text-center py-4">No servers configured in .env</p>
+              )}
               {servers.map(s => (
-                <div key={s.server_name} className="p-3 bg-slate-900/30 rounded-xl border border-slate-700/50 flex items-center justify-between group">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">{s.server_name}</span>
-                      <Badge variant={s.status === "enabled" ? "success" : "danger"}>{s.status}</Badge>
+                <div key={s.name} className="p-3 bg-slate-900/30 rounded-xl border border-slate-700/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">{s.name}</span>
+                        <Badge variant={s.status === "enabled" ? "success" : "danger"}>{s.status}</Badge>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{s.ip}:{s.port} | Inbound: {s.inbound_id}</div>
                     </div>
-                    <div className="text-[10px] text-slate-500">{s.ip_address}:{s.panel_port} | Inbound: {s.inbound_id}</div>
+                    <button
+                      onClick={() => handleTestServer(s.name)}
+                      disabled={testingServer === s.name}
+                      className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {testingServer === s.name ? (
+                        <span className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      ) : <FiZap size={12} />}
+                      Test
+                    </button>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleRegenerateCookie(s.server_name)} className="p-1.5 hover:bg-blue-500/20 text-blue-400 rounded-lg" title="Regenerate Cookie"><FiRefreshCw size={14} /></button>
-                    <button onClick={() => { setEditingServer(s.server_name); setServerForm(s); setShowServerForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
-                    <button onClick={() => toggleServerStatus(s)} className="p-1.5 hover:bg-amber-500/20 text-amber-400 rounded-lg">{s.status === "enabled" ? <FiX size={14} /> : <FiCheck size={14} />}</button>
-                    <button onClick={() => deleteServer(s.server_name)} className="p-1.5 hover:bg-rose-500/20 text-rose-400 rounded-lg"><FiTrash2 size={14} /></button>
-                  </div>
+                  {serverTestResult?.name === s.name && (
+                    <div className={`mt-2 p-2 rounded-lg text-xs ${serverTestResult.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      {serverTestResult.status === 'success'
+                        ? `✓ Connected | Inbounds: ${serverTestResult.inbounds_count}`
+                        : `✗ Failed: ${serverTestResult.error}`}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </Card>
-
-          {inboundLogs && (
-            <Card className="border-blue-500/30 bg-blue-500/5">
-              <SectionHeader title="Inbound Info / Logs" icon={FiInfo} />
-              <pre className="text-[10px] text-blue-300 overflow-x-auto p-2 bg-slate-950 rounded-lg max-h-40">
-                {JSON.stringify(inboundLogs, null, 2)}
-              </pre>
-              <Button variant="outline" size="sm" onClick={() => setInboundLogs(null)} className="mt-2 w-full">Clear Logs</Button>
-            </Card>
-          )}
 
           <Card>
             <SectionHeader title="Clean IPs" icon={FiCheck} onAdd={() => setShowIpForm(!showIpForm)} />
@@ -664,8 +629,36 @@ export default function Admin() {
 
       {activeTab === "pricing" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Referral Layers - separate card */}
+          <Card className="border-emerald-500/30">
+            <SectionHeader title="Referral Layer Bonuses" icon={FiTag} />
+            <p className="text-[10px] text-slate-500 mb-4">
+              Define the referral bonus percentage paid to each upline layer when a plan is purchased.
+              Layer 1 = direct referrer, Layer 2 = their referrer, etc.
+            </p>
+            <div className="space-y-3">
+              {[1,2,3,4,5].map(layer => (
+                <div key={layer} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 w-16 shrink-0">Layer {layer}:</span>
+                  <select
+                    value={referralConfig[`layer_${layer}`] ?? 0}
+                    onChange={e => setReferralConfig({ ...referralConfig, [`layer_${layer}`]: parseFloat(e.target.value) })}
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {REFERRAL_PCT_OPTIONS.map(v => (
+                      <option key={v} value={v}>{v === 0 ? 'Disabled' : `${v}%`}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <Button onClick={handleSaveReferralConfig} disabled={savingReferral} className="w-full mt-4" icon={FiCheck}>
+              {savingReferral ? 'Saving…' : 'Save Referral Config'}
+            </Button>
+          </Card>
+
           <Card>
-            <SectionHeader title="Plans" icon={FiTag} onAdd={() => { setShowPlanForm(!showPlanForm); setEditingPlan(null); }} />
+            <SectionHeader title="Plans" icon={FiTag} onAdd={() => { setShowPlanForm(!showPlanForm); setEditingPlan(null); setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5 }); }} />
             {showPlanForm && (
               <form onSubmit={handlePlanSubmit} className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700 animate-in zoom-in-95 duration-200">
                 <Input label="Plan Name" value={planForm.plan_name} onChange={e => setPlanForm({...planForm, plan_name: e.target.value})} required disabled={!!editingPlan} />
@@ -673,40 +666,6 @@ export default function Admin() {
                   <Input label="Traffic (GB)" type="number" value={planForm.traffic_gb} onChange={e => setPlanForm({...planForm, traffic_gb: parseFloat(e.target.value)})} required />
                   <Input label="Price ($)" type="number" value={planForm.price_usd} onChange={e => setPlanForm({...planForm, price_usd: parseFloat(e.target.value)})} required />
                 </div>
-                
-                <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-600">
-                  <div className="text-xs font-medium text-slate-400 mb-2">Referral Percentages (Layer → %)</div>
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4, 5].map(layer => (
-                      <div key={layer} className="grid grid-cols-3 gap-2 items-center">
-                        <span className="text-xs text-slate-400">Layer {layer}:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={planForm.referral_percentages?.[layer] || 0}
-                          onChange={e => {
-                            const value = e.target.value === '' ? 0 : parseFloat(e.target.value)
-                            setPlanForm({
-                              ...planForm, 
-                              referral_percentages: {
-                                ...planForm.referral_percentages,
-                                [layer]: value
-                              }
-                            })
-                          }}
-                          className="col-span-2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
-                          placeholder="0"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2 italic">
-                    Leave at 0 to disable that layer. Layer 1 = direct referral, Layer 2 = 2nd level, etc.
-                  </p>
-                </div>
-                
                 <div className="flex gap-2 mt-3">
                   <Button type="submit" className="flex-1">{editingPlan ? "Update" : "Create"} Plan</Button>
                   <Button type="button" variant="outline" onClick={() => setShowPlanForm(false)}>Cancel</Button>
@@ -719,17 +678,9 @@ export default function Admin() {
                   <div>
                     <div className="text-sm font-bold text-white">{p.plan_name}</div>
                     <div className="text-[10px] text-slate-500">{p.traffic_gb} GB | ${p.price_usd}</div>
-                    {p.referral_percentages && Object.keys(p.referral_percentages).length > 0 && (
-                      <div className="text-[10px] text-emerald-400 mt-1">
-                        Referral: {Object.entries(p.referral_percentages)
-                          .filter(([_, v]) => v > 0)
-                          .map(([layer, pct]) => `L${layer}:${pct}%`)
-                          .join(', ')}
-                      </div>
-                    )}
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setEditingPlan(p.plan_name); setPlanForm(p); setShowPlanForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
+                    <button onClick={() => { setEditingPlan(p.plan_name); setPlanForm({ plan_name: p.plan_name, traffic_gb: p.traffic_gb, price_usd: p.price_usd }); setShowPlanForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
                     <button onClick={() => deletePlan(p.plan_name)} className="p-1.5 hover:bg-rose-500/20 text-rose-400 rounded-lg"><FiTrash2 size={14} /></button>
                   </div>
                 </div>
