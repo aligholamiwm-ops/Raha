@@ -77,12 +77,14 @@ services:
     image: mongo:7.0
     container_name: raha_mongodb
     restart: unless-stopped
+    # WARNING: Use 'docker-compose down' (NOT 'docker-compose down -v') to
+    # preserve database data. The -v flag removes named volumes and wipes data.
     environment:
       MONGO_INITDB_DATABASE: raha_vpn
     volumes:
       - mongodb_data:/data/db
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 15s

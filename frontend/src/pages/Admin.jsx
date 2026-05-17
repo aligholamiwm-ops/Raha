@@ -120,8 +120,13 @@ export default function Admin() {
 
   const [userSearch, setUserSearch] = useState("");
   const [foundUser, setFoundUser] = useState(null);
+  const [foundUsers, setFoundUsers] = useState([]);
   const [userTickets, setUserTickets] = useState([]);
+  const [userLoans, setUserLoans] = useState([]);
   const [chargeAmount, setChargeAmount] = useState(0);
+  const [loanAmount, setLoanAmount] = useState('');
+  const [loanNote, setLoanNote] = useState('');
+  const [allocatingLoan, setAllocatingLoan] = useState(false);
   const [inboundLogs, setInboundLogs] = useState(null);
 
   useEffect(() => {
@@ -233,25 +238,48 @@ export default function Admin() {
   const handleUserSearch = async () => {
     if (!userSearch) return;
     setLoading(true);
+    setFoundUser(null);
+    setFoundUsers([]);
+    setUserTickets([]);
+    setUserLoans([]);
     try {
-      const res = await client.get(`/api/v1/users/${userSearch}`);
-      setFoundUser(res.data);
-      // Fetch user's tickets
-      const ticketsRes = await client.get(`/api/v1/admin/users/${userSearch}/tickets`);
-      setUserTickets(ticketsRes.data || []);
+      // Use search endpoint (searches nickname, username, phone, id, name)
+      const res = await client.get(`/api/v1/admin/users/search?q=${encodeURIComponent(userSearch)}`);
+      const results = res.data || [];
+      if (results.length === 1) {
+        // Direct match: load full details
+        await loadUserDetails(results[0]);
+      } else if (results.length > 1) {
+        setFoundUsers(results);
+      } else {
+        alert("No users found");
+      }
     } catch (err) { 
-      alert("User not found"); 
-      setFoundUser(null); 
-      setUserTickets([]);
+      alert("Search failed: " + (err.response?.data?.detail || err.message));
     }
     setLoading(false);
+  };
+
+  const loadUserDetails = async (user) => {
+    setFoundUser(user);
+    setFoundUsers([]);
+    try {
+      const [ticketsRes, loansRes] = await Promise.allSettled([
+        client.get(`/api/v1/admin/users/${user.telegram_id}/tickets`),
+        client.get(`/api/v1/loans/admin/user/${user.telegram_id}`),
+      ]);
+      setUserTickets(ticketsRes.status === 'fulfilled' ? ticketsRes.value.data || [] : []);
+      setUserLoans(loansRes.status === 'fulfilled' ? loansRes.value.data || [] : []);
+    } catch (err) {
+      console.error("Failed to load user details", err);
+    }
   };
 
   const handleCharge = async () => {
     try {
       await client.post(`/api/v1/users/${foundUser.telegram_id}/add_balance?amount=${chargeAmount}`);
       alert("Balance added!");
-      handleUserSearch();
+      await loadUserDetails(foundUser);
     } catch (err) { alert("Error charging user"); }
   };
 
@@ -259,8 +287,29 @@ export default function Admin() {
     try {
       await client.put(`/api/v1/admin/users/${foundUser.telegram_id}/role`, { role: newRole });
       alert("Role updated!");
-      handleUserSearch();
+      await loadUserDetails(foundUser);
     } catch (err) { alert("Error updating role: " + (err.response?.data?.detail || err.message)); }
+  };
+
+  const handleAllocateLoan = async () => {
+    const amount = parseFloat(loanAmount);
+    if (!amount || amount <= 0) { alert("Enter a valid loan amount"); return; }
+    setAllocatingLoan(true);
+    try {
+      await client.post('/api/v1/loans/admin/allocate', {
+        telegram_id: foundUser.telegram_id,
+        amount_usdt: amount,
+        note: loanNote || null,
+      });
+      alert(`Loan of $${amount} USDT allocated and balance charged!`);
+      setLoanAmount('');
+      setLoanNote('');
+      await loadUserDetails(foundUser);
+    } catch (err) {
+      alert("Error allocating loan: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setAllocatingLoan(false);
+    }
   };
 
   const handlePlanSubmit = async (e) => {
@@ -447,33 +496,84 @@ export default function Admin() {
       {activeTab === "users" && (
         <Card className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <SectionHeader title="Manage User" icon={FiUsers} />
-          <div className="flex gap-2 mb-6">
+          <div className="flex gap-2 mb-4">
             <input 
               className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-emerald-500 outline-none" 
-              placeholder="Enter Telegram ID..." 
+              placeholder="Search by ID, nickname, @username, phone..." 
               value={userSearch} 
-              onChange={e => setUserSearch(e.target.value)} 
+              onChange={e => setUserSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleUserSearch()}
             />
             <Button onClick={handleUserSearch} disabled={loading} icon={loading ? FiRefreshCw : null}>
               {loading ? "" : "Search"}
             </Button>
           </div>
+          <p className="text-[10px] text-slate-500 mb-4 italic">Search by Telegram ID, nickname, @username, phone number, or name</p>
+
+          {/* Multi-result list */}
+          {foundUsers.length > 1 && !foundUser && (
+            <div className="space-y-2 mb-4">
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">{foundUsers.length} Users Found</div>
+              {foundUsers.map(u => (
+                <button
+                  key={u.telegram_id}
+                  onClick={() => loadUserDetails(u)}
+                  className="w-full p-3 bg-slate-900/50 rounded-xl border border-slate-700 text-left hover:border-emerald-500/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-white">
+                        {u.nickname || u.telegram_info?.first_name || `ID: ${u.telegram_id}`}
+                        {u.telegram_info?.username && <span className="text-slate-400 font-normal ml-1">@{u.telegram_info.username}</span>}
+                      </div>
+                      <div className="text-[10px] text-slate-500">ID: {u.telegram_id} · ${u.wallet_balance_usd?.toFixed(2)} USDT</div>
+                    </div>
+                    <Badge variant={u.role === "admin" ? "warning" : "info"}>{u.role}</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {foundUser && (
-            <div className="space-y-6 animate-in zoom-in-95 duration-300">
+            <div className="space-y-4 animate-in zoom-in-95 duration-300">
+              {foundUsers.length > 1 && (
+                <button onClick={() => setFoundUser(null)} className="text-xs text-emerald-400 hover:underline">← Back to results</button>
+              )}
               <div className="p-4 bg-slate-900 rounded-2xl border border-slate-700">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <div className="text-lg font-bold text-white">ID: {foundUser.telegram_id}</div>
-                    <div className="text-xs text-slate-500 italic">Joined: {new Date(foundUser.created_at).toLocaleDateString()}</div>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-3">
+                    {foundUser.telegram_info?.photo_url && (
+                      <img src={foundUser.telegram_info.photo_url} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-slate-600" />
+                    )}
+                    <div>
+                      <div className="text-base font-bold text-white">
+                        {foundUser.nickname || foundUser.telegram_info?.first_name || `User ${foundUser.telegram_id}`}
+                        {foundUser.telegram_info?.last_name && ` ${foundUser.telegram_info.last_name}`}
+                      </div>
+                      {foundUser.telegram_info?.username && (
+                        <div className="text-xs text-slate-400">@{foundUser.telegram_info.username}</div>
+                      )}
+                      <div className="text-xs text-slate-500">ID: {foundUser.telegram_id} · Joined: {new Date(foundUser.created_at).toLocaleDateString()}</div>
+                    </div>
                   </div>
                   <Badge variant={foundUser.role === "admin" ? "warning" : "info"}>{foundUser.role}</Badge>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="p-2 bg-slate-800/50 rounded-lg">
-                    <div className="text-slate-500 mb-1">Balance</div>
-                    <div className="text-emerald-400 font-bold">${foundUser.wallet_balance_usd}</div>
+                    <div className="text-slate-500 mb-1">Wallet</div>
+                    <div className="text-emerald-400 font-bold">${(foundUser.wallet_balance_usd || 0).toFixed(2)}</div>
+                  </div>
+                  <div className="p-2 bg-slate-800/50 rounded-lg">
+                    <div className="text-slate-500 mb-1">Traffic Balance</div>
+                    <div className="text-blue-400 font-bold">{(foundUser.traffic_balance_gb || 0).toFixed(2)} GB</div>
+                  </div>
+                  <div className="p-2 bg-slate-800/50 rounded-lg">
+                    <div className="text-slate-500 mb-1">Unpaid Loans</div>
+                    <div className="text-red-400 font-bold">
+                      ${userLoans.filter(l => l.status === 'unpaid').reduce((s, l) => s + l.amount_usdt, 0).toFixed(2)}
+                    </div>
                   </div>
                   <div className="p-2 bg-slate-800/50 rounded-lg">
                     <div className="text-slate-500 mb-1">Free Trial</div>
@@ -481,18 +581,10 @@ export default function Admin() {
                       {foundUser.has_used_free_trial ? "Used" : "Available"}
                     </div>
                   </div>
-                  <div className="p-2 bg-slate-800/50 rounded-lg">
-                    <div className="text-slate-500 mb-1">Referrer ID</div>
-                    <div className="text-white">{foundUser.referrer_id || "None"}</div>
-                  </div>
-                  <div className="p-2 bg-slate-800/50 rounded-lg">
-                    <div className="text-slate-500 mb-1">Total Purchased</div>
-                    <div className="text-blue-400 font-bold">{foundUser.total_referred_gb_purchased.toFixed(2)} GB</div>
-                  </div>
                 </div>
               </div>
               
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-3">
                   <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">User Role</div>
                   <Select 
@@ -508,9 +600,43 @@ export default function Admin() {
                 </div>
 
                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-                  <Input label="Add Balance ($)" type="number" value={chargeAmount} onChange={e => setChargeAmount(parseFloat(e.target.value))} />
+                  <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">Add Balance</div>
+                  <Input label="Amount ($)" type="number" value={chargeAmount} onChange={e => setChargeAmount(parseFloat(e.target.value))} />
                   <Button onClick={handleCharge} className="w-full" variant="primary">Add Balance</Button>
                 </div>
+
+                {/* Loan Allocation */}
+                <div className="p-4 bg-slate-900/50 rounded-xl border border-rose-500/30 space-y-3">
+                  <div className="text-xs font-medium text-rose-400 uppercase tracking-wide">Allocate USDT Loan</div>
+                  <p className="text-[10px] text-slate-500">Loan amount will be added to user's wallet balance immediately.</p>
+                  <Input label="Loan Amount (USDT)" type="number" value={loanAmount} onChange={e => setLoanAmount(e.target.value)} placeholder="e.g. 10" />
+                  <Input label="Note (optional)" value={loanNote} onChange={e => setLoanNote(e.target.value)} placeholder="Reason for loan..." />
+                  <Button onClick={handleAllocateLoan} disabled={allocatingLoan || !loanAmount} variant="danger" className="w-full">
+                    {allocatingLoan ? 'Allocating...' : 'Allocate Loan'}
+                  </Button>
+                </div>
+
+                {/* Loans list */}
+                {userLoans.length > 0 && (
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
+                    <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Loans ({userLoans.length})</div>
+                    {userLoans.map(loan => (
+                      <div key={loan.loan_id} className={`p-3 rounded-lg border ${loan.status === 'settled' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">${loan.amount_usdt?.toFixed(2)} USDT</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${loan.status === 'settled' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-red-400 border-red-500/30 bg-red-500/10'}`}>
+                            {loan.status === 'settled' ? '✓ Settled' : 'Unpaid'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          {new Date(loan.created_at).toLocaleDateString()}
+                          {loan.note && ` · ${loan.note}`}
+                          {loan.settled_at && ` · Settled ${new Date(loan.settled_at).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {userTickets.length > 0 && (
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">

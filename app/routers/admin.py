@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from app.database import get_database
@@ -45,6 +45,41 @@ async def get_stats(
         "total_tickets": total_tickets,
         "open_tickets": open_tickets,
     }
+
+
+@router.get("/users/search", summary="Search users by any identifier (admin)")
+async def search_users(
+    q: str = Query(..., min_length=1, description="Query: telegram_id, nickname, username, phone, or name"),
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> list[UserModel]:
+    """Search across all user fields: telegram_id, nickname, telegram username, phone, name."""
+    conditions = []
+
+    # Try numeric match for telegram_id
+    try:
+        tid = int(q)
+        conditions.append({"telegram_id": tid})
+    except ValueError:
+        pass
+
+    # Text-based matches (case-insensitive regex)
+    regex = {"$regex": q, "$options": "i"}
+    conditions.extend([
+        {"nickname": regex},
+        {"telegram_info.username": regex},
+        {"telegram_info.first_name": regex},
+        {"telegram_info.last_name": regex},
+        {"telegram_info.phone_number": regex},
+    ])
+
+    query = {"$or": conditions} if conditions else {}
+    results = []
+    async for doc in db.users.find(query).limit(20):
+        doc.pop("_id", None)
+        results.append(UserModel(**doc))
+    return results
+
 
 @router.put("/users/{telegram_id}/role", summary="Change user role (admin)")
 async def change_user_role(
