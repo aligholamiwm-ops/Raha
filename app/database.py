@@ -28,6 +28,9 @@ def get_database() -> AsyncIOMotorDatabase:
 
 async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.users.create_index("telegram_id", unique=True)
+    await db.users.create_index("nickname")
+    await db.users.create_index("telegram_info.username")
+    await db.users.create_index("telegram_info.phone_number")
     await db.servers.create_index("server_name", unique=True)
     await db.vpn_configs.create_index("uuid", unique=True)
     await db.vpn_configs.create_index("telegram_id")
@@ -42,3 +45,6 @@ async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.payments.create_index("payment_id", unique=True)
     await db.payments.create_index("telegram_id")
     await db.payments.create_index("plisio_txn_id")
+    await db.loans.create_index("loan_id", unique=True)
+    await db.loans.create_index("telegram_id")
+    await db.loans.create_index("status")

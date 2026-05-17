@@ -15,7 +15,7 @@ from telegram import (
 from telegram.ext import Application, CommandHandler, ContextTypes
 from app.config import get_settings
 from app.database import connect_db, get_database, close_db
-from app.models.user import UserModel
+from app.models.user import UserModel, TelegramInfo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,6 +24,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+
+async def _get_profile_photo_url(bot, telegram_id: int) -> str | None:
+    """Fetch the user's latest profile photo URL via the Telegram Bot API."""
+    try:
+        photos = await bot.get_user_profile_photos(telegram_id, limit=1)
+        if photos and photos.photos:
+            file_id = photos.photos[0][-1].file_id
+            file = await bot.get_file(file_id)
+            return file.file_path  # Full URL to the photo
+    except Exception as exc:
+        logger.warning("Could not fetch profile photo for %s: %s", telegram_id, exc)
+    return None
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — send Mini App launch button and auto-create user record."""
     if not update.effective_user:
@@ -31,7 +45,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user = update.effective_user
     telegram_id = user.id
-    
+
+    # Build TelegramInfo from bot user object
+    photo_url = await _get_profile_photo_url(context.bot, telegram_id)
+    tg_info = TelegramInfo(
+        first_name=user.first_name,
+        last_name=user.last_name,
+        username=user.username,
+        language_code=user.language_code,
+        is_premium=bool(getattr(user, "is_premium", False)),
+        photo_url=photo_url,
+    )
+
     # Auto-create user record on /start
     try:
         db = get_database()
@@ -49,14 +74,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             logger.info(f"Bot: New user {telegram_id} referred by {referrer_id}")
                 except (ValueError, TypeError):
                     pass
-            
+
             new_user = UserModel(
                 telegram_id=telegram_id,
                 referrer_id=referrer_id,
+                telegram_info=tg_info,
                 created_at=datetime.now(timezone.utc),
             )
             await db.users.insert_one(new_user.to_dict())
             logger.info(f"Bot: Successfully created user {telegram_id}")
+        else:
+            # Update telegram info for existing user
+            tg_info_update = {k: v for k, v in tg_info.model_dump().items() if v is not None}
+            if tg_info_update:
+                await db.users.update_one(
+                    {"telegram_id": telegram_id},
+                    {"$set": {f"telegram_info.{k}": v for k, v in tg_info_update.items()}},
+                )
     except Exception as e:
         logger.error(f"Bot: Failed to ensure user record for {telegram_id}: {e}")
 

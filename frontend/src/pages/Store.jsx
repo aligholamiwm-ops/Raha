@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { createInvoice, renewConfig } from '../api/client'
+import { createInvoice, renewConfig, getMyLoans, payLoan } from '../api/client'
 
 function parseDuration(planName) {
   if (!planName) return 'Unknown'
@@ -42,6 +42,13 @@ const WithdrawIcon = () => (
   </svg>
 )
 
+const LoanIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <line x1="2" y1="10" x2="22" y2="10" />
+  </svg>
+)
+
 export default function Store() {
   const { user, plans, loading } = useApp()
   const location = useLocation()
@@ -53,6 +60,52 @@ export default function Store() {
   const [depositAmount, setDepositAmount] = useState('')
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [loans, setLoans] = useState([])
+  const [loansLoading, setLoansLoading] = useState(false)
+  const [payingLoan, setPayingLoan] = useState(null)
+
+  useEffect(() => {
+    if (activeTab === 'loans') {
+      loadLoans()
+    }
+  }, [activeTab])
+
+  const loadLoans = async () => {
+    setLoansLoading(true)
+    try {
+      const data = await getMyLoans()
+      setLoans(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setLoans([])
+    } finally {
+      setLoansLoading(false)
+    }
+  }
+
+  const totalUnpaidLoan = loans.filter(l => l.status === 'unpaid').reduce((sum, l) => sum + (l.amount_usdt || 0), 0)
+
+  const handlePayLoan = async (loan) => {
+    setError(null)
+    setSuccess(null)
+    setPayingLoan(loan.loan_id)
+    try {
+      const result = await payLoan(loan.loan_id)
+      const url = result?.invoice_url
+      if (url) {
+        const tg = window.Telegram?.WebApp
+        if (tg?.openLink) {
+          tg.openLink(url)
+        } else {
+          window.open(url, '_blank')
+        }
+        setSuccess('Payment link opened. Complete the payment to settle your loan.')
+      }
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Failed to create payment. Please try again.')
+    } finally {
+      setPayingLoan(null)
+    }
+  }
 
   const handleBuy = async (plan) => {
     setError(null)
@@ -119,11 +172,21 @@ export default function Store() {
             {renewState?.serverName ? `Renewing: ${renewState.serverName}` : 'Manage your balance'}
           </p>
         </div>
-        <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-3 py-2 text-right">
-          <p className="text-xs text-emerald-400 font-medium">Wallet</p>
-          <p className="text-emerald-300 font-bold text-sm">
-            ${(user?.wallet_balance_usd || 0).toFixed(2)} USDT
-          </p>
+        <div className="flex flex-col gap-1 items-end">
+          <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-3 py-2 text-right">
+            <p className="text-xs text-emerald-400 font-medium">Wallet</p>
+            <p className="text-emerald-300 font-bold text-sm">
+              ${(user?.wallet_balance_usd || 0).toFixed(2)} USDT
+            </p>
+          </div>
+          {totalUnpaidLoan > 0 && (
+            <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2 text-right">
+              <p className="text-xs text-red-400 font-medium">Unpaid Loans</p>
+              <p className="text-red-300 font-bold text-sm">
+                ${totalUnpaidLoan.toFixed(2)} USDT
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -141,10 +204,10 @@ export default function Store() {
 
       {/* Tabs */}
       {!renewState?.renewUuid && (
-        <div className="flex gap-2 bg-slate-800 rounded-xl ring-1 ring-slate-700 p-1">
+        <div className="flex gap-1.5 bg-slate-800 rounded-xl ring-1 ring-slate-700 p-1">
           <button
             onClick={() => setActiveTab('deposit')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
               activeTab === 'deposit'
                 ? 'bg-emerald-600 text-white'
                 : 'text-slate-400 hover:text-slate-300'
@@ -155,7 +218,7 @@ export default function Store() {
           </button>
           <button
             onClick={() => setActiveTab('withdrawal')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
               activeTab === 'withdrawal'
                 ? 'bg-emerald-600 text-white'
                 : 'text-slate-400 hover:text-slate-300'
@@ -163,6 +226,20 @@ export default function Store() {
           >
             <WithdrawIcon />
             Withdrawal
+          </button>
+          <button
+            onClick={() => { setActiveTab('loans'); loadLoans(); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors relative ${
+              activeTab === 'loans'
+                ? 'bg-red-600 text-white'
+                : 'text-slate-400 hover:text-slate-300'
+            }`}
+          >
+            <LoanIcon />
+            Loans
+            {totalUnpaidLoan > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+            )}
           </button>
         </div>
       )}
@@ -282,6 +359,75 @@ export default function Store() {
           >
             Create Withdrawal Ticket
           </button>
+        </div>
+      )}
+
+      {/* Loans Tab */}
+      {!renewState?.renewUuid && activeTab === 'loans' && (
+        <div className="space-y-3">
+          {totalUnpaidLoan > 0 && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+              <p className="text-red-400 text-sm font-semibold text-center">
+                💳 Outstanding Loans: ${totalUnpaidLoan.toFixed(2)} USDT unpaid
+              </p>
+            </div>
+          )}
+
+          {loansLoading ? (
+            <div className="space-y-3">
+              {[1, 2].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
+            </div>
+          ) : loans.length === 0 ? (
+            <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-8 text-center">
+              <p className="text-slate-400 text-sm">No loans found</p>
+            </div>
+          ) : (
+            loans.map((loan) => (
+              <div
+                key={loan.loan_id}
+                className={`rounded-xl ring-1 p-4 space-y-2 ${
+                  loan.status === 'settled'
+                    ? 'bg-emerald-500/10 ring-emerald-500/30'
+                    : 'bg-red-500/10 ring-red-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white font-bold text-base">${(loan.amount_usdt || 0).toFixed(2)} USDT</p>
+                    <p className="text-slate-400 text-xs mt-0.5">
+                      {new Date(loan.created_at).toLocaleDateString()}
+                      {loan.note && <span className="ml-2 text-slate-500">· {loan.note}</span>}
+                    </p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                    loan.status === 'settled'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-400 border-red-500/30'
+                  }`}>
+                    {loan.status === 'settled' ? '✓ Settled' : 'Unpaid'}
+                  </span>
+                </div>
+                {loan.status === 'settled' && loan.settled_at && (
+                  <p className="text-emerald-400 text-xs">
+                    Settled on {new Date(loan.settled_at).toLocaleDateString()}
+                  </p>
+                )}
+                {loan.status === 'unpaid' && (
+                  <button
+                    onClick={() => handlePayLoan(loan)}
+                    disabled={payingLoan === loan.loan_id}
+                    className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-semibold py-2 rounded-lg transition-colors mt-1"
+                  >
+                    {payingLoan === loan.loan_id ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      '💳 Pay Now'
+                    )}
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>

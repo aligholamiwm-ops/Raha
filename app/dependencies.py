@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 
 from app.config import get_settings, Settings
 from app.database import get_database
-from app.models.user import UserModel, UserRole
+from app.models.user import UserModel, UserRole, TelegramInfo
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,17 @@ async def get_current_user(
         raise HTTPException(status_code=403, detail="Cannot determine telegram_id")
 
     doc = await db.users.find_one({"telegram_id": telegram_id})
+    
+    # Build telegram_info from validated init_data
+    tg_info = TelegramInfo(
+        first_name=user_data.get("first_name"),
+        last_name=user_data.get("last_name"),
+        username=user_data.get("username"),
+        language_code=user_data.get("language_code"),
+        is_premium=bool(user_data.get("is_premium", False)),
+        photo_url=user_data.get("photo_url"),
+    )
+
     if doc is None:
         logger.info(f"Creating new user with telegram_id={telegram_id}")
         referrer_id: Optional[int] = None
@@ -148,6 +159,7 @@ async def get_current_user(
         new_user = UserModel(
             telegram_id=telegram_id,
             referrer_id=referrer_id,
+            telegram_info=tg_info,
             created_at=datetime.now(timezone.utc),
         )
         try:
@@ -157,6 +169,15 @@ async def get_current_user(
             logger.error(f"Failed to insert new user {telegram_id} into database: {e}")
             raise HTTPException(status_code=500, detail="Failed to create user record")
         return new_user
+
+    # Update telegram_info for existing users on each login
+    tg_info_update = {k: v for k, v in tg_info.model_dump().items() if v is not None}
+    if tg_info_update:
+        await db.users.update_one(
+            {"telegram_id": telegram_id},
+            {"$set": {f"telegram_info.{k}": v for k, v in tg_info_update.items()}},
+        )
+        doc.update({"telegram_info": {**((doc.get("telegram_info") or {})), **tg_info_update}})
 
     doc.pop("_id", None)
     logger.debug(f"Found existing user with telegram_id={telegram_id}")

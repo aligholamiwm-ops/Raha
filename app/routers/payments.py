@@ -132,52 +132,70 @@ async def payment_webhook(
 
     if plisio_status in ("completed", "mismatch"):
         telegram_id: int = payment_doc["telegram_id"]
-        plan_doc = await db.plans.find_one({"plan_name": payment_doc["plan_name"]})
         amount_usd: float = payment_doc["amount_usd"]
+        payment_type: str = payment_doc.get("type", "plan")
 
-        if plan_doc:
-            # Credit the user's wallet so they can make a purchase
-            await db.users.update_one(
-                {"telegram_id": telegram_id},
-                {"$inc": {"wallet_balance_usd": amount_usd}},
-            )
-            
-            # Process multi-layer referral bonuses
-            user_doc = await db.users.find_one({"telegram_id": telegram_id})
-            if user_doc and user_doc.get("referrer_id"):
-                referral_percentages = plan_doc.get("referral_percentages", {})
-                if referral_percentages:
-                    # Calculate and distribute referral bonuses across layers
-                    current_referrer_id = user_doc.get("referrer_id")
-                    layer = FIRST_REFERRAL_LAYER
-                    
-                    while current_referrer_id and layer <= MAX_REFERRAL_LAYERS:
-                        percentage = referral_percentages.get(layer, 0.0)
-                        if percentage <= 0:
-                            break  # No percentage defined for this layer
+        if payment_type == "loan":
+            # Settle the loan instead of crediting the wallet
+            loan_id = payment_doc.get("loan_id")
+            if loan_id:
+                await db.loans.update_one(
+                    {"loan_id": loan_id, "status": "unpaid"},
+                    {
+                        "$set": {
+                            "status": "settled",
+                            "settled_at": datetime.now(timezone.utc),
+                            "payment_id": order_number,
+                        }
+                    },
+                )
+                logger.info("Loan %s settled via payment %s for user %s", loan_id, order_number, telegram_id)
+        else:
+            plan_doc = await db.plans.find_one({"plan_name": payment_doc["plan_name"]})
+
+            if plan_doc:
+                # Credit the user's wallet so they can make a purchase
+                await db.users.update_one(
+                    {"telegram_id": telegram_id},
+                    {"$inc": {"wallet_balance_usd": amount_usd}},
+                )
+                
+                # Process multi-layer referral bonuses
+                user_doc = await db.users.find_one({"telegram_id": telegram_id})
+                if user_doc and user_doc.get("referrer_id"):
+                    referral_percentages = plan_doc.get("referral_percentages", {})
+                    if referral_percentages:
+                        # Calculate and distribute referral bonuses across layers
+                        current_referrer_id = user_doc.get("referrer_id")
+                        layer = FIRST_REFERRAL_LAYER
                         
-                        bonus_amount = (amount_usd * percentage) / 100.0
-                        
-                        # Credit referral bonus - only increment total_referred_usd_purchased for layer 1
-                        update_fields = {"referral_bonus_usd": bonus_amount}
-                        if layer == FIRST_REFERRAL_LAYER:
-                            update_fields["total_referred_usd_purchased"] = amount_usd
-                        
-                        await db.users.update_one(
-                            {"telegram_id": current_referrer_id},
-                            {"$inc": update_fields},
-                        )
-                        logger.info(
-                            "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
-                            layer, bonus_amount, current_referrer_id, telegram_id
-                        )
-                        
-                        # Move to next layer
-                        referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
-                        if not referrer_doc or not referrer_doc.get("referrer_id"):
-                            break
-                        current_referrer_id = referrer_doc.get("referrer_id")
-                        layer += 1
+                        while current_referrer_id and layer <= MAX_REFERRAL_LAYERS:
+                            percentage = referral_percentages.get(layer, 0.0)
+                            if percentage <= 0:
+                                break  # No percentage defined for this layer
+                            
+                            bonus_amount = (amount_usd * percentage) / 100.0
+                            
+                            # Credit referral bonus - only increment total_referred_usd_purchased for layer 1
+                            update_fields = {"referral_bonus_usd": bonus_amount}
+                            if layer == FIRST_REFERRAL_LAYER:
+                                update_fields["total_referred_usd_purchased"] = amount_usd
+                            
+                            await db.users.update_one(
+                                {"telegram_id": current_referrer_id},
+                                {"$inc": update_fields},
+                            )
+                            logger.info(
+                                "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
+                                layer, bonus_amount, current_referrer_id, telegram_id
+                            )
+                            
+                            # Move to next layer
+                            referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
+                            if not referrer_doc or not referrer_doc.get("referrer_id"):
+                                break
+                            current_referrer_id = referrer_doc.get("referrer_id")
+                            layer += 1
 
         await db.payments.update_one(
             {"payment_id": order_number},
