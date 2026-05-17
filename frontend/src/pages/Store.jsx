@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { createInvoice, renewConfig, getMyLoans, payLoan } from '../api/client'
+import { createInvoice, buyPlanWithWallet, getMyLoans, payLoan } from '../api/client'
 
 function parseDuration(planName) {
   if (!planName) return 'Unknown'
@@ -113,8 +113,8 @@ export default function Store() {
     setBuyingPlan(plan.plan_name)
     try {
       if (renewState?.renewUuid) {
-        await renewConfig(renewState.renewUuid, plan.plan_name)
-        setSuccess(`Config renewed with plan "${parseDuration(plan.plan_name)}"!`)
+        await buyPlanWithWallet(plan.plan_name)
+        setSuccess(`Plan "${parseDuration(plan.plan_name)}" purchased — traffic balance updated!`)
       } else {
         const result = await createInvoice(plan.plan_name, 'USDT')
         const url = result?.invoice_url || result?.url || result

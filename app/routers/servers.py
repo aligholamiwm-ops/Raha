@@ -1,112 +1,59 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel
-from app.models.server import ServerModel, ServerCreate, ServerUpdate, ServerResponse
-from app.integrations.xui_api import AsyncXUIClient
-import logging
+from app.config import get_settings, Settings
+from app.integrations.xui_api import build_xui_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def _to_response(doc: dict) -> ServerResponse:
-    return ServerResponse(
-        server_name=doc['server_name'],
-        ip_address=doc['ip_address'],
-        panel_port=doc['panel_port'],
-        inbound_id=doc['inbound_id'],
-        status=doc.get('status', 'enabled')
-    )
 
-@router.get('/', response_model=list[ServerResponse], summary='List all servers (admin)')
+@router.get('/', summary='List all servers from .env (admin)')
 async def list_servers(
     _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> list[ServerResponse]:
-    servers = []
-    async for doc in db.servers.find({}):
-        doc.pop('_id', None)
-        servers.append(_to_response(doc))
-    return servers
+    settings: Settings = Depends(get_settings),
+) -> list[dict]:
+    """Returns servers configured in .env (sensitive fields excluded)."""
+    servers = settings.get_server_list()
+    return [
+        {
+            "name": s.get("name", s.get("server_name", "")),
+            "ip": s.get("ip", s.get("ip_address", "")),
+            "port": s.get("port", s.get("panel_port", 2053)),
+            "inbound_id": s.get("inbound_id", 1),
+            "status": s.get("status", "enabled"),
+        }
+        for s in servers
+    ]
 
-@router.post('/', response_model=ServerResponse, status_code=201, summary='Create a new server (admin)')
-async def create_server(
-    payload: ServerCreate,
-    _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> ServerResponse:
-    existing = await db.servers.find_one({'server_name': payload.server_name})
-    if existing:
-        raise HTTPException(status_code=409, detail='Server name already exists')
-    server = ServerModel(**payload.model_dump())
-    await db.servers.insert_one(server.to_dict())
-    return _to_response(server.to_dict())
 
-@router.put('/{server_name}', response_model=ServerResponse, summary='Update server (admin)')
-async def update_server(
+@router.post('/{server_name}/test', summary='Test XUI connection for a server (admin)')
+async def test_server_connection(
     server_name: str,
-    payload: ServerUpdate,
     _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> ServerResponse:
-    update_data = payload.to_dict()
-    if not update_data:
-        raise HTTPException(status_code=400, detail='No fields to update')
-    result = await db.servers.find_one_and_update(
-        {'server_name': server_name},
-        {'$set': update_data},
-        return_document=True,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    servers = settings.get_server_list()
+    server = next(
+        (s for s in servers if s.get("name", s.get("server_name", "")) == server_name),
+        None,
     )
-    if not result:
-        raise HTTPException(status_code=404, detail='Server not found')
-    result.pop('_id', None)
-    return _to_response(result)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found in .env configuration")
 
-@router.delete('/{server_name}', status_code=204, summary='Delete server (admin)')
-async def delete_server(
-    server_name: str,
-    _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> None:
-    result = await db.servers.delete_one({'server_name': server_name})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail='Server not found')
-
-@router.post('/{server_name}/regenerate-cookie', summary='Regenerate server cookie and get inbound info')
-async def regenerate_cookie(
-    server_name: str,
-    _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-):
-    server_doc = await db.servers.find_one({'server_name': server_name})
-    if not server_doc:
-        raise HTTPException(status_code=404, detail='Server not found')
-    
-    # Use ip_address and panel_port directly from database
-    base_url = f"{server_doc['ip_address']}:{server_doc['panel_port']}"
-    
-    logger.info(f"Regenerating cookie for {server_name} using base_url: {base_url}")
-    
-    xui = AsyncXUIClient(
-        base_url=base_url,
-        username=server_doc['username'],
-        password=server_doc['password'],
-        inbound_id=server_doc['inbound_id'],
-        server_name=server_doc['server_name'],
-        db=db,
-    )
-    
     try:
+        xui = build_xui_client(server)
         cookie = await xui.login()
         inbounds = await xui.get_inbounds()
-        target_inbound = next((ib for ib in inbounds if ib.get('id') == server_doc['inbound_id']), None)
-        
+        inbound_id = int(server.get("inbound_id", 1))
+        target_inbound = next((ib for ib in inbounds if ib.get("id") == inbound_id), None)
         return {
-            'status': 'success',
-            'cookie': cookie,
-            'inbound_info': target_inbound
+            "status": "success",
+            "server_name": server_name,
+            "inbounds_count": len(inbounds),
+            "target_inbound": target_inbound,
         }
-    except Exception as e:
-        logger.error(f'Failed to regenerate cookie for {server_name}: {str(e)}')
-        raise HTTPException(status_code=500, detail=f'Failed to regenerate cookie: {str(e)}')
+    except Exception as exc:
+        logger.error("test_server_connection failed for %s: %s", server_name, exc)
+        raise HTTPException(status_code=502, detail=f"Failed to connect to server: {exc}")

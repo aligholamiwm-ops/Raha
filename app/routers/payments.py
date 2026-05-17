@@ -15,9 +15,8 @@ from app.integrations.plisio import PlisioClient
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Referral system constants
 FIRST_REFERRAL_LAYER = 1
-MAX_REFERRAL_LAYERS = 10
+MAX_REFERRAL_LAYERS = 5
 
 
 class CreateInvoiceRequest(BaseModel):
@@ -41,13 +40,14 @@ async def create_invoice(
         raise HTTPException(status_code=404, detail="Plan not found")
 
     price_usd: float = plan_doc["price_usd"]
+    traffic_gb: float = plan_doc["traffic_gb"]
+
     if price_usd <= 0:
         raise HTTPException(status_code=400, detail="Plan is free; no invoice needed")
 
     payment_id = str(uuid.uuid4())
     order_number = payment_id
 
-    # Build callback URL from the current request base
     base_url = str(request.base_url).rstrip("/")
     callback_url = f"{base_url}/api/v1/payments/webhook"
 
@@ -74,12 +74,12 @@ async def create_invoice(
 
     invoice = invoice_data.get("data", {})
 
-    # Persist pending payment record
     payment_doc = {
         "payment_id": payment_id,
         "telegram_id": current_user.telegram_id,
         "plan_name": payload.plan_name,
         "amount_usd": price_usd,
+        "traffic_gb": traffic_gb,
         "status": "pending",
         "plisio_txn_id": invoice.get("txn_id", ""),
         "invoice_url": invoice.get("invoice_url", ""),
@@ -108,6 +108,114 @@ async def payment_webhook(
         data = await request.json()
     except Exception:
         data = dict(await request.form())
+
+    plisio = PlisioClient(
+        api_key=settings.PLISIO_API_KEY,
+        secret_key=settings.PLISIO_SECRET_KEY,
+    )
+
+    if not plisio.verify_webhook(data):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    txn_id: str = data.get("txn_id", "")
+    order_number: str = data.get("order_number", "")
+    plisio_status: str = data.get("status", "")
+
+    payment_doc = await db.payments.find_one({"payment_id": order_number})
+    if not payment_doc:
+        logger.warning("Webhook for unknown payment_id: %s", order_number)
+        return {"ok": True}
+
+    if payment_doc.get("status") == "completed":
+        return {"ok": True}
+
+    if plisio_status in ("completed", "mismatch"):
+        telegram_id: int = payment_doc["telegram_id"]
+        amount_usd: float = payment_doc["amount_usd"]
+        payment_type: str = payment_doc.get("type", "plan")
+
+        if payment_type == "loan":
+            loan_id = payment_doc.get("loan_id")
+            if loan_id:
+                await db.loans.update_one(
+                    {"loan_id": loan_id, "status": "unpaid"},
+                    {
+                        "$set": {
+                            "status": "settled",
+                            "settled_at": datetime.now(timezone.utc),
+                            "payment_id": order_number,
+                        }
+                    },
+                )
+                logger.info("Loan %s settled via payment %s for user %s", loan_id, order_number, telegram_id)
+        else:
+            # Plan payment — credit traffic_balance_gb
+            traffic_gb: float = payment_doc.get("traffic_gb", 0.0)
+            if traffic_gb > 0:
+                await db.users.update_one(
+                    {"telegram_id": telegram_id},
+                    {"$inc": {"traffic_balance_gb": traffic_gb}},
+                )
+                logger.info(
+                    "Payment %s completed: +%.2f GB traffic to user %s",
+                    order_number, traffic_gb, telegram_id,
+                )
+            else:
+                # Fallback: custom deposit — credit wallet
+                await db.users.update_one(
+                    {"telegram_id": telegram_id},
+                    {"$inc": {"wallet_balance_usd": amount_usd}},
+                )
+                logger.info("Payment %s completed: +%.2f USDT wallet to user %s", order_number, amount_usd, telegram_id)
+
+            # Distribute referral bonuses from global config
+            user_doc = await db.users.find_one({"telegram_id": telegram_id})
+            if user_doc and user_doc.get("referrer_id"):
+                ref_cfg_doc = await db.referral_config.find_one({"_id": "global"})
+                if ref_cfg_doc:
+                    from app.models.referral_config import ReferralConfig
+                    ref_cfg_doc.pop("_id", None)
+                    ref_cfg = ReferralConfig(**ref_cfg_doc)
+                    current_referrer_id = user_doc.get("referrer_id")
+                    for layer in range(FIRST_REFERRAL_LAYER, MAX_REFERRAL_LAYERS + 1):
+                        pct = ref_cfg.get_layer(layer)
+                        if pct <= 0 or not current_referrer_id:
+                            break
+                        bonus = (amount_usd * pct) / 100.0
+                        inc_fields: dict = {"referral_bonus_usd": bonus}
+                        if layer == FIRST_REFERRAL_LAYER:
+                            inc_fields["total_referred_usd_purchased"] = amount_usd
+                        await db.users.update_one(
+                            {"telegram_id": current_referrer_id},
+                            {"$inc": inc_fields},
+                        )
+                        logger.info(
+                            "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
+                            layer, bonus, current_referrer_id, telegram_id,
+                        )
+                        ref_doc = await db.users.find_one({"telegram_id": current_referrer_id})
+                        if not ref_doc or not ref_doc.get("referrer_id"):
+                            break
+                        current_referrer_id = ref_doc["referrer_id"]
+
+        await db.payments.update_one(
+            {"payment_id": order_number},
+            {
+                "$set": {
+                    "status": "completed",
+                    "plisio_txn_id": txn_id,
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+
+    elif plisio_status in ("expired", "cancelled", "error"):
+        await db.payments.update_one(
+            {"payment_id": order_number},
+            {"$set": {"status": plisio_status}},
+        )
+
+    return {"ok": True}
 
     plisio = PlisioClient(
         api_key=settings.PLISIO_API_KEY,

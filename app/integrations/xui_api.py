@@ -2,10 +2,12 @@ import httpx
 import json
 import logging
 from datetime import datetime
-from functools import wraps
 from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
+
+# In-memory cookie cache: {server_name: cookie_string}
+_cookie_cache: dict[str, str] = {}
 
 _HEADERS = {
     "User-Agent": (
@@ -28,15 +30,15 @@ class AsyncXUIClient:
         password: str,
         inbound_id: int,
         server_name: str,
-        db=None,
+        db=None,  # kept for backward compat, no longer used
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.inbound_id = inbound_id
         self.server_name = server_name
-        self.db = db
-        self._cookie: str = ""
+        # Restore cached cookie if available
+        self._cookie: str = _cookie_cache.get(server_name, "")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -90,21 +92,20 @@ class AsyncXUIClient:
 
         # Extract Set-Cookie header value
         cookie_header = response.headers.get("set-cookie", "")
-        # Grab the first token (session cookie name=value pair)
         self._cookie = cookie_header.split(";")[0] if cookie_header else ""
 
-        if self.db is not None and self._cookie:
-            await self.db.servers.update_one(
-                {"server_name": self.server_name},
-                {"$set": {"cookie": self._cookie}},
-            )
+        # Cache cookie in memory
+        if self._cookie:
+            _cookie_cache[self.server_name] = self._cookie
 
         logger.info("XUI login successful for server %s", self.server_name)
         return self._cookie
 
     def set_cookie(self, cookie: str) -> None:
-        """Inject a previously cached cookie (e.g. from MongoDB)."""
+        """Inject a session cookie."""
         self._cookie = cookie
+        if cookie:
+            _cookie_cache[self.server_name] = cookie
 
     # ------------------------------------------------------------------
     # Inbounds
@@ -165,6 +166,7 @@ class AsyncXUIClient:
                         "domain_name": domain_name,
                         "inbound_id": ib.get("id"),
                         "protocol": ib.get("protocol"),
+                        "port": ib.get("port"),
                     }
                 )
         return client_list
@@ -221,7 +223,7 @@ class AsyncXUIClient:
         return {}
 
     # ------------------------------------------------------------------
-    # Static utilities (kept from original)
+    # Static utilities
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -241,3 +243,17 @@ class AsyncXUIClient:
                 return f"{size:.2f} {unit}"
             size /= 1024.0
         return f"{size:.2f} PB"
+
+
+def build_xui_client(server: dict) -> AsyncXUIClient:
+    """Build an AsyncXUIClient from a server config dict (from env)."""
+    ip = server.get("ip", server.get("ip_address", ""))
+    port = server.get("port", server.get("panel_port", 2053))
+    base_url = f"http://{ip}:{port}"
+    return AsyncXUIClient(
+        base_url=base_url,
+        username=server["username"],
+        password=server["password"],
+        inbound_id=int(server.get("inbound_id", 1)),
+        server_name=server.get("name", server.get("server_name", "")),
+    )
