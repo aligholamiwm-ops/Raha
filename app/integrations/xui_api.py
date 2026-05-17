@@ -249,7 +249,10 @@ def build_xui_client(server: dict) -> AsyncXUIClient:
     """Build an AsyncXUIClient from a server config dict (from env)."""
     ip = server.get("ip", server.get("ip_address", ""))
     port = server.get("port", server.get("panel_port", 2053))
-    base_url = f"http://{ip}:{port}"
+    if ip.startswith("http://" ) or ip.startswith("https://" ):
+        base_url = f"{ip}:{port}"
+    else:
+        base_url = f"http://{ip}:{port}"
     return AsyncXUIClient(
         base_url=base_url,
         username=server["username"],
