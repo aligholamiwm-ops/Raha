@@ -111,6 +111,9 @@ export default function Admin() {
   const [discountForm, setDiscountForm] = useState({ code: "", discount_percent: 10 });
   const [editingDiscount, setEditingDiscount] = useState(null);
 
+  const [referralSettings, setReferralSettings] = useState({ layer_1: 5, layer_2: 3, layer_3: 2, layer_4: 1, layer_5: 0.5 });
+  const [savingReferral, setSavingReferral] = useState(false);
+
   const [userSearch, setUserSearch] = useState("");
   const [foundUser, setFoundUser] = useState(null);
   const [foundUsers, setFoundUsers] = useState([]);
@@ -124,7 +127,7 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === "stats") fetchStats();
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
-    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); }
+    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
   }, [activeTab]);
 
   const fetchStats = async () => {
@@ -160,6 +163,25 @@ export default function Admin() {
       const res = await client.get("/api/v1/discounts/");
       setDiscounts(res.data);
     } catch (err) { console.error("Failed to fetch discounts", err); }
+  };
+
+  const fetchReferralSettings = async () => {
+    try {
+      const res = await client.get("/api/v1/admin/referral-settings");
+      setReferralSettings(res.data);
+    } catch (err) { console.error("Failed to fetch referral settings", err); }
+  };
+
+  const handleSaveReferralSettings = async () => {
+    setSavingReferral(true);
+    try {
+      await client.put("/api/v1/admin/referral-settings", referralSettings);
+      alert("Referral settings saved!");
+    } catch (err) {
+      alert("Error saving referral settings: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSavingReferral(false);
+    }
   };
 
   const handleTestServer = async (serverName) => {
@@ -666,6 +688,33 @@ export default function Admin() {
                   </div>
                 </div>
               ))}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Referral Percentages" icon={FiTag} />
+            <p className="text-xs text-slate-500 mb-4">Set the bonus percentage for each referral layer. Layer 1 = direct referrer, Layer 5 = deepest level.</p>
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(layer => (
+                <div key={layer} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 w-16 flex-shrink-0">Layer {layer}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={referralSettings[`layer_${layer}`] ?? 0}
+                    onChange={e => setReferralSettings(prev => ({ ...prev, [`layer_${layer}`]: parseFloat(e.target.value) || 0 }))}
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-xs text-slate-500 w-4">%</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <Button onClick={handleSaveReferralSettings} disabled={savingReferral} className="w-full">
+                {savingReferral ? "Saving…" : "Save Referral Settings"}
+              </Button>
             </div>
           </Card>
         </div>

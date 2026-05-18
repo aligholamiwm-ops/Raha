@@ -36,9 +36,16 @@ async def _distribute_referral_bonuses(
     if not user_doc or not user_doc.get("referrer_id"):
         return
 
+    # Read referral layer percentages from DB settings (fallback to env config)
+    db_settings_doc = await db.settings.find_one({"_id": "referral_settings"})
+    def get_layer_pct(layer: int) -> float:
+        if db_settings_doc:
+            return float(db_settings_doc.get(f"layer_{layer}", 0.0))
+        return settings.get_referral_layer_pct(layer)
+
     current_referrer_id: int | None = user_doc["referrer_id"]
     for layer in range(FIRST_REFERRAL_LAYER, MAX_REFERRAL_LAYERS + 1):
-        pct = settings.get_referral_layer_pct(layer)
+        pct = get_layer_pct(layer)
         if pct <= 0 or not current_referrer_id:
             break
 
@@ -50,16 +57,12 @@ async def _distribute_referral_bonuses(
             break
 
         benefit_type = referrer_doc.get("referral_benefit_type", ReferralBenefitType.usdt)
-        inc_fields: dict = {"referral_bonus_usd": bonus}
-        if layer == FIRST_REFERRAL_LAYER:
-            inc_fields["total_referred_usd_purchased"] = amount_usd
-
         if benefit_type == ReferralBenefitType.traffic:
-            # Credit traffic balance (1 USDT = 1 GB by convention)
-            inc_fields["traffic_balance_gb"] = bonus
+            # Credit traffic balance (1 USDT = 1 GB by convention) and track as GB bonus
+            inc_fields: dict = {"referred_bonus_gb": bonus, "traffic_balance_gb": bonus}
         else:
-            # Credit USDT wallet
-            inc_fields["wallet_balance_usd"] = bonus
+            # Credit USDT wallet and track as USDT bonus
+            inc_fields = {"referred_bonus_usd": bonus, "wallet_balance_usd": bonus}
 
         await db.users.update_one(
             {"telegram_id": current_referrer_id},
