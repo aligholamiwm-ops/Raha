@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel, UserRole
@@ -16,6 +16,13 @@ router = APIRouter()
 
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+class ReferralSettings(BaseModel):
+    layer_1: float = Field(default=5.0, ge=0.0, le=100.0, description="Layer 1 referral percentage")
+    layer_2: float = Field(default=3.0, ge=0.0, le=100.0, description="Layer 2 referral percentage")
+    layer_3: float = Field(default=2.0, ge=0.0, le=100.0, description="Layer 3 referral percentage")
+    layer_4: float = Field(default=1.0, ge=0.0, le=100.0, description="Layer 4 referral percentage")
+    layer_5: float = Field(default=0.5, ge=0.0, le=100.0, description="Layer 5 referral percentage")
 
 @router.get("/stats", summary="Dashboard statistics")
 async def get_stats(
@@ -147,3 +154,42 @@ async def sync_configs(
         "total_clients": total_clients,
         "errors": errors,
     }
+
+
+@router.get("/referral-settings", response_model=ReferralSettings, summary="Get referral layer percentages (admin)")
+async def get_referral_settings(
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> ReferralSettings:
+    doc = await db.settings.find_one({"_id": "referral_settings"})
+    if doc:
+        return ReferralSettings(
+            layer_1=doc.get("layer_1", settings.REFERRAL_LAYER_1_PCT),
+            layer_2=doc.get("layer_2", settings.REFERRAL_LAYER_2_PCT),
+            layer_3=doc.get("layer_3", settings.REFERRAL_LAYER_3_PCT),
+            layer_4=doc.get("layer_4", settings.REFERRAL_LAYER_4_PCT),
+            layer_5=doc.get("layer_5", settings.REFERRAL_LAYER_5_PCT),
+        )
+    return ReferralSettings(
+        layer_1=settings.REFERRAL_LAYER_1_PCT,
+        layer_2=settings.REFERRAL_LAYER_2_PCT,
+        layer_3=settings.REFERRAL_LAYER_3_PCT,
+        layer_4=settings.REFERRAL_LAYER_4_PCT,
+        layer_5=settings.REFERRAL_LAYER_5_PCT,
+    )
+
+
+@router.put("/referral-settings", response_model=ReferralSettings, summary="Update referral layer percentages (admin)")
+async def update_referral_settings(
+    payload: ReferralSettings,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ReferralSettings:
+    data = payload.model_dump()
+    await db.settings.update_one(
+        {"_id": "referral_settings"},
+        {"$set": data},
+        upsert=True,
+    )
+    return payload

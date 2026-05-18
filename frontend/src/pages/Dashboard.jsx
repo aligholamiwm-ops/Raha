@@ -160,66 +160,68 @@ export default function Dashboard() {
       {/* Create Config Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-t-2xl p-5 animate-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-center justify-between mb-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-t-2xl animate-in slide-in-from-bottom-4 duration-300 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 pb-3 flex-shrink-0">
               <h3 className="text-base font-bold text-white">Create New Config</h3>
               <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400">
                 <FiX size={18} />
               </button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">
-              Available traffic balance: <span className="text-emerald-400 font-bold">{trafficBalanceGB.toFixed(2)} GB</span>
-            </p>
-            {createError && (
-              <div className="bg-rose-500/20 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm mb-4">
-                {createError}
-              </div>
-            )}
-            <form onSubmit={handleCreateConfig} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Config Name</label>
-                <input
-                  type="text"
-                  value={createForm.name}
-                  onChange={e => setCreateForm({...createForm, name: e.target.value})}
-                  placeholder="e.g. myphone (no hyphens)"
-                  maxLength={32}
-                  required
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Used as your config identifier. No hyphens allowed.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Traffic (GB)</label>
-                <input
-                  type="number"
-                  value={createForm.total_gb}
-                  onChange={e => setCreateForm({...createForm, total_gb: parseFloat(e.target.value) || 0})}
-                  min={0.1}
-                  max={trafficBalanceGB}
-                  step={0.5}
-                  required
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Duration (days, 0 = unlimited)</label>
-                <input
-                  type="number"
-                  value={createForm.duration_days}
-                  onChange={e => setCreateForm({...createForm, duration_days: parseInt(e.target.value) || 0})}
-                  min={0}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={creating}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors"
-              >
-                {creating ? 'Creating…' : 'Create Config'}
-              </button>
-            </form>
+            <div className="overflow-y-auto flex-1 px-5 pb-5">
+              <p className="text-xs text-slate-400 mb-4">
+                Available traffic balance: <span className="text-emerald-400 font-bold">{trafficBalanceGB.toFixed(2)} GB</span>
+              </p>
+              {createError && (
+                <div className="bg-rose-500/20 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm mb-4">
+                  {createError}
+                </div>
+              )}
+              <form onSubmit={handleCreateConfig} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Config Name</label>
+                  <input
+                    type="text"
+                    value={createForm.name}
+                    onChange={e => setCreateForm({...createForm, name: e.target.value})}
+                    placeholder="e.g. myphone (no hyphens)"
+                    maxLength={32}
+                    required
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Used as your config identifier. No hyphens allowed.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Traffic (GB)</label>
+                  <input
+                    type="number"
+                    value={createForm.total_gb}
+                    onChange={e => setCreateForm({...createForm, total_gb: parseFloat(e.target.value) || 0})}
+                    min={0.1}
+                    max={trafficBalanceGB}
+                    step={0.5}
+                    required
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Duration (days, 0 = unlimited)</label>
+                  <input
+                    type="number"
+                    value={createForm.duration_days}
+                    onChange={e => setCreateForm({...createForm, duration_days: parseInt(e.target.value) || 0})}
+                    min={0}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors"
+                >
+                  {creating ? 'Creating…' : 'Create Config'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
