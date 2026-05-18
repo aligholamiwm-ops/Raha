@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { createInvoice, buyPlanWithWallet, getMyLoans, payLoan } from '../api/client'
+import { createInvoice, getMyLoans, payLoan } from '../api/client'
 
 function parseDuration(planName) {
   if (!planName) return 'Unknown'
@@ -112,11 +112,10 @@ export default function Store() {
     setSuccess(null)
     setBuyingPlan(plan.plan_name)
     try {
-      if (renewState?.renewUuid) {
-        await buyPlanWithWallet(plan.plan_name)
-        setSuccess(`Plan "${parseDuration(plan.plan_name)}" purchased — traffic balance updated!`)
+      const result = await createInvoice(plan.plan_name, 'USDT')
+      if (result?.status === 'wallet_payment') {
+        setSuccess(`Plan "${plan.plan_name}" purchased from wallet! +${result.traffic_gb_added} GB added.`)
       } else {
-        const result = await createInvoice(plan.plan_name, 'USDT')
         const url = result?.invoice_url || result?.url || result
         if (url && typeof url === 'string') {
           const tg = window.Telegram?.WebApp

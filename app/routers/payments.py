@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.config import get_settings, Settings
 from app.database import get_database
 from app.dependencies import get_current_user
-from app.models.user import UserModel
+from app.models.user import UserModel, ReferralBenefitType
 from app.integrations.plisio import PlisioClient
 
 logger = logging.getLogger(__name__)
@@ -22,11 +22,62 @@ MAX_REFERRAL_LAYERS = 5
 class CreateInvoiceRequest(BaseModel):
     plan_name: str
     currency: str = "BTC"
+    discount_code: str | None = None
+
+
+async def _distribute_referral_bonuses(
+    db: AsyncIOMotorDatabase,
+    settings: Settings,
+    buyer_telegram_id: int,
+    amount_usd: float,
+) -> None:
+    """Walk the referral chain and credit each referrer according to their benefit preference."""
+    user_doc = await db.users.find_one({"telegram_id": buyer_telegram_id})
+    if not user_doc or not user_doc.get("referrer_id"):
+        return
+
+    current_referrer_id: int | None = user_doc["referrer_id"]
+    for layer in range(FIRST_REFERRAL_LAYER, MAX_REFERRAL_LAYERS + 1):
+        pct = settings.get_referral_layer_pct(layer)
+        if pct <= 0 or not current_referrer_id:
+            break
+
+        bonus = (amount_usd * pct) / 100.0
+
+        # Read referrer to determine benefit preference
+        referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
+        if not referrer_doc:
+            break
+
+        benefit_type = referrer_doc.get("referral_benefit_type", ReferralBenefitType.usdt)
+        inc_fields: dict = {"referral_bonus_usd": bonus}
+        if layer == FIRST_REFERRAL_LAYER:
+            inc_fields["total_referred_usd_purchased"] = amount_usd
+
+        if benefit_type == ReferralBenefitType.traffic:
+            # Credit traffic balance (1 USDT = 1 GB by convention)
+            inc_fields["traffic_balance_gb"] = bonus
+        else:
+            # Credit USDT wallet
+            inc_fields["wallet_balance_usd"] = bonus
+
+        await db.users.update_one(
+            {"telegram_id": current_referrer_id},
+            {"$inc": inc_fields},
+        )
+        logger.info(
+            "Layer %d referral bonus: %.4f to user %d from purchase by %d (type=%s)",
+            layer, bonus, current_referrer_id, buyer_telegram_id, benefit_type,
+        )
+
+        if not referrer_doc.get("referrer_id"):
+            break
+        current_referrer_id = referrer_doc["referrer_id"]
 
 
 @router.post(
     "/create-invoice",
-    summary="Create a Plisio crypto payment invoice",
+    summary="Buy a plan — deducts from wallet if sufficient, otherwise creates Plisio invoice",
 )
 async def create_invoice(
     payload: CreateInvoiceRequest,
@@ -45,9 +96,49 @@ async def create_invoice(
     if price_usd <= 0:
         raise HTTPException(status_code=400, detail="Plan is free; no invoice needed")
 
-    payment_id = str(uuid.uuid4())
-    order_number = payment_id
+    # Apply discount code
+    discount_pct = 0.0
+    if payload.discount_code:
+        discount_doc = await db.discounts.find_one({"code": payload.discount_code})
+        if not discount_doc:
+            raise HTTPException(status_code=404, detail="Discount code not found")
+        if current_user.telegram_id in discount_doc.get("used_by", []):
+            raise HTTPException(status_code=400, detail="Discount code already used by you")
+        discount_pct = discount_doc["discount_percent"]
 
+    final_price = price_usd * (1 - discount_pct / 100.0)
+
+    # ── Wallet-first: pay with balance if sufficient ──────────────────────
+    if current_user.wallet_balance_usd >= final_price:
+        update_ops: dict = {
+            "$inc": {
+                "wallet_balance_usd": -final_price,
+                "traffic_balance_gb": traffic_gb,
+            }
+        }
+        await db.users.update_one({"telegram_id": current_user.telegram_id}, update_ops)
+
+        if payload.discount_code:
+            await db.discounts.update_one(
+                {"code": payload.discount_code},
+                {"$addToSet": {"used_by": current_user.telegram_id}},
+            )
+
+        await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price)
+
+        logger.info(
+            "User %d bought plan %s for %.2f USDT from wallet, +%.2f GB traffic",
+            current_user.telegram_id, payload.plan_name, final_price, traffic_gb,
+        )
+        return {
+            "status": "wallet_payment",
+            "plan_name": payload.plan_name,
+            "traffic_gb_added": traffic_gb,
+            "amount_paid": final_price,
+        }
+
+    # ── Fallback: create Plisio crypto invoice ────────────────────────────
+    payment_id = str(uuid.uuid4())
     base_url = str(request.base_url).rstrip("/")
     callback_url = f"{base_url}/api/v1/payments/webhook"
 
@@ -58,8 +149,8 @@ async def create_invoice(
     try:
         invoice_data = await plisio.create_invoice(
             order_name=f"Raha VPN – {payload.plan_name}",
-            order_number=order_number,
-            amount_usd=price_usd,
+            order_number=payment_id,
+            amount_usd=final_price,
             callback_url=callback_url,
         )
     except Exception as exc:
@@ -78,8 +169,9 @@ async def create_invoice(
         "payment_id": payment_id,
         "telegram_id": current_user.telegram_id,
         "plan_name": payload.plan_name,
-        "amount_usd": price_usd,
+        "amount_usd": final_price,
         "traffic_gb": traffic_gb,
+        "discount_code": payload.discount_code,
         "status": "pending",
         "plisio_txn_id": invoice.get("txn_id", ""),
         "invoice_url": invoice.get("invoice_url", ""),
@@ -88,9 +180,10 @@ async def create_invoice(
     await db.payments.insert_one(payment_doc)
 
     return {
+        "status": "invoice_created",
         "payment_id": payment_id,
         "invoice_url": invoice.get("invoice_url", ""),
-        "amount_usd": price_usd,
+        "amount_usd": final_price,
         "plan_name": payload.plan_name,
     }
 
@@ -149,8 +242,16 @@ async def payment_webhook(
                 )
                 logger.info("Loan %s settled via payment %s for user %s", loan_id, order_number, telegram_id)
         else:
-            # Plan payment — credit traffic_balance_gb
             traffic_gb: float = payment_doc.get("traffic_gb", 0.0)
+
+            # Apply discount code mark if present
+            discount_code = payment_doc.get("discount_code")
+            if discount_code:
+                await db.discounts.update_one(
+                    {"code": discount_code},
+                    {"$addToSet": {"used_by": telegram_id}},
+                )
+
             if traffic_gb > 0:
                 await db.users.update_one(
                     {"telegram_id": telegram_id},
@@ -161,149 +262,14 @@ async def payment_webhook(
                     order_number, traffic_gb, telegram_id,
                 )
             else:
-                # Fallback: custom deposit — credit wallet
+                # Fallback: credit wallet
                 await db.users.update_one(
                     {"telegram_id": telegram_id},
                     {"$inc": {"wallet_balance_usd": amount_usd}},
                 )
                 logger.info("Payment %s completed: +%.2f USDT wallet to user %s", order_number, amount_usd, telegram_id)
 
-            # Distribute referral bonuses from global config
-            user_doc = await db.users.find_one({"telegram_id": telegram_id})
-            if user_doc and user_doc.get("referrer_id"):
-                ref_cfg_doc = await db.referral_config.find_one({"_id": "global"})
-                if ref_cfg_doc:
-                    from app.models.referral_config import ReferralConfig
-                    ref_cfg_doc.pop("_id", None)
-                    ref_cfg = ReferralConfig(**ref_cfg_doc)
-                    current_referrer_id = user_doc.get("referrer_id")
-                    for layer in range(FIRST_REFERRAL_LAYER, MAX_REFERRAL_LAYERS + 1):
-                        pct = ref_cfg.get_layer(layer)
-                        if pct <= 0 or not current_referrer_id:
-                            break
-                        bonus = (amount_usd * pct) / 100.0
-                        inc_fields: dict = {"referral_bonus_usd": bonus}
-                        if layer == FIRST_REFERRAL_LAYER:
-                            inc_fields["total_referred_usd_purchased"] = amount_usd
-                        await db.users.update_one(
-                            {"telegram_id": current_referrer_id},
-                            {"$inc": inc_fields},
-                        )
-                        logger.info(
-                            "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
-                            layer, bonus, current_referrer_id, telegram_id,
-                        )
-                        ref_doc = await db.users.find_one({"telegram_id": current_referrer_id})
-                        if not ref_doc or not ref_doc.get("referrer_id"):
-                            break
-                        current_referrer_id = ref_doc["referrer_id"]
-
-        await db.payments.update_one(
-            {"payment_id": order_number},
-            {
-                "$set": {
-                    "status": "completed",
-                    "plisio_txn_id": txn_id,
-                    "completed_at": datetime.now(timezone.utc),
-                }
-            },
-        )
-
-    elif plisio_status in ("expired", "cancelled", "error"):
-        await db.payments.update_one(
-            {"payment_id": order_number},
-            {"$set": {"status": plisio_status}},
-        )
-
-    return {"ok": True}
-
-    plisio = PlisioClient(
-        api_key=settings.PLISIO_API_KEY,
-        secret_key=settings.PLISIO_SECRET_KEY,
-    )
-
-    if not plisio.verify_webhook(data):
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
-
-    txn_id: str = data.get("txn_id", "")
-    order_number: str = data.get("order_number", "")
-    plisio_status: str = data.get("status", "")
-
-    # Idempotency: only process if not already completed
-    payment_doc = await db.payments.find_one({"payment_id": order_number})
-    if not payment_doc:
-        logger.warning("Webhook for unknown payment_id: %s", order_number)
-        return {"ok": True}
-
-    if payment_doc.get("status") == "completed":
-        return {"ok": True}  # Already processed
-
-    if plisio_status in ("completed", "mismatch"):
-        telegram_id: int = payment_doc["telegram_id"]
-        amount_usd: float = payment_doc["amount_usd"]
-        payment_type: str = payment_doc.get("type", "plan")
-
-        if payment_type == "loan":
-            # Settle the loan instead of crediting the wallet
-            loan_id = payment_doc.get("loan_id")
-            if loan_id:
-                await db.loans.update_one(
-                    {"loan_id": loan_id, "status": "unpaid"},
-                    {
-                        "$set": {
-                            "status": "settled",
-                            "settled_at": datetime.now(timezone.utc),
-                            "payment_id": order_number,
-                        }
-                    },
-                )
-                logger.info("Loan %s settled via payment %s for user %s", loan_id, order_number, telegram_id)
-        else:
-            plan_doc = await db.plans.find_one({"plan_name": payment_doc["plan_name"]})
-
-            if plan_doc:
-                # Credit the user's wallet so they can make a purchase
-                await db.users.update_one(
-                    {"telegram_id": telegram_id},
-                    {"$inc": {"wallet_balance_usd": amount_usd}},
-                )
-                
-                # Process multi-layer referral bonuses
-                user_doc = await db.users.find_one({"telegram_id": telegram_id})
-                if user_doc and user_doc.get("referrer_id"):
-                    referral_percentages = plan_doc.get("referral_percentages", {})
-                    if referral_percentages:
-                        # Calculate and distribute referral bonuses across layers
-                        current_referrer_id = user_doc.get("referrer_id")
-                        layer = FIRST_REFERRAL_LAYER
-                        
-                        while current_referrer_id and layer <= MAX_REFERRAL_LAYERS:
-                            percentage = referral_percentages.get(layer, 0.0)
-                            if percentage <= 0:
-                                break  # No percentage defined for this layer
-                            
-                            bonus_amount = (amount_usd * percentage) / 100.0
-                            
-                            # Credit referral bonus - only increment total_referred_usd_purchased for layer 1
-                            update_fields = {"referral_bonus_usd": bonus_amount}
-                            if layer == FIRST_REFERRAL_LAYER:
-                                update_fields["total_referred_usd_purchased"] = amount_usd
-                            
-                            await db.users.update_one(
-                                {"telegram_id": current_referrer_id},
-                                {"$inc": update_fields},
-                            )
-                            logger.info(
-                                "Layer %d referral bonus: %.2f USDT to user %d from purchase by %d",
-                                layer, bonus_amount, current_referrer_id, telegram_id
-                            )
-                            
-                            # Move to next layer
-                            referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
-                            if not referrer_doc or not referrer_doc.get("referrer_id"):
-                                break
-                            current_referrer_id = referrer_doc.get("referrer_id")
-                            layer += 1
+            await _distribute_referral_bonuses(db, settings, telegram_id, amount_usd)
 
         await db.payments.update_one(
             {"payment_id": order_number},

@@ -10,6 +10,11 @@ class UserRole(str, Enum):
     support = "support"
 
 
+class ReferralBenefitType(str, Enum):
+    usdt = "usdt"      # referral bonus credited as USDT wallet balance
+    traffic = "traffic"  # referral bonus credited as traffic_balance_gb
+
+
 class TelegramInfo(BaseModel):
     """Telegram user info captured from Mini App init_data or bot interactions."""
     model_config = ConfigDict(populate_by_name=True)
@@ -35,6 +40,10 @@ class UserModel(BaseModel):
     role: UserRole = Field(default=UserRole.user)
     total_referred_usd_purchased: float = Field(default=0.0, ge=0.0, description="Total USDT from referred users' purchases")
     referral_bonus_usd: float = Field(default=0.0, ge=0.0, description="Accumulated referral bonus in USDT")
+    referral_benefit_type: ReferralBenefitType = Field(
+        default=ReferralBenefitType.usdt,
+        description="How the user receives referral bonuses: 'usdt' credits wallet, 'traffic' credits traffic balance",
+    )
     telegram_info: Optional[TelegramInfo] = Field(default=None, description="Telegram profile information")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -57,6 +66,7 @@ class UserUpdate(BaseModel):
     traffic_balance_gb: Optional[float] = Field(default=None, ge=0.0)
     has_used_free_trial: Optional[bool] = None
     role: Optional[UserRole] = None
+    referral_benefit_type: Optional[ReferralBenefitType] = None
     total_referred_usd_purchased: Optional[float] = Field(default=None, ge=0.0)
     referral_bonus_usd: Optional[float] = Field(default=None, ge=0.0)
 
