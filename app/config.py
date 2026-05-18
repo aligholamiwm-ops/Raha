@@ -30,6 +30,23 @@ class Settings(BaseSettings):
     # Servers — JSON array of server config objects, stored in .env
     # Example: [{"name":"s1","ip":"1.2.3.4","port":2053,"username":"admin","password":"secret","inbound_id":1,"status":"enabled"}]
     SERVERS: str = "[]"
+    # Referral layer percentages (0–100). Each layer represents a deeper referral level.
+    REFERRAL_LAYER_1_PCT: float = 5.0
+    REFERRAL_LAYER_2_PCT: float = 3.0
+    REFERRAL_LAYER_3_PCT: float = 2.0
+    REFERRAL_LAYER_4_PCT: float = 1.0
+    REFERRAL_LAYER_5_PCT: float = 0.5
+
+    def get_referral_layer_pct(self, layer: int) -> float:
+        """Return referral percentage for a given layer number (1–5), 0.0 if not defined."""
+        mapping = {
+            1: self.REFERRAL_LAYER_1_PCT,
+            2: self.REFERRAL_LAYER_2_PCT,
+            3: self.REFERRAL_LAYER_3_PCT,
+            4: self.REFERRAL_LAYER_4_PCT,
+            5: self.REFERRAL_LAYER_5_PCT,
+        }
+        return mapping.get(layer, 0.0)
 
     model_config = {
         "env_file": ".env",

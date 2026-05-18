@@ -85,7 +85,6 @@ const Badge = ({ children, variant = "info" }) => {
   );
 };
 
-const REFERRAL_PCT_OPTIONS = [0,1,2,3,5,7,10,12,15,20,25,30];
 
 export default function Admin() {
   const { user } = useApp();
@@ -98,8 +97,6 @@ export default function Admin() {
   const [cleanIps, setCleanIps] = useState([]);
   const [plans, setPlans] = useState([]);
   const [discounts, setDiscounts] = useState([]);
-  const [referralConfig, setReferralConfig] = useState({ layer_1: 0, layer_2: 0, layer_3: 0, layer_4: 0, layer_5: 0 });
-  const [savingReferral, setSavingReferral] = useState(false);
   const [testingServer, setTestingServer] = useState(null);
   const [serverTestResult, setServerTestResult] = useState(null);
 
@@ -127,7 +124,7 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === "stats") fetchStats();
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
-    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralConfig(); }
+    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); }
   }, [activeTab]);
 
   const fetchStats = async () => {
@@ -163,22 +160,6 @@ export default function Admin() {
       const res = await client.get("/api/v1/discounts/");
       setDiscounts(res.data);
     } catch (err) { console.error("Failed to fetch discounts", err); }
-  };
-
-  const fetchReferralConfig = async () => {
-    try {
-      const res = await client.get("/api/v1/referral-config/");
-      setReferralConfig(res.data);
-    } catch (err) { console.error("Failed to fetch referral config", err); }
-  };
-
-  const handleSaveReferralConfig = async () => {
-    setSavingReferral(true);
-    try {
-      await client.put("/api/v1/referral-config/", referralConfig);
-      alert("Referral config saved!");
-    } catch (err) { alert("Error saving referral config: " + (err.response?.data?.detail || err.message)); }
-    setSavingReferral(false);
   };
 
   const handleTestServer = async (serverName) => {
@@ -629,34 +610,6 @@ export default function Admin() {
 
       {activeTab === "pricing" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Referral Layers - separate card */}
-          <Card className="border-emerald-500/30">
-            <SectionHeader title="Referral Layer Bonuses" icon={FiTag} />
-            <p className="text-[10px] text-slate-500 mb-4">
-              Define the referral bonus percentage paid to each upline layer when a plan is purchased.
-              Layer 1 = direct referrer, Layer 2 = their referrer, etc.
-            </p>
-            <div className="space-y-3">
-              {[1,2,3,4,5].map(layer => (
-                <div key={layer} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-16 shrink-0">Layer {layer}:</span>
-                  <select
-                    value={referralConfig[`layer_${layer}`] ?? 0}
-                    onChange={e => setReferralConfig({ ...referralConfig, [`layer_${layer}`]: parseFloat(e.target.value) })}
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {REFERRAL_PCT_OPTIONS.map(v => (
-                      <option key={v} value={v}>{v === 0 ? 'Disabled' : `${v}%`}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-            <Button onClick={handleSaveReferralConfig} disabled={savingReferral} className="w-full mt-4" icon={FiCheck}>
-              {savingReferral ? 'Saving…' : 'Save Referral Config'}
-            </Button>
-          </Card>
-
           <Card>
             <SectionHeader title="Plans" icon={FiTag} onAdd={() => { setShowPlanForm(!showPlanForm); setEditingPlan(null); setPlanForm({ plan_name: "", traffic_gb: 10, price_usd: 5 }); }} />
             {showPlanForm && (

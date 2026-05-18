@@ -6,6 +6,7 @@ from app.database import get_database
 from app.dependencies import require_admin, get_current_user
 from app.models.user import UserModel
 from app.models.plan import PlanModel, PlanCreate, PlanUpdate
+from app.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,6 +95,7 @@ async def buy_plan_with_wallet(
     discount_code: str | None = None,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
     plan_doc = await db.plans.find_one({"plan_name": plan_name})
     if not plan_doc:
@@ -133,31 +135,10 @@ async def buy_plan_with_wallet(
             {"$addToSet": {"used_by": current_user.telegram_id}},
         )
 
-    # Distribute referral bonuses
+    # Distribute referral bonuses using settings-based layer percentages
     if current_user.referrer_id and price_usd > 0:
-        ref_cfg_doc = await db.referral_config.find_one({"_id": "global"})
-        if ref_cfg_doc:
-            from app.models.referral_config import ReferralConfig
-            ref_cfg_doc.pop("_id", None)
-            ref_cfg = ReferralConfig(**ref_cfg_doc)
-            current_referrer_id = current_user.referrer_id
-            for layer in range(1, 6):
-                pct = ref_cfg.get_layer(layer)
-                if pct <= 0 or not current_referrer_id:
-                    break
-                bonus = (final_price * pct) / 100.0
-                inc_fields: dict = {"referral_bonus_usd": bonus}
-                if layer == 1:
-                    inc_fields["total_referred_usd_purchased"] = final_price
-                await db.users.update_one(
-                    {"telegram_id": current_referrer_id},
-                    {"$inc": inc_fields},
-                )
-                logger.info("Layer %d referral bonus %.2f USDT to user %d", layer, bonus, current_referrer_id)
-                ref_doc = await db.users.find_one({"telegram_id": current_referrer_id})
-                if not ref_doc or not ref_doc.get("referrer_id"):
-                    break
-                current_referrer_id = ref_doc["referrer_id"]
+        from app.routers.payments import _distribute_referral_bonuses
+        await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price)
 
     logger.info("User %d bought plan %s for %.2f USDT, +%.2f GB traffic", current_user.telegram_id, plan_name, final_price, traffic_gb)
     return {

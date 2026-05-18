@@ -64,8 +64,6 @@ export const deletePlan = (name) => api.delete('/api/v1/plans/' + name).then((r)
 export const getDiscounts = () => api.get('/api/v1/discounts/').then((r) => r.data)
 export const createDiscount = (data) => api.post('/api/v1/discounts/', data).then((r) => r.data)
 export const deleteDiscount = (code) => api.delete('/api/v1/discounts/' + code).then((r) => r.data)
-export const getReferralConfig = () => api.get('/api/v1/referral-config/').then((r) => r.data)
-export const updateReferralConfig = (data) => api.put('/api/v1/referral-config/', data).then((r) => r.data)
 
 export const getMyLoans = () => api.get('/api/v1/loans/my').then((r) => r.data)
 export const payLoan = (loanId) => api.post(`/api/v1/loans/${loanId}/pay`).then((r) => r.data)
