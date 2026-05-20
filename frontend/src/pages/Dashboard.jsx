@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import GaugeChart from '../components/GaugeChart'
 import ConfigCard from '../components/ConfigCard'
 import { createConfig } from '../api/client'
-import { FiPlus, FiX } from 'react-icons/fi'
+import { FiPlus, FiX, FiRefreshCw } from 'react-icons/fi'
 
 function bytesToGB(bytes) {
   if (!bytes || bytes === 0) return 0
@@ -27,18 +26,28 @@ function SkeletonCard() {
 }
 
 export default function Dashboard() {
-  const { user, configs, loading, refreshConfigs } = useApp()
+  const { user, configs, loading, refreshConfigs, refreshUser } = useApp()
   const navigate = useNavigate()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', total_gb: 1, duration_days: 30 })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const totalUsedGB = configs.reduce((sum, c) => sum + bytesToGB(c.usage_up + c.usage_down), 0)
+  // Correctly sum total used GB across all configs
+  const totalUsedGB = configs.reduce((sum, c) => sum + bytesToGB((c.usage_up || 0) + (c.usage_down || 0)), 0)
   const totalGB = configs.reduce((sum, c) => sum + (c.total_gb || 0), 0)
+  const usagePct = totalGB > 0 ? Math.min(100, Math.round((totalUsedGB / totalGB) * 100)) : 0
+
   const trafficBalanceGB = user?.traffic_balance_gb ?? 0
 
   const handleCharge = () => navigate('/store')
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([refreshConfigs(), refreshUser()])
+    setRefreshing(false)
+  }
 
   const handleCreateConfig = async (e) => {
     e.preventDefault()
@@ -54,7 +63,8 @@ export default function Dashboard() {
       await createConfig({ ...createForm, name: createForm.name.trim() })
       setShowCreateModal(false)
       setCreateForm({ name: '', total_gb: 1, duration_days: 30 })
-      await refreshConfigs()
+      // Refresh both configs and user (to update traffic balance)
+      await Promise.all([refreshConfigs(), refreshUser()])
     } catch (err) {
       const detail = err.response?.data?.detail || err.message || 'Failed to create config'
       setCreateError(detail)
@@ -62,6 +72,13 @@ export default function Dashboard() {
       setCreating(false)
     }
   }
+
+  const handleConfigUpdate = async () => {
+    await Promise.all([refreshConfigs(), refreshUser()])
+  }
+
+  // Color for total usage bar
+  const usageBarColor = usagePct > 85 ? 'bg-red-500' : usagePct > 60 ? 'bg-amber-500' : 'bg-emerald-500'
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -71,6 +88,14 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold text-white">Raha VPN</h1>
           <p className="text-slate-400 text-sm">Your secure connection</p>
         </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors"
+          title="Refresh"
+        >
+          <FiRefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+        </button>
       </div>
 
       {/* Traffic Balance */}
@@ -89,38 +114,48 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Traffic Usage Gauge */}
-      <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
-        <h2 className="text-slate-300 font-semibold text-sm mb-4">Traffic Usage</h2>
-        <div className="flex items-start justify-center">
+      {/* Total Traffic Usage Summary */}
+      {configs.length > 0 && (
+        <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-slate-300 font-semibold text-sm">Total Traffic Usage</h2>
+            <span className="text-xs font-bold text-white">{usagePct}%</span>
+          </div>
           {loading ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="skeleton w-28 h-20 rounded-lg" />
-              <div className="skeleton h-3 w-20" />
+            <div className="space-y-2">
+              <div className="skeleton h-3 w-full rounded-full" />
+              <div className="skeleton h-3 w-3/4 rounded-full" />
             </div>
           ) : (
-            <GaugeChart
-              value={totalUsedGB}
-              max={totalGB || 1}
-              label="Traffic Usage"
-              color="#10b981"
-            />
+            <div className="space-y-2">
+              <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${usageBarColor}`}
+                  style={{ width: `${usagePct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>{totalUsedGB.toFixed(2)} GB used</span>
+                <span>{totalGB.toFixed(1)} GB total across {configs.length} config{configs.length !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Configs Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-slate-300 font-semibold text-sm">My Configs</h2>
           <button
-            onClick={refreshConfigs}
-            className="text-emerald-400 text-xs font-medium hover:text-emerald-300 transition-colors"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-emerald-400 text-xs font-medium hover:text-emerald-300 transition-colors flex items-center gap-1"
           >
+            <FiRefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
-
         {loading ? (
           <>
             <SkeletonCard />
@@ -151,7 +186,7 @@ export default function Dashboard() {
               key={config.uuid || config.email}
               config={config}
               onCharge={handleCharge}
-              onRefresh={refreshConfigs}
+              onRefresh={handleConfigUpdate}
             />
           ))
         )}
@@ -159,8 +194,8 @@ export default function Dashboard() {
 
       {/* Create Config Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-t-2xl animate-in slide-in-from-bottom-4 duration-300 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl animate-in zoom-in-95 duration-300 max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between p-5 pb-3 flex-shrink-0">
               <h3 className="text-base font-bold text-white">Create New Config</h3>
               <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400">
@@ -198,7 +233,7 @@ export default function Dashboard() {
                     onChange={e => setCreateForm({...createForm, total_gb: parseFloat(e.target.value) || 0})}
                     min={0.1}
                     max={trafficBalanceGB}
-                    step={0.5}
+                    step="any"
                     required
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
                   />
@@ -221,6 +256,7 @@ export default function Dashboard() {
                   {creating ? 'Creating…' : 'Create Config'}
                 </button>
               </form>
+              <div className="h-8"></div>
             </div>
           </div>
         </div>

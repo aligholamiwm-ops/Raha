@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext';
 import client from '../api/client';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
-  FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap
+  FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap,
+  FiSend, FiRadio, FiMessageSquare
 } from 'react-icons/fi';
 
 const Card = ({ children, className = "" }) => (
@@ -123,12 +124,58 @@ export default function Admin() {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanNote, setLoanNote] = useState('');
   const [allocatingLoan, setAllocatingLoan] = useState(false);
+  // Send message to user
+  const [sendMsgText, setSendMsgText] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [sendMsgResult, setSendMsgResult] = useState(null);
+  // Broadcast
+  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [broadcastTarget, setBroadcastTarget] = useState('all');
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState(null);
 
   useEffect(() => {
     if (activeTab === "stats") fetchStats();
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
     if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
   }, [activeTab]);
+
+  const handleSendMessage = async () => {
+    if (!sendMsgText.trim() || !foundUser) return;
+    setSendingMsg(true);
+    setSendMsgResult(null);
+    try {
+      await client.post('/api/v1/admin/users/send-message', {
+        telegram_id: foundUser.telegram_id,
+        message: sendMsgText.trim()
+      });
+      setSendMsgResult({ ok: true, msg: 'Message sent successfully!' });
+      setSendMsgText('');
+    } catch (err) {
+      setSendMsgResult({ ok: false, msg: err.response?.data?.detail || 'Failed to send message' });
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastMsg.trim()) return;
+    if (!window.confirm(`Send broadcast to "${broadcastTarget}" group? This cannot be undone.`)) return;
+    setBroadcasting(true);
+    setBroadcastResult(null);
+    try {
+      const res = await client.post('/api/v1/admin/users/broadcast', {
+        message: broadcastMsg.trim(),
+        target: broadcastTarget
+      });
+      setBroadcastResult({ ok: true, data: res.data });
+      setBroadcastMsg('');
+    } catch (err) {
+      setBroadcastResult({ ok: false, msg: err.response?.data?.detail || 'Broadcast failed' });
+    } finally {
+      setBroadcasting(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -354,6 +401,7 @@ export default function Admin() {
           { id: "stats", label: "Stats", icon: FiBarChart2 },
           { id: "servers", label: "Servers", icon: FiServer },
           { id: "users", label: "Users", icon: FiUsers },
+          { id: "broadcast", label: "Broadcast", icon: FiRadio },
           { id: "pricing", label: "Pricing", icon: FiTag }
         ].map(tab => (
           <button
@@ -573,6 +621,38 @@ export default function Admin() {
                   <Button onClick={handleCharge} className="w-full" variant="primary">Add Balance</Button>
                 </div>
 
+                {/* Send Message to User */}
+                <div className="p-4 bg-slate-900/50 rounded-xl border border-blue-500/30 space-y-3">
+                  <div className="text-xs font-medium text-blue-400 uppercase tracking-wide flex items-center gap-2">
+                    <FiMessageSquare size={12} /> Send Message
+                  </div>
+                  <p className="text-[10px] text-slate-500">Send a direct Telegram message to this user.</p>
+                  <textarea
+                    value={sendMsgText}
+                    onChange={e => setSendMsgText(e.target.value)}
+                    placeholder="Type your message here..."
+                    rows={3}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
+                  />
+                  {sendMsgResult && (
+                    <div className={`text-xs px-3 py-2 rounded-lg border ${
+                      sendMsgResult.ok
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {sendMsgResult.msg}
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleSendMessage}
+                    disabled={sendingMsg || !sendMsgText.trim()}
+                    icon={FiSend}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {sendingMsg ? 'Sending...' : 'Send Message'}
+                  </Button>
+                </div>
                 {/* Loan Allocation */}
                 <div className="p-4 bg-slate-900/50 rounded-xl border border-rose-500/30 space-y-3">
                   <div className="text-xs font-medium text-rose-400 uppercase tracking-wide">Allocate USDT Loan</div>
@@ -630,6 +710,83 @@ export default function Admin() {
         </Card>
       )}
 
+      {activeTab === "broadcast" && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Card>
+            <SectionHeader title="Broadcast Message" icon={FiRadio} />
+            <p className="text-xs text-slate-400 mb-4">
+              Send a Telegram message to a group of users. Choose your target audience carefully.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-2">Target Audience</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { value: 'all', label: 'All Users', desc: 'Every registered user', color: 'emerald' },
+                    { value: 'unpaid_loans', label: 'Unpaid Loans', desc: 'Users with outstanding loan balance', color: 'rose' },
+                    { value: 'active_configs', label: 'Active Configs', desc: 'Users with at least one active VPN config', color: 'blue' }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setBroadcastTarget(opt.value)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        broadcastTarget === opt.value
+                          ? `border-${opt.color}-500/50 bg-${opt.color}-500/10`
+                          : 'border-slate-700 bg-slate-900/30 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className={`text-sm font-bold ${
+                        broadcastTarget === opt.value ? `text-${opt.color}-400` : 'text-white'
+                      }`}>{opt.label}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-2">Message</label>
+                <textarea
+                  value={broadcastMsg}
+                  onChange={e => setBroadcastMsg(e.target.value)}
+                    placeholder="Type your broadcast message here... Supports HTML: <b>bold</b>, <i>italic</i>"
+                  rows={5}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500 resize-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Supports HTML: bold, italic, links</p>
+              </div>
+              {broadcastResult && (
+                <div className={`p-4 rounded-xl border text-sm ${
+                  broadcastResult.ok
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                }`}>
+                  {broadcastResult.ok ? (
+                    <div>
+                      <div className="font-bold mb-1">✓ Broadcast Complete</div>
+                      <div className="text-xs space-y-0.5">
+                        <div>Sent: <span className="font-bold">{broadcastResult.data?.sent}</span></div>
+                        <div>Failed: <span className="font-bold">{broadcastResult.data?.failed}</span></div>
+                        <div>Total: <span className="font-bold">{broadcastResult.data?.total}</span></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>✗ {broadcastResult.msg}</div>
+                  )}
+                </div>
+              )}
+              <Button
+                onClick={handleBroadcast}
+                disabled={broadcasting || !broadcastMsg.trim()}
+                icon={FiSend}
+                variant="primary"
+                className="w-full"
+              >
+                {broadcasting ? 'Broadcasting...' : `Send Broadcast to ${broadcastTarget === 'all' ? 'All Users' : broadcastTarget === 'unpaid_loans' ? 'Users with Unpaid Loans' : 'Users with Active Configs'}`}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
       {activeTab === "pricing" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <Card>

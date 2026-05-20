@@ -3,260 +3,136 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional, Any
-
 logger = logging.getLogger(__name__)
-
-# In-memory cookie cache: {server_name: cookie_string}
+# Persistent caches
 _cookie_cache: dict[str, str] = {}
-
+_prefix_cache: dict[str, str] = {}
 _HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
     "X-Requested-With": "XMLHttpRequest",
 }
-
-
 class AsyncXUIClient:
-    """Async HTTP client for the 3x-ui panel (Sanaei fork)."""
-
-    def __init__(
-        self,
-        base_url: str,
-        username: str,
-        password: str,
-        inbound_id: int,
-        server_name: str,
-        db=None,  # kept for backward compat, no longer used
-    ) -> None:
+    def __init__(self, base_url: str, username: str, password: str, inbound_id: int, server_name: str, db=None) -> None:
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.inbound_id = inbound_id
         self.server_name = server_name
-        # Restore cached cookie if available
-        self._cookie: str = _cookie_cache.get(server_name, "")
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
+        self._cookie = _cookie_cache.get(server_name, "")
+        self._prefix = _prefix_cache.get(server_name, "")
     def _make_client(self) -> httpx.AsyncClient:
         headers = dict(_HEADERS)
         if self._cookie:
             headers["Cookie"] = self._cookie
-        return httpx.AsyncClient(headers=headers, verify=False, timeout=30)
-
-    async def _request(
-        self,
-        method: str,
-        path: str,
-        retry_on_401: bool = True,
-        **kwargs: Any,
-    ) -> httpx.Response:
-        url = f"{self.base_url}{path}"
-        async with self._make_client() as client:
-            response = await client.request(method, url, **kwargs)
-
-        if response.status_code == 401 and retry_on_401:
-            logger.warning("Got 401 from %s, re-logging in…", url)
-            await self.login()
-            async with self._make_client() as client:
-                response = await client.request(method, url, **kwargs)
-
-        return response
-
-    # ------------------------------------------------------------------
-    # Auth
-    # ------------------------------------------------------------------
-
+        return httpx.AsyncClient(headers=headers, verify=False, timeout=30, follow_redirects=False)
     async def login(self) -> str:
-        """Authenticate and cache the session cookie. Returns cookie string."""
-        async with httpx.AsyncClient(headers=_HEADERS, verify=False, timeout=30) as client:
-            response = await client.post(
-                f"{self.base_url}/login",
-                data={"username": self.username, "password": self.password},
-            )
-
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"XUI login failed with HTTP {response.status_code}"
-            )
-
-        data = response.json()
-        if not data.get("success"):
-            raise RuntimeError(f"XUI login rejected: {data.get('msg')}")
-
-        # Extract Set-Cookie header value
-        cookie_header = response.headers.get("set-cookie", "")
-        self._cookie = cookie_header.split(";")[0] if cookie_header else ""
-
-        # Cache cookie in memory
-        if self._cookie:
-            _cookie_cache[self.server_name] = self._cookie
-
-        logger.info("XUI login successful for server %s", self.server_name)
-        return self._cookie
-
-    def set_cookie(self, cookie: str) -> None:
-        """Inject a session cookie."""
-        self._cookie = cookie
-        if cookie:
-            _cookie_cache[self.server_name] = cookie
-
-    # ------------------------------------------------------------------
-    # Inbounds
-    # ------------------------------------------------------------------
-
-    async def get_inbounds(self) -> list:
-        response = await self._request("GET", "/panel/api/inbounds/list")
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success"):
-                return data.get("obj", [])
-        logger.error("get_inbounds failed: %s", response.text)
-        return []
-
-    # ------------------------------------------------------------------
-    # Client info
-    # ------------------------------------------------------------------
-
-    async def get_client_info(self, email: Optional[str] = None) -> list:
-        inbounds = await self.get_inbounds()
-        client_list = []
-        for ib in inbounds:
-            try:
-                stream_settings = json.loads(ib.get("streamSettings", "{}"))
-            except json.JSONDecodeError:
-                stream_settings = {}
-
-            domain_name = ""
-            tls_settings = (
-                stream_settings.get("tlsSettings")
-                or stream_settings.get("xtlsSettings")
-                or stream_settings.get("realitySettings")
-            )
-            if tls_settings:
-                domain_name = tls_settings.get("serverName", "")
-
-            client_stats = {stat["email"]: stat for stat in ib.get("clientStats", [])}
-            try:
-                settings = json.loads(ib.get("settings", "{}"))
-            except json.JSONDecodeError:
-                settings = {}
-            clients = settings.get("clients", [])
-
-            for c in clients:
-                c_email = c.get("email")
-                if email and c_email != email:
+        for prefix in ["", "/xui"]:
+            url = f"{self.base_url}{prefix}/login"
+            logger.info(f"[{self.server_name}] Attempting login at {url}")
+            async with httpx.AsyncClient(headers=_HEADERS, verify=False, timeout=15, follow_redirects=False) as client:
+                try:
+                    resp = await client.post(url, data={"username": self.username, "password": self.password})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("success"):
+                            self._prefix = prefix
+                            _prefix_cache[self.server_name] = prefix
+                            cookie = resp.headers.get("set-cookie", "").split(";")[0]
+                            if cookie:
+                                self._cookie = cookie
+                                _cookie_cache[self.server_name] = cookie
+                            logger.info(f"[{self.server_name}] Login successful with prefix '{prefix}'")
+                            return self._cookie
+                except Exception:
                     continue
-                stats = client_stats.get(c_email, {})
-                client_list.append(
-                    {
-                        "email": c_email,
-                        "uuid": c.get("id"),
-                        "enable": c.get("enable", True),
-                        "usage_up": stats.get("up", 0),
-                        "usage_down": stats.get("down", 0),
-                        "total_gb": c.get("totalGB", 0) / (1024**3),
-                        "expiry_time_ms": c.get("expiryTime", 0),
-                        "domain_name": domain_name,
-                        "inbound_id": ib.get("id"),
-                        "protocol": ib.get("protocol"),
-                        "port": ib.get("port"),
-                    }
-                )
-        return client_list
-
-    # ------------------------------------------------------------------
-    # Client CRUD
-    # ------------------------------------------------------------------
-
+        raise RuntimeError(f"XUI login failed for {self.server_name}")
+    async def _request(self, method: str, path: str, retry_on_401: bool = True, **kwargs) -> httpx.Response:
+        if not self._cookie:
+            await self.login()
+        url = f"{self.base_url}{self._prefix}{path}"
+        logger.info(f"[{self.server_name}] Request: {method} {url}")
+        async with self._make_client() as client:
+            try:
+                resp = await client.request(method, url, **kwargs)
+                if resp.status_code == 404:
+                    logger.warning(f"[{self.server_name}] 404 at {url}, re-detecting prefix...")
+                    await self.login()
+                    url = f"{self.base_url}{self._prefix}{path}"
+                    async with self._make_client() as client2:
+                        resp = await client2.request(method, url, **kwargs)
+                if resp.status_code == 401 and retry_on_401:
+                    await self.login()
+                    return await self._request(method, path, retry_on_401=False, **kwargs)
+                return resp
+            except httpx.RequestError as exc:
+                logger.error(f"[{self.server_name}] Connection error: {exc}")
+                raise RuntimeError(f"Connection error: {exc}")
+    async def get_inbounds(self) -> list:
+        resp = await self._request("GET", "/panel/api/inbounds/list")
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
     async def add_client(self, inbound_id: int, client_data: dict) -> dict:
         payload = {"id": inbound_id, "settings": json.dumps({"clients": [client_data]})}
-        response = await self._request("POST", "/panel/api/inbounds/addClient", json=payload)
-        if response.status_code == 200:
-            return response.json()
-        logger.error("add_client failed: %s", response.text)
-        return {"success": False, "msg": response.text}
-
+        resp = await self._request("POST", "/panel/api/inbounds/addClient", json=payload)
+        return resp.json() if resp.status_code == 200 else {"success": False, "msg": f"HTTP {resp.status_code}"}
     async def update_client(self, inbound_id: int, uuid: str, client_data: dict) -> dict:
         payload = {"id": inbound_id, "settings": json.dumps({"clients": [client_data]})}
-        response = await self._request(
-            "POST", f"/panel/api/inbounds/updateClient/{uuid}", json=payload
-        )
-        if response.status_code == 200:
-            return response.json()
-        logger.error("update_client failed: %s", response.text)
-        return {"success": False, "msg": response.text}
-
+        resp = await self._request("POST", f"/panel/api/inbounds/updateClient/{uuid}", json=payload)
+        return resp.json() if resp.status_code == 200 else {"success": False, "msg": f"HTTP {resp.status_code}"}
     async def delete_client(self, inbound_id: int, uuid: str) -> dict:
-        response = await self._request(
-            "POST", f"/panel/api/inbounds/{inbound_id}/delClient/{uuid}"
-        )
-        if response.status_code == 200:
-            return response.json()
-        logger.error("delete_client failed: %s", response.text)
-        return {"success": False, "msg": response.text}
-
-    async def reset_client_traffic(self, inbound_id: int, email: str) -> dict:
-        response = await self._request(
-            "POST", f"/panel/api/inbounds/{inbound_id}/resetClientTraffic/{email}"
-        )
-        if response.status_code == 200:
-            return response.json()
-        logger.error("reset_client_traffic failed: %s", response.text)
-        return {"success": False, "msg": response.text}
-
-    async def get_client_traffic_by_email(self, email: str) -> dict:
-        response = await self._request(
-            "GET", f"/panel/api/inbounds/getClientTraffics/{email}"
-        )
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success"):
-                return data.get("obj", {})
-        logger.error("get_client_traffic_by_email failed: %s", response.text)
-        return {}
-
-    # ------------------------------------------------------------------
-    # Static utilities
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def timestamp_to_date(ts_ms: int) -> str:
-        if not ts_ms or ts_ms <= 0:
-            return "Unlimited"
-        try:
-            dt = datetime.fromtimestamp(ts_ms / 1000.0)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:
-            return "Invalid Date"
-
-    @staticmethod
-    def format_bytes(size: float) -> str:
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size < 1024.0:
-                return f"{size:.2f} {unit}"
-            size /= 1024.0
-        return f"{size:.2f} PB"
-
-
+        resp = await self._request("POST", f"/panel/api/inbounds/{inbound_id}/delClient/{uuid}")
+        return resp.json() if resp.status_code == 200 else {"success": False, "msg": f"HTTP {resp.status_code}"}
+    def build_subscription_link(self, sub_id: str) -> str:
+        """Build the subscription link URL for a given subId."""
+        if not sub_id:
+            return ""
+        # XUI subscription endpoint: /sub/{subId}
+        # Replace port 2083 with 2096 for sub link
+        sub_base = self.base_url.replace(":2083", ":2096")
+        return f"{sub_base}/sub/{sub_id}"
+    async def get_client_info(self, email: Optional[str] = None) -> list:
+        inbounds = await self.get_inbounds()
+        clients = []
+        # Get traffic stats to include usage data
+        traffic_resp = await self._request("GET", "/panel/api/inbounds/getClientTraffics/all")
+        traffic_map = {}
+        if traffic_resp.status_code == 200:
+            obj = traffic_resp.json().get("obj")
+            if isinstance(obj, list):
+                for t in obj:
+                    traffic_map[t["email"]] = t
+        for ib in inbounds:
+            try:
+                settings_obj = json.loads(ib.get("settings", "{}"))
+                clients_list = settings_obj.get("clients")
+                if not isinstance(clients_list, list):
+                    continue
+                for c in clients_list:
+                    if not email or c.get("email") == email:
+                        # Map 'id' to 'uuid' as expected by the router
+                        c["uuid"] = str(c.get("id", ""))
+                        c["inbound_id"] = ib.get("id")
+                        # Add traffic data
+                        t_data = traffic_map.get(c.get("email"), {})
+                        c["usage_up"] = float(t_data.get("up", 0))
+                        c["usage_down"] = float(t_data.get("down", 0))
+                        c["total_gb"] = float(c.get("totalGB", 0)) / (1024 ** 3) if c.get("totalGB") else 0.0
+                        c["expiry_time_ms"] = int(c.get("expiryTime", 0))
+                        c["enable"] = bool(c.get("enable", True))
+                        # Add last online
+                        c["last_online"] = int(t_data.get("expiryTime", 0)) if "expiryTime" in t_data else 0
+                        # Build subscription link from subId
+                        sub_id = c.get("subId", "")
+                        c["subscription_link"] = self.build_subscription_link(sub_id) if sub_id else ""
+                        clients.append(c)
+            except: continue
+        return clients
 def build_xui_client(server: dict) -> AsyncXUIClient:
-    """Build an AsyncXUIClient from a server config dict (from env)."""
-    ip = server.get("ip", server.get("ip_address", ""))
-    port = server.get("port", server.get("panel_port", 2053))
-    if ip.startswith("http://" ) or ip.startswith("https://" ):
-        base_url = f"{ip}:{port}"
-    else:
-        base_url = f"http://{ip}:{port}"
-    return AsyncXUIClient(
-        base_url=base_url,
-        username=server["username"],
-        password=server["password"],
-        inbound_id=int(server.get("inbound_id", 1)),
-        server_name=server.get("name", server.get("server_name", "")),
-    )
+    ip = server.get("ip", "")
+    port = server.get("port", 2053)
+    base_url = ip if ip.startswith("http") else f"http://{ip}"
+    if ":" not in base_url[8:]: base_url = f"{base_url}:{port}"
+    return AsyncXUIClient(base_url, server["username"], server["password"], int(server.get("inbound_id", 1)), server.get("name", ""))
