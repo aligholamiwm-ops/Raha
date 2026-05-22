@@ -88,6 +88,7 @@ export const verifyAdminPassword = (password) =>
 export const setAdminPasswordForUser = (telegramId, password) =>
   api.put(`/api/v1/admin/users/${telegramId}/set-admin-password`, { password }).then((r) => r.data)
 
+export const sendConfigToBot = (configUuid, password) => api.post(`/api/v1/configs/${configUuid}/send-to-bot`, null, { params: { password } }).then((r) => r.data)
 export const downloadConfigZip = (configUuid, password) =>
   api.post(`/api/v1/configs/${configUuid}/download-zip`, null, {
     params: { password },

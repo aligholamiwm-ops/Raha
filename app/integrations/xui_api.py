@@ -124,6 +124,10 @@ class AsyncXUIClient:
                         c["enable"] = bool(c.get("enable", True))
                         # Add last online
                         c["last_online"] = int(t_data.get("expiryTime", 0)) if "expiryTime" in t_data else 0
+                        # Extract external proxies if any
+                        stream_settings = json.loads(ib.get("streamSettings", "{}"))
+                        c["external_proxies"] = stream_settings.get("externalProxy", [])
+                        c["inbound"] = ib
                         # Build subscription link from subId
                         sub_id = c.get("subId", "")
                         c["subscription_link"] = self.build_subscription_link(sub_id) if sub_id else ""

@@ -1,23 +1,22 @@
 import React, { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { downloadConfigZip } from '../api/client'
+import { sendConfigToBot } from '../api/client'
 
 const CloseIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
   </svg>
 )
+
 const CopyIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
   </svg>
 )
-const DownloadIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
+
+const TelegramIcon = () => (
+  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.52-1.4.51-.46-.01-1.35-.26-2.01-.48-.81-.27-1.45-.42-1.39-.89.03-.24.37-.49 1.02-.74 4-1.74 6.67-2.88 8-3.43 3.81-1.58 4.6-1.85 5.12-1.86.11 0 .37.03.54.17.14.12.18.28.2.44-.01.07 0 .14-.01.21z" />
   </svg>
 )
 
@@ -25,8 +24,9 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
   const [copied, setCopied] = useState(false)
   const [zipPassword, setZipPassword] = useState('')
   const [showZipInput, setShowZipInput] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-  const [downloadError, setDownloadError] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
 
   const handleCopy = async () => {
     if (!subscriptionLink) return
@@ -39,24 +39,20 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
     }
   }
 
-  const handleDownloadZip = async () => {
+  const handleSendToBot = async () => {
     if (!zipPassword.trim()) return
-    setDownloading(true)
-    setDownloadError(null)
+    setSending(true)
+    setError(null)
+    setMessage(null)
     try {
-      const blob = await downloadConfigZip(uuid, zipPassword.trim())
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${configName || uuid}.zip`
-      a.click()
-      URL.revokeObjectURL(url)
+      const res = await sendConfigToBot(uuid, zipPassword.trim())
+      setMessage(res.message || 'ZIP sent to your Telegram!')
       setShowZipInput(false)
       setZipPassword('')
     } catch (err) {
-      setDownloadError(err?.response?.data?.detail || 'Failed to download ZIP')
+      setError(err?.response?.data?.detail || 'Failed to send ZIP')
     } finally {
-      setDownloading(false)
+      setSending(false)
     }
   }
 
@@ -103,14 +99,14 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
           {copied ? 'Copied!' : 'Copy Subscription Link'}
         </button>
 
-        {/* Download ZIP section */}
+        {/* Send to Telegram section */}
         {!showZipInput ? (
           <button
             onClick={() => setShowZipInput(true)}
-            className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium text-sm py-3 rounded-xl transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
           >
-            <DownloadIcon />
-            Download ZIP
+            <TelegramIcon />
+            Send All QR to Telegram (ZIP)
           </button>
         ) : (
           <div className="space-y-2">
@@ -119,33 +115,37 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
                 type="password"
                 value={zipPassword}
                 onChange={(e) => setZipPassword(e.target.value)}
-                placeholder="Enter ZIP password"
+                placeholder="Set ZIP password"
                 className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
-                onKeyDown={(e) => e.key === 'Enter' && handleDownloadZip()}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendToBot()}
                 autoFocus
               />
               <button
-                onClick={handleDownloadZip}
-                disabled={downloading || !zipPassword.trim()}
+                onClick={handleSendToBot}
+                disabled={sending || !zipPassword.trim()}
                 className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium px-4 rounded-xl transition-colors"
               >
-                {downloading ? (
+                {sending ? (
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <DownloadIcon />
+                  'Send'
                 )}
               </button>
               <button
-                onClick={() => { setShowZipInput(false); setZipPassword(''); setDownloadError(null) }}
+                onClick={() => { setShowZipInput(false); setZipPassword(''); setError(null) }}
                 className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-700 transition-colors"
               >
                 ✕
               </button>
             </div>
-            {downloadError && (
-              <p className="text-rose-400 text-xs">{downloadError}</p>
-            )}
           </div>
+        )}
+
+        {error && (
+          <p className="text-rose-400 text-center text-xs bg-rose-400/10 py-2 rounded-lg">{error}</p>
+        )}
+        {message && (
+          <p className="text-emerald-400 text-center text-xs bg-emerald-400/10 py-2 rounded-lg">{message}</p>
         )}
       </div>
     </div>
