@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import client from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser } from '../api/client';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
   FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap,
-  FiSend, FiRadio, FiMessageSquare
+  FiSend, FiRadio, FiMessageSquare, FiLock, FiEye, FiEyeOff
 } from 'react-icons/fi';
 
 const Card = ({ children, className = "" }) => (
@@ -93,6 +93,13 @@ export default function Admin() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   
+  // Admin 2FA password gate
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminPwdInput, setAdminPwdInput] = useState('');
+  const [adminPwdError, setAdminPwdError] = useState(null);
+  const [adminPwdLoading, setAdminPwdLoading] = useState(false);
+  const [adminPwdVisible, setAdminPwdVisible] = useState(false);
+
   // Lists
   const [servers, setServers] = useState([]);
   const [cleanIps, setCleanIps] = useState([]);
@@ -109,7 +116,7 @@ export default function Admin() {
   const [editingPlan, setEditingPlan] = useState(null);
 
   const [showDiscountForm, setShowDiscountForm] = useState(false);
-  const [discountForm, setDiscountForm] = useState({ code: "", discount_percent: 10 });
+  const [discountForm, setDiscountForm] = useState({ code: "", discount_percent: 10, max_uses: "" });
   const [editingDiscount, setEditingDiscount] = useState(null);
 
   const [referralSettings, setReferralSettings] = useState({ layer_1: 5, layer_2: 3, layer_3: 2, layer_4: 1, layer_5: 0.5 });
@@ -124,6 +131,9 @@ export default function Admin() {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanNote, setLoanNote] = useState('');
   const [allocatingLoan, setAllocatingLoan] = useState(false);
+  // Admin password for user management
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [settingAdminPwd, setSettingAdminPwd] = useState(false);
   // Send message to user
   const [sendMsgText, setSendMsgText] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
@@ -312,8 +322,27 @@ export default function Admin() {
     try {
       await client.put(`/api/v1/admin/users/${foundUser.telegram_id}/role`, { role: newRole });
       alert("Role updated!");
+      setNewAdminPassword('');
       await loadUserDetails(foundUser);
     } catch (err) { alert("Error updating role: " + (err.response?.data?.detail || err.message)); }
+  };
+
+  const handleSetAdminPassword = async () => {
+    if (!newAdminPassword.trim() || newAdminPassword.trim().length < 4) {
+      alert("Password must be at least 4 characters");
+      return;
+    }
+    setSettingAdminPwd(true);
+    try {
+      await setAdminPasswordForUser(foundUser.telegram_id, newAdminPassword.trim());
+      alert("Admin password set successfully!");
+      setNewAdminPassword('');
+      await loadUserDetails(foundUser);
+    } catch (err) {
+      alert("Error setting admin password: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSettingAdminPwd(false);
+    }
   };
 
   const handleAllocateLoan = async () => {
@@ -363,18 +392,31 @@ export default function Admin() {
 
   const handleDiscountSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      code: discountForm.code,
+      discount_percent: discountForm.discount_percent,
+      ...(discountForm.max_uses !== "" && discountForm.max_uses !== null
+        ? { max_uses: parseInt(discountForm.max_uses, 10) }
+        : {}),
+    };
     try {
       if (editingDiscount) {
-        await client.put(`/api/v1/discounts/${editingDiscount}`, discountForm);
+        const updatePayload = {
+          discount_percent: discountForm.discount_percent,
+          ...(discountForm.max_uses !== "" && discountForm.max_uses !== null
+            ? { max_uses: parseInt(discountForm.max_uses, 10) }
+            : {}),
+        };
+        await client.put(`/api/v1/discounts/${editingDiscount}`, updatePayload);
       } else {
-        await client.post("/api/v1/discounts/", discountForm);
+        await client.post("/api/v1/discounts/", payload);
       }
       alert("Discount saved!");
-      setDiscountForm({ code: "", discount_percent: 10 });
+      setDiscountForm({ code: "", discount_percent: 10, max_uses: "" });
       setEditingDiscount(null);
       setShowDiscountForm(false);
       fetchDiscounts();
-    } catch (err) { alert("Error saving discount"); }
+    } catch (err) { alert("Error saving discount: " + (err.response?.data?.detail || err.message)); }
   };
 
   const deleteDiscount = async (code) => {
@@ -385,8 +427,72 @@ export default function Admin() {
     } catch (err) { alert("Error deleting discount"); }
   };
 
+  const handleUnlockAdmin = async (e) => {
+    e.preventDefault();
+    if (!adminPwdInput.trim()) return;
+    setAdminPwdLoading(true);
+    setAdminPwdError(null);
+    try {
+      await verifyAdminPassword(adminPwdInput.trim());
+      setAdminPasswordHeader(adminPwdInput.trim());
+      setAdminUnlocked(true);
+    } catch (err) {
+      setAdminPwdError(err.response?.data?.detail || 'Invalid password');
+    } finally {
+      setAdminPwdLoading(false);
+    }
+  };
+
   if (user?.role !== "admin") {
     return <div className="p-8 text-center text-slate-400">Access Denied. Admins only.</div>;
+  }
+
+  // If the admin has a 2FA password configured, show password gate until unlocked
+  if (user?.has_admin_password && !adminUnlocked) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] px-4">
+        <div className="w-full max-w-xs bg-slate-800 border border-slate-700 rounded-3xl p-6 space-y-5">
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <FiLock className="text-emerald-400" size={24} />
+            </div>
+            <h2 className="text-white font-bold text-lg">Admin Dashboard</h2>
+            <p className="text-slate-400 text-xs">Enter your admin password to continue</p>
+          </div>
+          <form onSubmit={handleUnlockAdmin} className="space-y-3">
+            <div className="relative">
+              <input
+                type={adminPwdVisible ? "text" : "password"}
+                placeholder="Admin password"
+                value={adminPwdInput}
+                onChange={e => { setAdminPwdInput(e.target.value); setAdminPwdError(null); }}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm pr-10 focus:outline-none focus:border-emerald-500 transition-colors"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setAdminPwdVisible(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
+              >
+                {adminPwdVisible ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+              </button>
+            </div>
+            {adminPwdError && (
+              <p className="text-rose-400 text-xs flex items-center gap-1.5">
+                <FiX size={11} /> {adminPwdError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={adminPwdLoading || !adminPwdInput.trim()}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-bold rounded-xl transition-colors text-sm"
+            >
+              {adminPwdLoading ? 'Verifying…' : 'Unlock Dashboard'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -613,6 +719,34 @@ export default function Admin() {
                       { value: "admin", label: "Admin" }
                     ]}
                   />
+                  {/* Admin 2FA password setup — shown only when the target user is admin */}
+                  {foundUser.role === "admin" && (
+                    <div className="mt-2 pt-3 border-t border-slate-700 space-y-2">
+                      <div className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+                        <FiLock size={11} /> Set Admin 2FA Password
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Set a custom dashboard password for this admin. Leave blank to keep current setting.
+                        {foundUser.has_admin_password && <span className="text-emerald-400 ml-1">✓ Password is set</span>}
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          placeholder="New admin password (min 4 chars)"
+                          value={newAdminPassword}
+                          onChange={e => setNewAdminPassword(e.target.value)}
+                          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <button
+                          onClick={handleSetAdminPassword}
+                          disabled={settingAdminPwd || !newAdminPassword.trim()}
+                          className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-400 text-xs font-bold rounded-lg border border-amber-500/30 transition-colors"
+                        >
+                          {settingAdminPwd ? 'Setting…' : 'Set'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
@@ -821,11 +955,14 @@ export default function Admin() {
           </Card>
 
           <Card>
-            <SectionHeader title="Discounts" icon={FiTag} onAdd={() => { setShowDiscountForm(!showDiscountForm); setEditingDiscount(null); }} />
+            <SectionHeader title="Discounts" icon={FiTag} onAdd={() => { setShowDiscountForm(!showDiscountForm); setEditingDiscount(null); setDiscountForm({ code: "", discount_percent: 10, max_uses: "" }); }} />
             {showDiscountForm && (
               <form onSubmit={handleDiscountSubmit} className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700 animate-in zoom-in-95 duration-200">
                 <Input label="Code" value={discountForm.code} onChange={e => setDiscountForm({...discountForm, code: e.target.value})} required disabled={!!editingDiscount} />
-                <Input label="Percent (%)" type="number" value={discountForm.discount_percent} onChange={e => setDiscountForm({...discountForm, discount_percent: parseFloat(e.target.value)})} required />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Percent (%)" type="number" value={discountForm.discount_percent} onChange={e => setDiscountForm({...discountForm, discount_percent: parseFloat(e.target.value)})} required />
+                  <Input label="Max Uses (blank = unlimited)" type="number" value={discountForm.max_uses} onChange={e => setDiscountForm({...discountForm, max_uses: e.target.value})} min={1} placeholder="∞" />
+                </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1">{editingDiscount ? "Update" : "Create"} Discount</Button>
                   <Button type="button" variant="outline" onClick={() => setShowDiscountForm(false)}>Cancel</Button>
@@ -837,10 +974,15 @@ export default function Admin() {
                 <div key={d.code} className="p-3 bg-slate-900/30 rounded-xl border border-slate-700/50 flex items-center justify-between group">
                   <div>
                     <div className="text-sm font-bold text-white">{d.code}</div>
-                    <div className="text-[10px] text-slate-500">{d.discount_percent}% Off</div>
+                    <div className="text-[10px] text-slate-500">
+                      {d.discount_percent}% Off
+                      {d.max_uses != null
+                        ? ` · ${d.used_by?.length || 0}/${d.max_uses} uses`
+                        : d.used_by?.length > 0 ? ` · ${d.used_by.length} uses` : ''}
+                    </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setEditingDiscount(d.code); setDiscountForm(d); setShowDiscountForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
+                    <button onClick={() => { setEditingDiscount(d.code); setDiscountForm({ ...d, max_uses: d.max_uses ?? "" }); setShowDiscountForm(true); }} className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"><FiEdit2 size={14} /></button>
                     <button onClick={() => deleteDiscount(d.code)} className="p-1.5 hover:bg-rose-500/20 text-rose-400 rounded-lg"><FiTrash2 size={14} /></button>
                   </div>
                 </div>

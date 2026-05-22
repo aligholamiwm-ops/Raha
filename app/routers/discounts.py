@@ -88,6 +88,9 @@ async def validate_discount(
         raise HTTPException(status_code=404, detail="Discount code not found")
     if current_user.telegram_id in item.get("used_by", []):
         raise HTTPException(status_code=400, detail="You have already used this discount code")
+    max_uses = item.get("max_uses")
+    if max_uses is not None and len(item.get("used_by", [])) >= max_uses:
+        raise HTTPException(status_code=400, detail="This discount code has reached its maximum usage limit")
     return {
         "code": item["code"],
         "discount_percent": item["discount_percent"],

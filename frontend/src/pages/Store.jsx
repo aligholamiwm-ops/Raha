@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { createInvoice, getMyLoans, payLoan } from '../api/client'
+import { createInvoice, getMyLoans, payLoan, validateDiscount } from '../api/client'
 import {
   FiShoppingCart, FiArrowUp, FiArrowDown, FiCreditCard,
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
-  FiPackage, FiZap, FiStar, FiAward
+  FiPackage, FiZap, FiStar, FiAward, FiTag, FiX
 } from 'react-icons/fi'
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -166,9 +166,160 @@ function PlanCard({ plan, onBuy, buying, walletBalance }) {
   )
 }
 
+function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
+  const [discountCode, setDiscountCode] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [appliedDiscount, setAppliedDiscount] = useState(null)
+  const [discountError, setDiscountError] = useState(null)
+
+  const basePrice = plan?.price_usd || 0
+  const discountPct = appliedDiscount?.discount_percent || 0
+  const finalPrice = basePrice * (1 - discountPct / 100)
+  const canAfford = (walletBalance || 0) >= finalPrice
+
+  const handleApplyDiscount = async () => {
+    if (!discountCode.trim()) return
+    setValidating(true)
+    setDiscountError(null)
+    setAppliedDiscount(null)
+    try {
+      const result = await validateDiscount(discountCode.trim())
+      setAppliedDiscount(result)
+    } catch (e) {
+      setDiscountError(e?.response?.data?.detail || 'Invalid discount code')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null)
+    setDiscountCode('')
+    setDiscountError(null)
+  }
+
+  if (!plan) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end justify-center p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-3xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h3 className="text-white font-bold text-base">Confirm Purchase</h3>
+          <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-700 text-slate-400 transition-colors">
+            <FiX size={16} />
+          </button>
+        </div>
+
+        <div className="px-5 pb-5 space-y-4">
+          {/* Plan summary */}
+          <div className="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Plan</span>
+              <span className="text-white font-bold text-sm">{parseDuration(plan.plan_name)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Traffic</span>
+              <span className="text-emerald-400 font-bold text-sm">{plan.traffic_gb} GB</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Base Price</span>
+              <span className="text-white text-sm">${basePrice.toFixed(2)}</span>
+            </div>
+            {appliedDiscount && (
+              <div className="flex items-center justify-between text-emerald-400">
+                <span className="text-xs flex items-center gap-1"><FiTag size={10} /> Discount ({discountPct}%)</span>
+                <span className="text-sm font-bold">−${(basePrice - finalPrice).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+              <span className="text-slate-300 text-xs font-medium">You Pay</span>
+              <span className="text-white font-black text-base">${finalPrice.toFixed(2)} <span className="text-slate-400 text-xs font-normal">USDT</span></span>
+            </div>
+          </div>
+
+          {/* Discount code */}
+          {!appliedDiscount ? (
+            <div>
+              <p className="text-xs text-slate-400 mb-2">Have a discount code?</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter code"
+                  value={discountCode}
+                  onChange={e => { setDiscountCode(e.target.value); setDiscountError(null) }}
+                  onKeyDown={e => e.key === 'Enter' && handleApplyDiscount()}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <button
+                  onClick={handleApplyDiscount}
+                  disabled={!discountCode.trim() || validating}
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors"
+                >
+                  {validating ? <FiLoader size={14} className="animate-spin" /> : 'Apply'}
+                </button>
+              </div>
+              {discountError && (
+                <p className="text-rose-400 text-xs mt-1.5 flex items-center gap-1">
+                  <FiAlertCircle size={11} /> {discountError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <FiTag className="text-emerald-400" size={14} />
+                <div>
+                  <span className="text-emerald-400 font-bold text-sm">{appliedDiscount.code}</span>
+                  <span className="text-emerald-300 text-xs ml-1.5">({discountPct}% off)</span>
+                </div>
+              </div>
+              <button onClick={handleRemoveDiscount} className="text-slate-400 hover:text-rose-400 transition-colors">
+                <FiX size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Wallet balance note */}
+          {!canAfford && (
+            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">
+              <FiInfo size={12} />
+              Insufficient wallet balance — will redirect to crypto payment
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onCancel}
+              className="flex-1 py-3 rounded-2xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm(plan, appliedDiscount?.code || null)}
+              disabled={buying === plan.plan_name}
+              className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                buying === plan.plan_name
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
+              }`}
+            >
+              {buying === plan.plan_name ? (
+                <><FiLoader size={13} className="animate-spin" /> Processing…</>
+              ) : (
+                <><FiCheck size={13} /> Confirm</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DepositTab({ onDeposit, buying }) {
   const [amount, setAmount] = useState('')
-  const presets = [5, 10, 20, 50]
 
   return (
     <div className="space-y-4">
@@ -380,6 +531,7 @@ export default function Store() {
   const [loans, setLoans] = useState([])
   const [loansLoading, setLoansLoading] = useState(false)
   const [payingLoan, setPayingLoan] = useState(null)
+  const [confirmPlan, setConfirmPlan] = useState(null)
 
   useEffect(() => {
     if (activeTab === 'loans') loadLoans()
@@ -420,11 +572,17 @@ export default function Store() {
     } finally { setPayingLoan(null) }
   }
 
-  const handleBuy = async (plan) => {
+  const handleBuy = (plan) => {
+    setError(null); setSuccess(null)
+    setConfirmPlan(plan)
+  }
+
+  const handleConfirmBuy = async (plan, discountCode) => {
     setError(null); setSuccess(null)
     setBuyingPlan(plan.plan_name)
     try {
-      const result = await createInvoice(plan.plan_name, 'USDT')
+      const result = await createInvoice(plan.plan_name, 'USDT', discountCode)
+      setConfirmPlan(null)
       if (result?.status === 'wallet_payment') {
         setSuccess(`Plan "${plan.plan_name}" purchased! +${result.traffic_gb_added} GB added to your balance.`)
         await refreshUser()
@@ -443,9 +601,26 @@ export default function Store() {
     } finally { setBuyingPlan(null) }
   }
 
-  const handleDeposit = (amount) => {
-    const customPlan = { plan_name: `CustomDeposit_${Date.now()}`, price_usd: amount }
-    handleBuy(customPlan)
+  const handleDeposit = async (amount) => {
+    const customPlan = { plan_name: `CustomDeposit_${Date.now()}`, price_usd: amount, traffic_gb: 0 }
+    setBuyingPlan(customPlan.plan_name)
+    setError(null); setSuccess(null)
+    try {
+      const result = await createInvoice(customPlan.plan_name, 'USDT')
+      if (result?.status === 'wallet_payment') {
+        setSuccess('Deposit successful!')
+        await refreshUser()
+      } else {
+        const url = result?.invoice_url || result?.url || result
+        if (url && typeof url === 'string') {
+          const tg = window.Telegram?.WebApp
+          tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+          setSuccess('Invoice created! Complete payment in the opened window.')
+        }
+      }
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Failed to create deposit invoice.')
+    } finally { setBuyingPlan(null) }
   }
 
   return (
@@ -551,6 +726,17 @@ export default function Store() {
           loansLoading={loansLoading}
           onPayLoan={handlePayLoan}
           payingLoan={payingLoan}
+        />
+      )}
+
+      {/* Buy Confirmation Modal */}
+      {confirmPlan && (
+        <BuyConfirmModal
+          plan={confirmPlan}
+          walletBalance={user?.wallet_balance_usd || 0}
+          onConfirm={handleConfirmBuy}
+          onCancel={() => setConfirmPlan(null)}
+          buying={buyingPlan}
         />
       )}
     </div>
