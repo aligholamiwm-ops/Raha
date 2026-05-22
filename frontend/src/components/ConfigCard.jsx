@@ -101,7 +101,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   return (
     <>
       <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 relative overflow-hidden">
-        {/* Status Badge & Toggle */}
+        {/* Status Badge */}
         <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
             config.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
@@ -110,14 +110,6 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
           }`}>
             {config.status}
           </span>
-          <button
-            onClick={handleToggle}
-            disabled={busy}
-            className={`transition-colors ${isEnabled ? 'text-emerald-500' : 'text-slate-500'}`}
-            title={isEnabled ? 'Disable' : 'Enable'}
-          >
-            {busy ? <FiLoader className="animate-spin" size={20} /> : isEnabled ? <FiToggleRight size={24} /> : <FiToggleLeft size={24} />}
-          </button>
         </div>
 
         {/* Header */}
@@ -168,6 +160,14 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
           >
             <MdQrCode size={14} />
             <span>QR / Sub</span>
+          </button>
+          <button
+            onClick={handleToggle}
+            disabled={busy}
+            className={`flex items-center justify-center p-2.5 rounded-xl transition-colors ${isEnabled ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-slate-700 text-slate-500 hover:bg-slate-600'}`}
+            title={isEnabled ? 'Disable' : 'Enable'}
+          >
+            {busy ? <FiLoader className="animate-spin" size={18} /> : isEnabled ? <FiToggleRight size={20} /> : <FiToggleLeft size={20} />}
           </button>
           <button
             onClick={() => {
