@@ -30,12 +30,6 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   const usagePercent = config.total_gb > 0 ? Math.min(100, (usedGb / config.total_gb) * 100) : 0
   const isEnabled = config.enable
 
-  // Upload / Download bars
-  const uploadGb = config.usage_up / (1024 ** 3)
-  const downloadGb = config.usage_down / (1024 ** 3)
-  const uploadPct = config.total_gb > 0 ? Math.min(100, (uploadGb / config.total_gb) * 100) : 0
-  const downloadPct = config.total_gb > 0 ? Math.min(100, (downloadGb / config.total_gb) * 100) : 0
-
   const expiryDays = daysLeft(config.expiry_date)
 
   const refreshAfterAction = async () => {
@@ -58,8 +52,12 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
 
   const handleEdit = async (e) => {
     e.preventDefault()
-    setBusy(true)
     setError(null)
+    if (editForm.total_gb < usedGb) {
+      setError(`Traffic cannot be less than current usage (${usedGb.toFixed(2)} GB)`)
+      return
+    }
+    setBusy(true)
     try {
       await editConfig(config.email, editForm)
       setShowEdit(false)
@@ -125,10 +123,9 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
         {/* Header */}
         <div className="mb-3">
           <h3 className="text-white font-bold text-lg truncate pr-20">{config.name || 'Unnamed Config'}</h3>
-          <p className="text-slate-500 text-[10px] font-mono truncate">{config.server_name}</p>
         </div>
 
-        {/* Traffic Usage Section - Linear bars only */}
+        {/* Traffic Usage Section */}
         <div className="space-y-2 mb-4">
           {/* Total usage bar */}
           <div>
@@ -140,34 +137,6 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
               <div 
                 className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                 style={{ width: `${usagePercent}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Upload bar */}
-          <div>
-            <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
-              <span>↑ Upload</span>
-              <span>{uploadGb.toFixed(2)} GB</span>
-            </div>
-            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full rounded-full bg-blue-500 transition-all duration-500"
-                style={{ width: `${uploadPct}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Download bar */}
-          <div>
-            <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
-              <span>↓ Download</span>
-              <span>{downloadGb.toFixed(2)} GB</span>
-            </div>
-            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full rounded-full bg-purple-500 transition-all duration-500"
-                style={{ width: `${downloadPct}%` }}
               />
             </div>
           </div>
@@ -201,7 +170,11 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
             <span>QR / Sub</span>
           </button>
           <button
-            onClick={() => { setEditForm({ name: config.name || '', total_gb: config.total_gb || 0, duration_days: 0 }); setShowEdit(true); }}
+            onClick={() => {
+              const currentDays = config.expiry_date ? Math.max(0, daysLeft(config.expiry_date)) : 0
+              setEditForm({ name: config.name || '', total_gb: config.total_gb || 0, duration_days: currentDays })
+              setShowEdit(true)
+            }}
             className="flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-slate-200 p-2.5 rounded-xl transition-colors"
             title="Edit"
           >
@@ -243,10 +216,13 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
                   type="number"
                   value={editForm.total_gb}
                   onChange={e => setEditForm({...editForm, total_gb: parseFloat(e.target.value) || 0})}
-                  min={0.1}
+                  min={usedGb > 0 ? parseFloat(usedGb.toFixed(3)) : 0.1}
                   step="any"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                 />
+                {usedGb > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-1">Minimum: {usedGb.toFixed(2)} GB (current usage)</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">

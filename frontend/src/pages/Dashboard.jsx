@@ -3,11 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
 import { createConfig } from '../api/client'
-import { FiPlus, FiX, FiRefreshCw } from 'react-icons/fi'
+import { FiPlus, FiX, FiRefreshCw, FiSearch } from 'react-icons/fi'
 
 function bytesToGB(bytes) {
   if (!bytes || bytes === 0) return 0
   return bytes / (1024 * 1024 * 1024)
+}
+
+function daysLeft(dateStr) {
+  if (!dateStr) return null
+  const expiry = new Date(dateStr)
+  const now = new Date()
+  return Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
 }
 
 function SkeletonCard() {
@@ -33,6 +40,8 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('creation')
 
   // Correctly sum total used GB across all configs
   const totalUsedGB = configs.reduce((sum, c) => sum + bytesToGB((c.usage_up || 0) + (c.usage_down || 0)), 0)
@@ -80,6 +89,31 @@ export default function Dashboard() {
   // Color for total usage bar
   const usageBarColor = usagePct > 85 ? 'bg-red-500' : usagePct > 60 ? 'bg-amber-500' : 'bg-emerald-500'
 
+  // Filter configs by search query (case-insensitive, partial match)
+  const filteredConfigs = configs.filter(c =>
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Sort configs
+  const sortedConfigs = [...filteredConfigs].sort((a, b) => {
+    if (sortBy === 'remaining_days') {
+      const da = daysLeft(a.expiry_date)
+      const db = daysLeft(b.expiry_date)
+      // No expiry (null) → goes last
+      if (da === null && db === null) return 0
+      if (da === null) return 1
+      if (db === null) return -1
+      return da - db
+    }
+    if (sortBy === 'usage_pct') {
+      const pa = a.total_gb > 0 ? ((a.usage_up + a.usage_down) / (1024 ** 3)) / a.total_gb : 0
+      const pb = b.total_gb > 0 ? ((b.usage_up + b.usage_down) / (1024 ** 3)) / b.total_gb : 0
+      return pb - pa // highest usage first
+    }
+    // Default: creation order (original array order)
+    return 0
+  })
+
   return (
     <div className="px-4 py-5 space-y-5">
       {/* Header */}
@@ -101,17 +135,27 @@ export default function Dashboard() {
       {/* Traffic Balance */}
       <div className="bg-emerald-900/30 border border-emerald-700/30 rounded-xl p-3 flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">Traffic Balance</p>
+          <p className="text-xs text-slate-400">Available Traffic Balance</p>
           <p className="text-lg font-bold text-emerald-400">{trafficBalanceGB.toFixed(2)} GB</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          disabled={trafficBalanceGB <= 0}
-          className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
-        >
-          <FiPlus size={16} />
-          New Config
-        </button>
+        <div className="flex gap-2">
+          {trafficBalanceGB <= 0 ? (
+            <button
+              onClick={() => navigate('/store')}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+            >
+              Buy Traffic
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+            >
+              <FiPlus size={16} />
+              New Config
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Total Traffic Usage Summary */}
@@ -147,15 +191,44 @@ export default function Dashboard() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-slate-300 font-semibold text-sm">My Configs</h2>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="text-emerald-400 text-xs font-medium hover:text-emerald-300 transition-colors flex items-center gap-1"
-          >
-            <FiRefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
-            Refresh
-          </button>
         </div>
+
+        {/* Search & Sort */}
+        {configs.length > 0 && (
+          <div className="space-y-2">
+            <div className="relative">
+              <FiSearch size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search configs…"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-500">Sort:</span>
+              {[
+                { value: 'creation', label: 'Date' },
+                { value: 'remaining_days', label: 'Expiry' },
+                { value: 'usage_pct', label: 'Usage' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSortBy(opt.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                    sortBy === opt.value
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <>
             <SkeletonCard />
@@ -180,8 +253,12 @@ export default function Dashboard() {
               </button>
             )}
           </div>
+        ) : sortedConfigs.length === 0 ? (
+          <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-6 text-center">
+            <p className="text-slate-400 text-sm">No configs match your search</p>
+          </div>
         ) : (
-          configs.map((config) => (
+          sortedConfigs.map((config) => (
             <ConfigCard
               key={config.uuid || config.email}
               config={config}
