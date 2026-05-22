@@ -11,6 +11,19 @@ from app.config import get_settings, Settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+SETTINGS_ID = "plans"
+DISCOUNTS_ID = "discounts"
+
+
+async def _get_plans(db: AsyncIOMotorDatabase) -> list[dict]:
+    doc = await db.settings.find_one({"_id": SETTINGS_ID})
+    return doc.get("items", []) if doc else []
+
+
+async def _get_discounts(db: AsyncIOMotorDatabase) -> list[dict]:
+    doc = await db.settings.find_one({"_id": DISCOUNTS_ID})
+    return doc.get("items", []) if doc else []
+
 
 @router.get(
     "/",
@@ -20,11 +33,8 @@ router = APIRouter()
 async def list_plans(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[PlanModel]:
-    results = []
-    async for doc in db.plans.find({}):
-        doc.pop("_id", None)
-        results.append(PlanModel(**doc))
-    return results
+    items = await _get_plans(db)
+    return [PlanModel(**i) for i in items]
 
 
 @router.post(
@@ -38,11 +48,15 @@ async def create_plan(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> PlanModel:
-    existing = await db.plans.find_one({"plan_name": payload.plan_name})
-    if existing:
+    items = await _get_plans(db)
+    if any(i["plan_name"] == payload.plan_name for i in items):
         raise HTTPException(status_code=409, detail="Plan name already exists")
     plan = PlanModel(**payload.model_dump())
-    await db.plans.insert_one(plan.to_dict())
+    await db.settings.update_one(
+        {"_id": SETTINGS_ID},
+        {"$push": {"items": plan.to_dict()}},
+        upsert=True,
+    )
     return plan
 
 
@@ -60,15 +74,14 @@ async def update_plan(
     update_data = payload.to_dict()
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    result = await db.plans.find_one_and_update(
-        {"plan_name": plan_name},
-        {"$set": update_data},
-        return_document=True,
-    )
-    if not result:
+    doc = await db.settings.find_one({"_id": SETTINGS_ID})
+    items: list[dict] = doc.get("items", []) if doc else []
+    idx = next((i for i, x in enumerate(items) if x["plan_name"] == plan_name), None)
+    if idx is None:
         raise HTTPException(status_code=404, detail="Plan not found")
-    result.pop("_id", None)
-    return PlanModel(**result)
+    items[idx].update(update_data)
+    await db.settings.update_one({"_id": SETTINGS_ID}, {"$set": {"items": items}})
+    return PlanModel(**items[idx])
 
 
 @router.delete(
@@ -81,8 +94,11 @@ async def delete_plan(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> None:
-    result = await db.plans.delete_one({"plan_name": plan_name})
-    if result.deleted_count == 0:
+    result = await db.settings.update_one(
+        {"_id": SETTINGS_ID},
+        {"$pull": {"items": {"plan_name": plan_name}}},
+    )
+    if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Plan not found")
 
 
@@ -97,22 +113,24 @@ async def buy_plan_with_wallet(
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    plan_doc = await db.plans.find_one({"plan_name": plan_name})
-    if not plan_doc:
+    plans = await _get_plans(db)
+    plan = next((p for p in plans if p["plan_name"] == plan_name), None)
+    if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    price_usd: float = plan_doc["price_usd"]
-    traffic_gb: float = plan_doc["traffic_gb"]
+    price_usd: float = plan["price_usd"]
+    traffic_gb: float = plan["traffic_gb"]
 
     # Apply discount code
     discount_pct = 0.0
     if discount_code:
-        discount_doc = await db.discounts.find_one({"code": discount_code})
-        if not discount_doc:
+        discounts = await _get_discounts(db)
+        discount = next((d for d in discounts if d["code"] == discount_code), None)
+        if not discount:
             raise HTTPException(status_code=404, detail="Discount code not found")
-        if current_user.telegram_id in discount_doc.get("used_by", []):
+        if current_user.telegram_id in discount.get("used_by", []):
             raise HTTPException(status_code=400, detail="Discount code already used by you")
-        discount_pct = discount_doc["discount_percent"]
+        discount_pct = discount["discount_percent"]
 
     final_price = price_usd * (1 - discount_pct / 100.0)
 
@@ -130,9 +148,9 @@ async def buy_plan_with_wallet(
     await db.users.update_one({"telegram_id": current_user.telegram_id}, update_ops)
 
     if discount_code:
-        await db.discounts.update_one(
-            {"code": discount_code},
-            {"$addToSet": {"used_by": current_user.telegram_id}},
+        await db.settings.update_one(
+            {"_id": DISCOUNTS_ID, "items.code": discount_code},
+            {"$addToSet": {"items.$.used_by": current_user.telegram_id}},
         )
 
     # Distribute referral bonuses using settings-based layer percentages
@@ -147,3 +165,4 @@ async def buy_plan_with_wallet(
         "traffic_gb_added": traffic_gb,
         "amount_paid": final_price,
     }
+

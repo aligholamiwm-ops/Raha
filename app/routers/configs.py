@@ -298,9 +298,11 @@ async def get_vless_uri(
     name_only = _parse_name_from_email(email_label)
     clean_ip = domain
     if isp_name and isp_name != "default":
-        clean_ip_doc = await db.clean_ips.find_one({"isp_name": isp_name})
-        if clean_ip_doc:
-            clean_ip = clean_ip_doc["ip_address"]
+        clean_ip_settings = await db.settings.find_one({"_id": "clean_ips"})
+        clean_ip_items: list[dict] = clean_ip_settings.get("items", []) if clean_ip_settings else []
+        clean_ip_entry = next((i for i in clean_ip_items if i["isp_name"] == isp_name), None)
+        if clean_ip_entry:
+            clean_ip = clean_ip_entry["ip_address"]
     vless_uri = f"vless://{config_uuid}@{clean_ip}:{port}?type=tcp&security=tls&sni={domain}#{name_only}"
     # Build subscription link from xui client
     xui = build_xui_client(server)
