@@ -45,6 +45,7 @@ class UserModel(BaseModel):
         description="How the user receives referral bonuses: 'usdt' credits wallet, 'traffic' credits traffic balance",
     )
     telegram_info: Optional[TelegramInfo] = Field(default=None, description="Telegram profile information")
+    has_admin_password: bool = Field(default=False, description="Whether this admin has a 2FA dashboard password set")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:

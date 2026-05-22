@@ -130,6 +130,9 @@ async def buy_plan_with_wallet(
             raise HTTPException(status_code=404, detail="Discount code not found")
         if current_user.telegram_id in discount.get("used_by", []):
             raise HTTPException(status_code=400, detail="Discount code already used by you")
+        max_uses = discount.get("max_uses")
+        if max_uses is not None and len(discount.get("used_by", [])) >= max_uses:
+            raise HTTPException(status_code=400, detail="This discount code has reached its maximum usage limit")
         discount_pct = discount["discount_percent"]
 
     final_price = price_usd * (1 - discount_pct / 100.0)

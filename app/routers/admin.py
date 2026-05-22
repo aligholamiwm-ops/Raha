@@ -5,16 +5,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 from app.database import get_database
-from app.dependencies import require_admin
+from app.dependencies import require_admin, get_current_user
 from app.models.user import UserModel, UserRole
 from app.models.ticket import TicketModel
 from app.integrations.xui_api import build_xui_client
 from app.config import get_settings, Settings
+from app.utils.security import hash_password, verify_password
 import httpx
 logger = logging.getLogger(__name__)
 router = APIRouter()
 class UserRoleUpdate(BaseModel):
     role: UserRole
+class SetAdminPasswordPayload(BaseModel):
+    password: str = Field(..., min_length=4, description="New admin 2FA password")
+class VerifyAdminPasswordPayload(BaseModel):
+    password: str = Field(..., description="Admin 2FA password to verify")
 class ReferralSettings(BaseModel):
     layer_1: float = Field(default=5.0, ge=0.0, le=100.0, description="Layer 1 referral percentage")
     layer_2: float = Field(default=3.0, ge=0.0, le=100.0, description="Layer 2 referral percentage")
@@ -268,3 +273,44 @@ async def update_referral_settings(
         upsert=True,
     )
     return payload
+
+
+@router.put("/users/{telegram_id}/set-admin-password", summary="Set or update admin 2FA password for a user (admin)")
+async def set_admin_password(
+    telegram_id: int,
+    payload: SetAdminPasswordPayload,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    """Set a 2FA dashboard password for an admin user. The password is stored as a secure hash."""
+    user_doc = await db.users.find_one({"telegram_id": telegram_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user_doc.get("role") != UserRole.admin.value:
+        raise HTTPException(status_code=400, detail="User is not an admin")
+    hashed = hash_password(payload.password)
+    await db.users.update_one(
+        {"telegram_id": telegram_id},
+        {"$set": {"admin_password": hashed}},
+    )
+    return {"status": "success", "message": f"Admin password set for user {telegram_id}"}
+
+
+@router.post("/verify-password", summary="Verify calling admin's 2FA password")
+async def verify_admin_password(
+    payload: VerifyAdminPasswordPayload,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    """Verify the admin 2FA password without requiring it as a header (used by the login flow)."""
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if not current_user.has_admin_password:
+        return {"valid": True}
+    admin_doc = await db.users.find_one(
+        {"telegram_id": current_user.telegram_id}, {"admin_password": 1}
+    )
+    stored_hash = admin_doc.get("admin_password") if admin_doc else None
+    if not stored_hash or not verify_password(payload.password, stored_hash):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+    return {"valid": True}

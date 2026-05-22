@@ -7,12 +7,14 @@ from urllib.parse import unquote, parse_qsl
 from datetime import datetime, timezone
 
 from fastapi import Header, HTTPException, Depends
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import get_settings, Settings
 from app.database import get_database
 from app.models.user import UserModel, UserRole, TelegramInfo
+from app.utils.security import verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +182,33 @@ async def get_current_user(
         doc.update({"telegram_info": {**((doc.get("telegram_info") or {})), **tg_info_update}})
 
     doc.pop("_id", None)
+    # Compute has_admin_password from raw DB field (never expose hash to clients)
+    doc["has_admin_password"] = bool(doc.pop("admin_password", None))
     logger.debug(f"Found existing user with telegram_id={telegram_id}")
     return UserModel(**doc)
 
 
 async def require_admin(
+    x_admin_password: Optional[str] = Header(None, alias="x-admin-password"),
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> UserModel:
-    """Raise 403 if the authenticated user is not an admin."""
+    """Raise 403 if the authenticated user is not an admin.
+    
+    If the admin has a 2FA dashboard password configured, the correct password
+    must be supplied in the ``X-Admin-Password`` request header.
+    """
     if current_user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Admin access required")
+
+    if current_user.has_admin_password:
+        if not x_admin_password:
+            raise HTTPException(status_code=403, detail="Admin 2FA password required")
+        admin_doc = await db.users.find_one(
+            {"telegram_id": current_user.telegram_id}, {"admin_password": 1}
+        )
+        stored_hash = admin_doc.get("admin_password") if admin_doc else None
+        if not stored_hash or not verify_password(x_admin_password, stored_hash):
+            raise HTTPException(status_code=403, detail="Invalid admin password")
+
     return current_user
