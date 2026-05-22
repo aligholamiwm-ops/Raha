@@ -58,10 +58,10 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm px-4 pb-24"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-slate-800 rounded-2xl ring-1 ring-slate-700 w-full max-w-sm p-5 space-y-4">
+      <div className="bg-slate-800 rounded-2xl ring-1 ring-slate-700 w-full max-w-sm p-5 space-y-4 overflow-y-auto max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="text-white font-semibold text-base truncate pr-2">{configName || 'VPN Config'}</h3>
