@@ -240,12 +240,13 @@ async def get_referral_settings(
 ) -> ReferralSettings:
     doc = await db.settings.find_one({"_id": "referral_settings"})
     if doc:
+        data = doc.get("data", {})
         return ReferralSettings(
-            layer_1=doc.get("layer_1", settings.REFERRAL_LAYER_1_PCT),
-            layer_2=doc.get("layer_2", settings.REFERRAL_LAYER_2_PCT),
-            layer_3=doc.get("layer_3", settings.REFERRAL_LAYER_3_PCT),
-            layer_4=doc.get("layer_4", settings.REFERRAL_LAYER_4_PCT),
-            layer_5=doc.get("layer_5", settings.REFERRAL_LAYER_5_PCT),
+            layer_1=data.get("layer_1", settings.REFERRAL_LAYER_1_PCT),
+            layer_2=data.get("layer_2", settings.REFERRAL_LAYER_2_PCT),
+            layer_3=data.get("layer_3", settings.REFERRAL_LAYER_3_PCT),
+            layer_4=data.get("layer_4", settings.REFERRAL_LAYER_4_PCT),
+            layer_5=data.get("layer_5", settings.REFERRAL_LAYER_5_PCT),
         )
     return ReferralSettings(
         layer_1=settings.REFERRAL_LAYER_1_PCT,
@@ -263,7 +264,7 @@ async def update_referral_settings(
     data = payload.model_dump()
     await db.settings.update_one(
         {"_id": "referral_settings"},
-        {"$set": data},
+        {"$set": {"data": data}},
         upsert=True,
     )
     return payload

@@ -40,7 +40,8 @@ async def _distribute_referral_bonuses(
     db_settings_doc = await db.settings.find_one({"_id": "referral_settings"})
     def get_layer_pct(layer: int) -> float:
         if db_settings_doc:
-            return float(db_settings_doc.get(f"layer_{layer}", 0.0))
+            data = db_settings_doc.get("data", {})
+            return float(data.get(f"layer_{layer}", 0.0))
         return settings.get_referral_layer_pct(layer)
 
     current_referrer_id: int | None = user_doc["referrer_id"]
@@ -89,7 +90,9 @@ async def create_invoice(
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    plan_doc = await db.plans.find_one({"plan_name": payload.plan_name})
+    plan_settings = await db.settings.find_one({"_id": "plans"})
+    plan_items: list[dict] = plan_settings.get("items", []) if plan_settings else []
+    plan_doc = next((p for p in plan_items if p["plan_name"] == payload.plan_name), None)
     if not plan_doc:
         raise HTTPException(status_code=404, detail="Plan not found")
 
@@ -102,7 +105,9 @@ async def create_invoice(
     # Apply discount code
     discount_pct = 0.0
     if payload.discount_code:
-        discount_doc = await db.discounts.find_one({"code": payload.discount_code})
+        discount_settings = await db.settings.find_one({"_id": "discounts"})
+        discount_items: list[dict] = discount_settings.get("items", []) if discount_settings else []
+        discount_doc = next((d for d in discount_items if d["code"] == payload.discount_code), None)
         if not discount_doc:
             raise HTTPException(status_code=404, detail="Discount code not found")
         if current_user.telegram_id in discount_doc.get("used_by", []):
@@ -122,9 +127,9 @@ async def create_invoice(
         await db.users.update_one({"telegram_id": current_user.telegram_id}, update_ops)
 
         if payload.discount_code:
-            await db.discounts.update_one(
-                {"code": payload.discount_code},
-                {"$addToSet": {"used_by": current_user.telegram_id}},
+            await db.settings.update_one(
+                {"_id": "discounts", "items.code": payload.discount_code},
+                {"$addToSet": {"items.$.used_by": current_user.telegram_id}},
             )
 
         await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price)
@@ -250,9 +255,9 @@ async def payment_webhook(
             # Apply discount code mark if present
             discount_code = payment_doc.get("discount_code")
             if discount_code:
-                await db.discounts.update_one(
-                    {"code": discount_code},
-                    {"$addToSet": {"used_by": telegram_id}},
+                await db.settings.update_one(
+                    {"_id": "discounts", "items.code": discount_code},
+                    {"$addToSet": {"items.$.used_by": telegram_id}},
                 )
 
             if traffic_gb > 0:
