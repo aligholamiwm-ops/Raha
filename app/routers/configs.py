@@ -1,9 +1,11 @@
 import logging
 import uuid
 import json
+import io
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.dependencies import get_current_user, require_admin
 from app.config import Settings, get_settings
@@ -309,6 +311,96 @@ async def get_vless_uri(
     sub_id = client.get("subId", "")
     subscription_link = xui.build_subscription_link(sub_id) if sub_id else ""
     return {"vless_uri": vless_uri, "clean_ip": clean_ip, "domain": domain, "subscription_link": subscription_link}
+@router.post("/{config_uuid}/download-zip")
+async def download_config_zip(
+    config_uuid: str,
+    password: str = Query(..., min_length=1),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    """Download a password-protected ZIP with subscription QR code and all ISP config URLs."""
+    import pyzipper
+    import qrcode
+    from qrcode.image.pure import PyPNGImage
+
+    client, server = await _find_client_by_uuid(settings, config_uuid)
+    if not client or not server:
+        raise HTTPException(status_code=404, detail="Config not found")
+    tid = _parse_telegram_id_from_email(client.get("email", ""))
+    if tid != current_user.telegram_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    name_only = _parse_name_from_email(client.get("email", ""))
+    domain = server.get("ip", server.get("ip_address", ""))
+    if "://" in domain:
+        domain = domain.split("://")[1]
+    if ":" in domain:
+        domain = domain.split(":")[0]
+    port = 443
+
+    # Get subscription link
+    xui = build_xui_client(server)
+    sub_id = client.get("subId", "")
+    subscription_link = xui.build_subscription_link(sub_id) if sub_id else ""
+
+    # Get all clean IPs (ISPs)
+    clean_ip_settings = await db.settings.find_one({"_id": "clean_ips"})
+    clean_ip_items: list[dict] = clean_ip_settings.get("items", []) if clean_ip_settings else []
+
+    def _make_qr_png(text: str) -> bytes:
+        img = qrcode.make(text)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    def _make_vless_uri(ip: str) -> str:
+        return (
+            f"vless://{config_uuid}@{ip}:{port}"
+            f"?type=tcp&security=tls&sni={domain}#{name_only}"
+        )
+
+    # Build zip in memory
+    zip_buf = io.BytesIO()
+    with pyzipper.AESZipFile(zip_buf, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(password.encode("utf-8"))
+
+        # Subscription QR code
+        if subscription_link:
+            sub_qr_png = _make_qr_png(subscription_link)
+            zf.writestr("subscription_qr.png", sub_qr_png)
+            zf.writestr("subscription_url.txt", subscription_link)
+
+        # Config URLs for each ISP / external proxy
+        all_urls: list[str] = []
+
+        # Default (no specific clean IP)
+        default_uri = _make_vless_uri(domain)
+        all_urls.append(f"default: {default_uri}")
+        default_qr_png = _make_qr_png(default_uri)
+        zf.writestr("proxies/default_qr.png", default_qr_png)
+
+        for item in clean_ip_items:
+            isp = item.get("isp_name", "unknown")
+            ip = item.get("ip_address", domain)
+            uri = _make_vless_uri(ip)
+            all_urls.append(f"{isp}: {uri}")
+            isp_safe = isp.replace(" ", "_").replace("/", "_")
+            qr_png = _make_qr_png(uri)
+            zf.writestr(f"proxies/{isp_safe}_qr.png", qr_png)
+
+        # Write all URLs to a text file
+        zf.writestr("config_urls.txt", "\n".join(all_urls))
+
+    zip_buf.seek(0)
+    filename = f"{name_only or config_uuid}.zip"
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/", response_model=list[VpnConfigResponse])
 async def list_all_configs(
     skip: int = 0,

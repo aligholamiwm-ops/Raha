@@ -17,6 +17,7 @@ from app.models.ticket import (
     TicketMessage,
     SenderRole,
     USDTNetwork,
+    TicketWithUserInfo,
 )
 
 router = APIRouter()
@@ -80,7 +81,7 @@ async def list_my_tickets(
 
 @router.get(
     "/",
-    response_model=list[TicketModel],
+    response_model=list[TicketWithUserInfo],
     summary="List all tickets (admin/support)",
 )
 async def list_all_tickets(
@@ -92,7 +93,7 @@ async def list_all_tickets(
     limit: int = 50,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
-) -> list[TicketModel]:
+) -> list[TicketWithUserInfo]:
     # Allow both admin and support to view all tickets
     if current_user.role not in [UserRole.admin, UserRole.support]:
         raise HTTPException(status_code=403, detail="Admin or support access required")
@@ -107,9 +108,28 @@ async def list_all_tickets(
     sort_direction = -1 if sort_order == SortOrder.desc else 1
     
     results = []
+    telegram_ids = set()
+    raw_tickets = []
     async for doc in db.tickets.find(query).sort(sort_by.value, sort_direction).skip(skip).limit(limit):
         doc.pop("_id", None)
-        results.append(TicketModel(**doc))
+        raw_tickets.append(doc)
+        telegram_ids.add(doc.get("telegram_id"))
+
+    # Batch-fetch user telegram info
+    user_info_map = {}
+    if telegram_ids:
+        async for user_doc in db.users.find({"telegram_id": {"$in": list(telegram_ids)}}):
+            tid = user_doc.get("telegram_id")
+            user_info_map[tid] = user_doc.get("telegram_info")
+
+    for doc in raw_tickets:
+        ticket = TicketWithUserInfo(**doc)
+        tg_info = user_info_map.get(doc.get("telegram_id"))
+        if tg_info:
+            from app.models.user import TelegramInfo
+            ticket.user_telegram_info = TelegramInfo(**tg_info) if isinstance(tg_info, dict) else tg_info
+        results.append(ticket)
+
     return results
 
 

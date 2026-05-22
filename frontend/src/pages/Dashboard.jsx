@@ -116,21 +116,6 @@ export default function Dashboard() {
 
   return (
     <div className="px-4 py-5 space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Raha VPN</h1>
-          <p className="text-slate-400 text-sm">Your secure connection</p>
-        </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors"
-          title="Refresh"
-        >
-          <FiRefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-        </button>
-      </div>
 
       {/* Traffic Balance */}
       <div className="bg-emerald-900/30 border border-emerald-700/30 rounded-xl p-3 flex items-center justify-between">
@@ -191,6 +176,14 @@ export default function Dashboard() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-slate-300 font-semibold text-sm">My Configs</h2>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors"
+            title="Refresh"
+          >
+            <FiRefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          </button>
         </div>
 
         {/* Search & Sort */}

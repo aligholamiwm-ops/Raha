@@ -368,7 +368,7 @@ function LoansTab({ loans, loansLoading, onPayLoan, payingLoan }) {
 
 /* ─── main component ──────────────────────────────────────────── */
 export default function Store() {
-  const { user, plans, loading } = useApp()
+  const { user, plans, loading, refreshUser } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const renewState = location.state
@@ -427,6 +427,7 @@ export default function Store() {
       const result = await createInvoice(plan.plan_name, 'USDT')
       if (result?.status === 'wallet_payment') {
         setSuccess(`Plan "${plan.plan_name}" purchased! +${result.traffic_gb_added} GB added to your balance.`)
+        await refreshUser()
       } else {
         const url = result?.invoice_url || result?.url || result
         if (url && typeof url === 'string') {

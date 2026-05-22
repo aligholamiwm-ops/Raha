@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
 import uuid as _uuid
 
+from app.models.user import TelegramInfo
+
 
 class TicketStatus(str, Enum):
     open = "open"
@@ -91,3 +93,8 @@ class TicketReply(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     text: str = Field(..., description="Reply message text")
+
+
+class TicketWithUserInfo(TicketModel):
+    """Extends TicketModel with the ticket owner's Telegram profile info (used in staff views)."""
+    user_telegram_info: Optional[TelegramInfo] = None

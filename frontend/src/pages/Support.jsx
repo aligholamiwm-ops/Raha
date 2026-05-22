@@ -563,6 +563,23 @@ export default function Support() {
                   <span className="text-white font-medium text-sm">{ticket.title || `Ticket #${ticket.ticket_id?.slice(0, 8)}`}</span>
                   <StatusBadge status={ticket.status} />
                 </div>
+                {isStaff && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    {ticket.user_telegram_info?.photo_url && (
+                      <img
+                        src={ticket.user_telegram_info.photo_url}
+                        alt=""
+                        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+                      />
+                    )}
+                    <span className="font-medium text-slate-300">
+                      {[ticket.user_telegram_info?.first_name, ticket.user_telegram_info?.last_name].filter(Boolean).join(' ') || `ID: ${ticket.telegram_id}`}
+                    </span>
+                    {ticket.user_telegram_info?.username && (
+                      <span className="text-slate-500">@{ticket.user_telegram_info.username}</span>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">
                     {ticket.category}

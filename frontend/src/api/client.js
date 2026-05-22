@@ -71,4 +71,10 @@ export const adminAllocateLoan = (data) => api.post('/api/v1/loans/admin/allocat
 export const adminGetUserLoans = (telegramId) => api.get(`/api/v1/loans/admin/user/${telegramId}`).then((r) => r.data)
 export const adminSearchUsers = (q) => api.get('/api/v1/admin/users/search', { params: { q } }).then((r) => r.data)
 
+export const downloadConfigZip = (configUuid, password) =>
+  api.post(`/api/v1/configs/${configUuid}/download-zip`, null, {
+    params: { password },
+    responseType: 'blob',
+  }).then((r) => r.data)
+
 export default api

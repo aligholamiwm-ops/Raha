@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { getVlessUri } from '../api/client'
+import { downloadConfigZip } from '../api/client'
 
 const CloseIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
@@ -13,56 +13,52 @@ const CopyIcon = () => (
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 )
-const LinkIcon = () => (
+const DownloadIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 )
 
 export default function QRModal({ uuid, configName, subscriptionLink, onClose }) {
-  const [activeTab, setActiveTab] = useState(subscriptionLink ? 'subscription' : 'vless')
-  const [uri, setUri] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
-  const [copiedSub, setCopiedSub] = useState(false)
-  const [ispName, setIspName] = useState('default')
+  const [zipPassword, setZipPassword] = useState('')
+  const [showZipInput, setShowZipInput] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(null)
 
-  useEffect(() => {
-    if (!uuid) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    getVlessUri(uuid, ispName)
-      .then((data) => {
-        if (!cancelled) {
-          setUri(typeof data === 'string' ? data : data?.uri || data?.vless_uri || JSON.stringify(data))
-          setLoading(false)
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError('Failed to load VLESS URI')
-          setLoading(false)
-        }
-      })
-    return () => { cancelled = true }
-  }, [uuid, ispName])
-
-  const handleCopy = async (text, setCopiedFn) => {
-    if (!text) return
+  const handleCopy = async () => {
+    if (!subscriptionLink) return
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedFn(true)
-      setTimeout(() => setCopiedFn(false), 2000)
+      await navigator.clipboard.writeText(subscriptionLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     } catch {
-      setError('Unable to copy — please copy manually')
+      // ignore
     }
   }
 
-  const displayUri = activeTab === 'subscription' ? subscriptionLink : uri
-  const isSubTab = activeTab === 'subscription'
+  const handleDownloadZip = async () => {
+    if (!zipPassword.trim()) return
+    setDownloading(true)
+    setDownloadError(null)
+    try {
+      const blob = await downloadConfigZip(uuid, zipPassword.trim())
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${configName || uuid}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+      setShowZipInput(false)
+      setZipPassword('')
+    } catch (err) {
+      setDownloadError(err?.response?.data?.detail || 'Failed to download ZIP')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div
@@ -81,78 +77,76 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-900 rounded-xl p-1">
-          {subscriptionLink && (
-            <button
-              onClick={() => setActiveTab('subscription')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-                activeTab === 'subscription' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              <LinkIcon />
-              Subscription
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('vless')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-              activeTab === 'vless' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-300'
-            }`}
-          >
-            VLESS URI
-          </button>
-        </div>
-
-        {/* ISP selector (only for VLESS tab) */}
-        {activeTab === 'vless' && (
-          <div className="flex items-center gap-2">
-            <label className="text-slate-400 text-xs whitespace-nowrap">ISP:</label>
-            <input
-              type="text"
-              value={ispName}
-              onChange={(e) => setIspName(e.target.value || 'default')}
-              className="flex-1 bg-slate-700 text-white text-xs rounded-lg px-3 py-1.5 border border-slate-600 focus:outline-none focus:border-emerald-500"
-              placeholder="default"
-            />
-          </div>
-        )}
-
         {/* QR area */}
         <div className="flex items-center justify-center bg-white rounded-xl p-4 min-h-[200px]">
-          {isSubTab ? (
-            subscriptionLink ? (
-              <QRCodeSVG value={subscriptionLink} size={180} level="M" includeMargin={false} />
-            ) : (
-              <div className="text-slate-500 text-sm text-center">No subscription link available</div>
-            )
-          ) : loading ? (
-            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          ) : error ? (
-            <div className="text-red-500 text-sm text-center">{error}</div>
-          ) : uri ? (
-            <QRCodeSVG value={uri} size={180} level="M" includeMargin={false} />
+          {subscriptionLink ? (
+            <QRCodeSVG value={subscriptionLink} size={180} level="M" includeMargin={false} />
           ) : (
-            <div className="text-slate-500 text-sm">No URI available</div>
+            <div className="text-slate-500 text-sm text-center">No subscription link available</div>
           )}
         </div>
 
         {/* URI preview */}
-        {displayUri && !loading && (
+        {subscriptionLink && (
           <div className="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700">
-            <p className="text-slate-400 text-xs break-all line-clamp-3 font-mono">{displayUri}</p>
+            <p className="text-slate-400 text-xs break-all line-clamp-3 font-mono">{subscriptionLink}</p>
           </div>
         )}
 
         {/* Copy button */}
         <button
-          onClick={() => isSubTab ? handleCopy(subscriptionLink, setCopiedSub) : handleCopy(uri, setCopied)}
-          disabled={!displayUri || loading}
+          onClick={handleCopy}
+          disabled={!subscriptionLink}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
         >
           <CopyIcon />
-          {isSubTab ? (copiedSub ? 'Copied!' : 'Copy Subscription Link') : (copied ? 'Copied!' : 'Copy URI')}
+          {copied ? 'Copied!' : 'Copy Subscription Link'}
         </button>
+
+        {/* Download ZIP section */}
+        {!showZipInput ? (
+          <button
+            onClick={() => setShowZipInput(true)}
+            className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium text-sm py-3 rounded-xl transition-colors"
+          >
+            <DownloadIcon />
+            Download ZIP
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={zipPassword}
+                onChange={(e) => setZipPassword(e.target.value)}
+                placeholder="Enter ZIP password"
+                className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleDownloadZip()}
+                autoFocus
+              />
+              <button
+                onClick={handleDownloadZip}
+                disabled={downloading || !zipPassword.trim()}
+                className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium px-4 rounded-xl transition-colors"
+              >
+                {downloading ? (
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <DownloadIcon />
+                )}
+              </button>
+              <button
+                onClick={() => { setShowZipInput(false); setZipPassword(''); setDownloadError(null) }}
+                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-700 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            {downloadError && (
+              <p className="text-rose-400 text-xs">{downloadError}</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
