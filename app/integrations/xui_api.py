@@ -89,21 +89,38 @@ class AsyncXUIClient:
         """Build the subscription link URL for a given subId."""
         if not sub_id:
             return ""
-        # XUI subscription endpoint: /sub/{subId}
-        # Replace port 2083 with 2096 for sub link
-        sub_base = self.base_url.replace(":2083", ":2096")
-        return f"{sub_base}/sub/{sub_id}"
+        # The true sub link is https://de.sportmail.tk:2096/sub/{subId}
+        # We need to extract the domain from base_url and use port 2096
+        from urllib.parse import urlparse
+        parsed = urlparse(self.base_url)
+        domain = parsed.hostname
+        return f"https://{domain}:2096/sub/{sub_id}"
     async def get_client_info(self, email: Optional[str] = None) -> list:
         inbounds = await self.get_inbounds()
         clients = []
         # Get traffic stats to include usage data
-        traffic_resp = await self._request("GET", "/panel/api/inbounds/getClientTraffics/all")
         traffic_map = {}
+        # Try getting all traffic first
+        traffic_resp = await self._request("GET", "/panel/api/inbounds/getClientTraffics/all")
         if traffic_resp.status_code == 200:
-            obj = traffic_resp.json().get("obj")
-            if isinstance(obj, list):
-                for t in obj:
-                    traffic_map[t["email"]] = t
+            data = traffic_resp.json()
+            if data.get("success"):
+                obj = data.get("obj")
+                if isinstance(obj, list):
+                    for t in obj:
+                        traffic_map[t["email"]] = t
+        
+        # If 'all' failed or returned nothing, we'll fetch individually inside the loop if needed
+        # but for performance, let's try to get the stats from the inbound list itself if available
+        # Some versions of 3x-ui include stats in the inbound list's clientStats field
+        # Pre-map clientStats from inbounds if available
+        inbound_stats_map = {}
+        for ib in inbounds:
+            stats_list = ib.get("clientStats", [])
+            if isinstance(stats_list, list):
+                for s in stats_list:
+                    inbound_stats_map[s["email"]] = s
+
         for ib in inbounds:
             try:
                 settings_obj = json.loads(ib.get("settings", "{}"))
@@ -111,12 +128,21 @@ class AsyncXUIClient:
                 if not isinstance(clients_list, list):
                     continue
                 for c in clients_list:
-                    if not email or c.get("email") == email:
+                    c_email = c.get("email")
+                    if not email or c_email == email:
                         # Map 'id' to 'uuid' as expected by the router
                         c["uuid"] = str(c.get("id", ""))
                         c["inbound_id"] = ib.get("id")
-                        # Add traffic data
-                        t_data = traffic_map.get(c.get("email"), {})
+                        
+                        # Add traffic data (try traffic_map first, then inbound_stats_map)
+                        t_data = traffic_map.get(c_email) or inbound_stats_map.get(c_email, {})
+                        
+                        # If still no data and we are looking for a specific email, try individual fetch
+                        if not t_data and email:
+                            ind_resp = await self._request("GET", f"/panel/api/inbounds/getClientTraffics/{email}")
+                            if ind_resp.status_code == 200:
+                                t_data = ind_resp.json().get("obj", {})
+
                         c["usage_up"] = float(t_data.get("up", 0))
                         c["usage_down"] = float(t_data.get("down", 0))
                         c["total_gb"] = float(c.get("totalGB", 0)) / (1024 ** 3) if c.get("totalGB") else 0.0
@@ -135,8 +161,16 @@ class AsyncXUIClient:
             except: continue
         return clients
 def build_xui_client(server: dict) -> AsyncXUIClient:
-    ip = server.get("ip", "")
-    port = server.get("port", 2053)
-    base_url = ip if ip.startswith("http") else f"http://{ip}"
-    if ":" not in base_url[8:]: base_url = f"{base_url}:{port}"
+    """Build an AsyncXUIClient from a server config dict (from env)."""
+    # Prioritize full URL if provided
+    if "url" in server:
+        base_url = server["url"].rstrip("/")
+    else:
+        ip = server.get("ip", server.get("ip_address", ""))
+        port = server.get("port", server.get("panel_port", 2053))
+        if ip.startswith("http://") or ip.startswith("https://"):
+            base_url = f"{ip}:{port}"
+        else:
+            base_url = f"http://{ip}:{port}"
+            
     return AsyncXUIClient(base_url, server["username"], server["password"], int(server.get("inbound_id", 1)), server.get("name", ""))

@@ -331,7 +331,7 @@ async def get_vless_uri(
         clean_ip_entry = next((i for i in clean_ip_items if i["isp_name"] == isp_name), None)
         if clean_ip_entry:
             clean_ip = clean_ip_entry["ip_address"]
-    vless_uri = f"vless://{config_uuid}@{clean_ip}:{port}?type=tcp&security=tls&sni={domain}#{name_only}"
+    vless_uri = f"vless://{config_uuid}@{clean_ip}:{port}?encryption=none&security=tls&sni=d1k7t8nzs0vw2r.cloudfront.net&fp=firefox&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=ws&path=%2F#{name_only}"
     xui = build_xui_client(server)
     sub_id = client.get("subId", "")
     subscription_link = xui.build_subscription_link(sub_id) if sub_id else ""
@@ -377,7 +377,20 @@ async def send_config_to_bot(
         return buf.getvalue()
 
     def _make_vless_uri(ip: str) -> str:
-        return f"vless://{config_uuid}@{ip}:{port}?type=tcp&security=tls&sni={domain}#{name_only}"
+        # True link parameters: sni=d1k7t8nzs0vw2r.cloudfront.net, fp=firefox, alpn=h2,http/1.1, type=ws, path=/
+        sni = "d1k7t8nzs0vw2r.cloudfront.net"
+        params = [
+            "encryption=none",
+            "security=tls",
+            f"sni={sni}",
+            "fp=firefox",
+            "alpn=h2%2Chttp%2F1.1",
+            "insecure=0",
+            "allowInsecure=0",
+            "type=ws",
+            "path=%2F"
+        ]
+        return f"vless://{config_uuid}@{ip}:{port}?" + "&".join(params) + f"#{name_only}"
 
     # Build zip in memory
     zip_buf = io.BytesIO()
