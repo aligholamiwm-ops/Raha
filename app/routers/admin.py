@@ -58,15 +58,51 @@ async def get_stats(
     total_revenue = revenue_doc[0]["total"] if revenue_doc else 0.0
     total_tickets = await db.tickets.count_documents({})
     open_tickets = await db.tickets.count_documents({"status": "open"})
-    # Count configs live from XUI
+
+    # Count unsettled (unpaid) loans total
+    loans_pipeline = [
+        {"$match": {"status": "unpaid"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount_usdt"}}},
+    ]
+    loans_cursor = db.loans.aggregate(loans_pipeline)
+    loans_doc = await loans_cursor.to_list(length=1)
+    total_unsettled_loans = loans_doc[0]["total"] if loans_doc else 0.0
+
+    # Cumulative unused traffic: sum of all users' traffic_balance_gb
+    unused_pipeline = [
+        {"$group": {"_id": None, "total": {"$sum": "$traffic_balance_gb"}}},
+    ]
+    unused_cursor = db.users.aggregate(unused_pipeline)
+    unused_doc = await unused_cursor.to_list(length=1)
+    total_unused_traffic_gb = unused_doc[0]["total"] if unused_doc else 0.0
+
+    # Cumulative traffic purchased (from completed non-loan payments)
+    purchased_pipeline = [
+        {"$match": {"status": "completed", "type": {"$ne": "loan"}, "traffic_gb": {"$gt": 0}}},
+        {"$group": {"_id": None, "total": {"$sum": "$traffic_gb"}}},
+    ]
+    purchased_cursor = db.payments.aggregate(purchased_pipeline)
+    purchased_doc = await purchased_cursor.to_list(length=1)
+    total_purchased_traffic_gb = purchased_doc[0]["total"] if purchased_doc else 0.0
+    total_traffic_used_gb = max(0.0, total_purchased_traffic_gb - total_unused_traffic_gb)
+
+    # Count configs live from XUI — only those belonging to telegram users (numeric id prefix)
     total_configs = 0
     active_configs = 0
     for server in settings.get_enabled_servers():
         try:
             xui = build_xui_client(server)
             clients = await xui.get_client_info()
-            total_configs += len(clients)
-            active_configs += sum(1 for c in clients if c.get("enable", True))
+            for c in clients:
+                email = c.get("email", "")
+                # Only count configs whose email starts with a numeric telegram_id
+                try:
+                    int(email.split("-")[0].strip())
+                except (ValueError, IndexError):
+                    continue
+                total_configs += 1
+                if c.get("enable", True):
+                    active_configs += 1
         except Exception as exc:
             logger.warning("Stats: could not reach server %s: %s", server.get("name"), exc)
     return {
@@ -76,7 +112,187 @@ async def get_stats(
         "total_revenue_usd": round(total_revenue, 2),
         "total_tickets": total_tickets,
         "open_tickets": open_tickets,
+        "total_unsettled_loans_usd": round(total_unsettled_loans, 2),
+        "total_traffic_used_gb": round(total_traffic_used_gb, 2),
+        "total_unused_traffic_gb": round(total_unused_traffic_gb, 2),
     }
+@router.get("/users/top", summary="Get top 5 users by a given metric (admin)")
+async def get_top_users(
+    filter: str = Query(
+        ...,
+        description=(
+            "Metric to rank by: most_used_traffic | most_unused_traffic | "
+            "most_purchases | most_unsettled_loans | most_configs"
+        ),
+    ),
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> list[dict]:
+    """Return the top 5 users ranked by the requested metric."""
+    LIMIT = 5
+
+    if filter == "most_unused_traffic":
+        # Users with most remaining traffic balance
+        results = []
+        async for doc in db.users.find(
+            {"traffic_balance_gb": {"$gt": 0}},
+            {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "traffic_balance_gb": 1},
+        ).sort("traffic_balance_gb", -1).limit(LIMIT):
+            doc.pop("_id", None)
+            results.append({
+                "telegram_id": doc.get("telegram_id"),
+                "display_name": (
+                    doc.get("nickname")
+                    or (doc.get("telegram_info") or {}).get("first_name")
+                    or f"ID:{doc.get('telegram_id')}"
+                ),
+                "username": (doc.get("telegram_info") or {}).get("username"),
+                "value": round(doc.get("traffic_balance_gb", 0.0), 2),
+                "metric": "GB unused",
+            })
+        return results
+
+    if filter == "most_used_traffic":
+        # Total purchased from payments minus current balance per user
+        purchased_pipeline = [
+            {"$match": {"status": "completed", "type": {"$ne": "loan"}, "traffic_gb": {"$gt": 0}}},
+            {"$group": {"_id": "$telegram_id", "purchased": {"$sum": "$traffic_gb"}}},
+        ]
+        purchased_map: dict[int, float] = {}
+        async for doc in db.payments.aggregate(purchased_pipeline):
+            purchased_map[doc["_id"]] = doc["purchased"]
+
+        if not purchased_map:
+            return []
+
+        # Fetch current balances for those users
+        user_docs: dict[int, dict] = {}
+        async for doc in db.users.find(
+            {"telegram_id": {"$in": list(purchased_map.keys())}},
+            {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "traffic_balance_gb": 1},
+        ):
+            user_docs[doc["telegram_id"]] = doc
+
+        ranked = []
+        for tid, purchased in purchased_map.items():
+            balance = user_docs.get(tid, {}).get("traffic_balance_gb", 0.0)
+            used = max(0.0, purchased - balance)
+            u = user_docs.get(tid, {})
+            ranked.append({
+                "telegram_id": tid,
+                "display_name": (
+                    u.get("nickname")
+                    or (u.get("telegram_info") or {}).get("first_name")
+                    or f"ID:{tid}"
+                ),
+                "username": (u.get("telegram_info") or {}).get("username"),
+                "value": round(used, 2),
+                "metric": "GB used",
+            })
+        ranked.sort(key=lambda x: x["value"], reverse=True)
+        return ranked[:LIMIT]
+
+    if filter == "most_purchases":
+        pipeline = [
+            {"$match": {"status": "completed", "type": {"$ne": "loan"}}},
+            {"$group": {"_id": "$telegram_id", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": LIMIT},
+        ]
+        results = []
+        async for doc in db.payments.aggregate(pipeline):
+            tid = doc["_id"]
+            u = await db.users.find_one(
+                {"telegram_id": tid},
+                {"nickname": 1, "telegram_info": 1},
+            )
+            results.append({
+                "telegram_id": tid,
+                "display_name": (
+                    (u or {}).get("nickname")
+                    or ((u or {}).get("telegram_info") or {}).get("first_name")
+                    or f"ID:{tid}"
+                ),
+                "username": ((u or {}).get("telegram_info") or {}).get("username"),
+                "value": doc["count"],
+                "metric": "purchases",
+            })
+        return results
+
+    if filter == "most_unsettled_loans":
+        pipeline = [
+            {"$match": {"status": "unpaid"}},
+            {"$group": {"_id": "$telegram_id", "total": {"$sum": "$amount_usdt"}}},
+            {"$sort": {"total": -1}},
+            {"$limit": LIMIT},
+        ]
+        results = []
+        async for doc in db.loans.aggregate(pipeline):
+            tid = doc["_id"]
+            u = await db.users.find_one(
+                {"telegram_id": tid},
+                {"nickname": 1, "telegram_info": 1},
+            )
+            results.append({
+                "telegram_id": tid,
+                "display_name": (
+                    (u or {}).get("nickname")
+                    or ((u or {}).get("telegram_info") or {}).get("first_name")
+                    or f"ID:{tid}"
+                ),
+                "username": ((u or {}).get("telegram_info") or {}).get("username"),
+                "value": round(doc["total"], 2),
+                "metric": "USDT owed",
+            })
+        return results
+
+    if filter == "most_configs":
+        # Count per-telegram-id configs from XUI (only telegram-user configs)
+        config_counts: dict[int, int] = {}
+        for server in settings.get_enabled_servers():
+            try:
+                xui = build_xui_client(server)
+                clients = await xui.get_client_info()
+                for c in clients:
+                    email = c.get("email", "")
+                    try:
+                        tid = int(email.split("-")[0].strip())
+                        config_counts[tid] = config_counts.get(tid, 0) + 1
+                    except (ValueError, IndexError):
+                        pass
+            except Exception as exc:
+                logger.warning("top users most_configs: server error: %s", exc)
+
+        if not config_counts:
+            return []
+
+        top = sorted(config_counts.items(), key=lambda x: x[1], reverse=True)[:LIMIT]
+        results = []
+        for tid, count in top:
+            u = await db.users.find_one(
+                {"telegram_id": tid},
+                {"nickname": 1, "telegram_info": 1},
+            )
+            results.append({
+                "telegram_id": tid,
+                "display_name": (
+                    (u or {}).get("nickname")
+                    or ((u or {}).get("telegram_info") or {}).get("first_name")
+                    or f"ID:{tid}"
+                ),
+                "username": ((u or {}).get("telegram_info") or {}).get("username"),
+                "value": count,
+                "metric": "configs",
+            })
+        return results
+
+    raise HTTPException(status_code=400, detail=(
+        "Invalid filter. Use one of: most_used_traffic, most_unused_traffic, "
+        "most_purchases, most_unsettled_loans, most_configs"
+    ))
+
+
 @router.get("/users/search", summary="Search users by any identifier (admin)")
 async def search_users(
     q: str = Query(..., min_length=1, description="Query: telegram_id, nickname, username, phone, or name"),
