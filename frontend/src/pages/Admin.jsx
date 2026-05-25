@@ -164,11 +164,16 @@ export default function Admin() {
   const [broadcastTarget, setBroadcastTarget] = useState('all');
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
+  // Top users
+  const [topFilter, setTopFilter] = useState('most_used_traffic');
+  const [topUsers, setTopUsers] = useState([]);
+  const [topUsersLoading, setTopUsersLoading] = useState(false);
 
   useEffect(() => {
     if (activeTab === "stats") fetchStats();
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
     if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
+    if (activeTab === "users") fetchTopUsers(topFilter);
   }, [activeTab]);
 
   const handleSendMessage = async () => {
@@ -248,6 +253,25 @@ export default function Admin() {
       const res = await client.get("/api/v1/admin/referral-settings");
       setReferralSettings(res.data);
     } catch (err) { console.error("Failed to fetch referral settings", err); }
+  };
+
+  const fetchTopUsers = async (filter) => {
+    setTopUsersLoading(true);
+    try {
+      const res = await client.get(`/api/v1/admin/users/top?filter=${filter}`);
+      setTopUsers(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch top users", err);
+      setTopUsers([]);
+    } finally {
+      setTopUsersLoading(false);
+    }
+  };
+
+  const handleTopFilterChange = (newFilter) => {
+    setTopFilter(newFilter);
+    setTopUsers([]);
+    fetchTopUsers(newFilter);
   };
 
   const handleSaveReferralSettings = async () => {
@@ -554,6 +578,11 @@ export default function Admin() {
           <Card><div className="text-xs text-slate-400">Revenue</div><div className="text-xl font-bold text-emerald-400">${stats.total_revenue_usd}</div></Card>
           <Card><div className="text-xs text-slate-400">Active Configs</div><div className="text-xl font-bold text-blue-400">{stats.active_configs}</div></Card>
           <Card><div className="text-xs text-slate-400">Open Tickets</div><div className="text-xl font-bold text-rose-400">{stats.open_tickets}</div></Card>
+          <Card><div className="text-xs text-slate-400">Unsettled Loans</div><div className="text-xl font-bold text-amber-400">${stats.total_unsettled_loans_usd ?? '—'}</div></Card>
+          <Card><div className="text-xs text-slate-400">Traffic Used</div><div className="text-xl font-bold text-purple-400">{stats.total_traffic_used_gb ?? '—'} GB</div></Card>
+          <div className="col-span-2">
+            <Card><div className="text-xs text-slate-400">Unused Traffic (all users)</div><div className="text-xl font-bold text-cyan-400">{stats.total_unused_traffic_gb ?? '—'} GB</div></Card>
+          </div>
           <div className="col-span-2">
             <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(res => toast(`OK: ${res.data.servers_ok} | Failed: ${res.data.servers_failed} | Clients: ${res.data.total_clients}`)).catch(() => toast("Sync failed", 'error'))} className="w-full" icon={FiRefreshCw}>Test Server Connectivity</Button>
             <p className="text-[10px] text-slate-500 mt-2 text-center italic">
@@ -655,6 +684,66 @@ export default function Admin() {
               {loading ? "" : "Search"}
             </Button>
           </div>
+
+          {/* Top users dropdown */}
+          {!foundUser && (
+            <div className="mb-4 p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Top 5 Users</span>
+                {topUsersLoading && <span className="w-3.5 h-3.5 border border-slate-500 border-t-transparent rounded-full animate-spin" />}
+              </div>
+              <select
+                value={topFilter}
+                onChange={e => handleTopFilterChange(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
+              >
+                <option value="most_used_traffic">Most Used Traffic</option>
+                <option value="most_unused_traffic">Most Unused Traffic</option>
+                <option value="most_purchases">Most Purchases</option>
+                <option value="most_unsettled_loans">Most Unsettled Loans</option>
+                <option value="most_configs">Most Configs</option>
+              </select>
+              {topUsers.length > 0 && (
+                <div className="space-y-1.5 mt-1">
+                  {topUsers.map((u, idx) => (
+                    <button
+                      key={u.telegram_id}
+                      onClick={async () => {
+                        setLoading(true);
+                        try {
+                          const res = await client.get(`/api/v1/admin/users/search?q=${u.telegram_id}`);
+                          const results = res.data || [];
+                          if (results.length > 0) {
+                            await loadUserDetails(results[0]);
+                          }
+                        } catch (err) {
+                          toast("Failed to load user: " + (err.response?.data?.detail || err.message), 'error');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      className="w-full p-2 bg-slate-800/60 rounded-lg border border-slate-700 text-left hover:border-emerald-500/50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 w-4">#{idx + 1}</span>
+                          <div>
+                            <span className="text-xs font-bold text-white">{u.display_name}</span>
+                            {u.username && <span className="text-[10px] text-slate-400 ml-1">@{u.username}</span>}
+                            <div className="text-[10px] text-slate-500">{u.telegram_id}</div>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-emerald-400">{u.value} <span className="text-[10px] text-slate-500">{u.metric}</span></span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!topUsersLoading && topUsers.length === 0 && (
+                <p className="text-[10px] text-slate-600 text-center py-1">No data</p>
+              )}
+            </div>
+          )}
 
           {/* Multi-result list */}
           {foundUsers.length > 1 && !foundUser && (
