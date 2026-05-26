@@ -3,16 +3,11 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_database
 from app.dependencies import require_admin
 from app.models.user import UserModel
-from app.models.clean_ip import CleanIPModel, CleanIPCreate
+from app.models.setting import CleanIPModel, CleanIPCreate, get_setting_items
 
 router = APIRouter()
 
 SETTINGS_ID = "clean_ips"
-
-
-async def _get_items(db: AsyncIOMotorDatabase) -> list[dict]:
-    doc = await db.settings.find_one({"_id": SETTINGS_ID})
-    return doc.get("items", []) if doc else []
 
 
 @router.get("/", response_model=list[CleanIPModel], summary="List clean IPs")
@@ -20,7 +15,7 @@ async def list_clean_ips(
     isp_name: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[CleanIPModel]:
-    items = await _get_items(db)
+    items = await get_setting_items(db, SETTINGS_ID)
     if isp_name:
         items = [i for i in items if i["isp_name"] == isp_name]
     return [CleanIPModel(**i) for i in items]
@@ -32,7 +27,7 @@ async def create_clean_ip(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> CleanIPModel:
-    items = await _get_items(db)
+    items = await get_setting_items(db, SETTINGS_ID)
     if any(i["isp_name"] == payload.isp_name and i["ip_address"] == payload.ip_address for i in items):
         raise HTTPException(status_code=409, detail="This IP already exists for this ISP")
     ip_model = CleanIPModel(**payload.model_dump())
