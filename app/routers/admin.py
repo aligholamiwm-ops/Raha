@@ -8,6 +8,7 @@ from app.database import get_database
 from app.dependencies import require_admin, get_current_user
 from app.models.user import UserModel, UserRole
 from app.models.ticket import TicketModel
+from app.models.setting import ReferralSettings
 from app.integrations.xui_api import build_xui_client
 from app.config import get_settings, Settings
 from app.utils.security import hash_password, verify_password
@@ -20,12 +21,6 @@ class SetAdminPasswordPayload(BaseModel):
     password: str = Field(..., min_length=4, description="New admin 2FA password")
 class VerifyAdminPasswordPayload(BaseModel):
     password: str = Field(..., description="Admin 2FA password to verify")
-class ReferralSettings(BaseModel):
-    layer_1: float = Field(default=5.0, ge=0.0, le=100.0, description="Layer 1 referral percentage")
-    layer_2: float = Field(default=3.0, ge=0.0, le=100.0, description="Layer 2 referral percentage")
-    layer_3: float = Field(default=2.0, ge=0.0, le=100.0, description="Layer 3 referral percentage")
-    layer_4: float = Field(default=1.0, ge=0.0, le=100.0, description="Layer 4 referral percentage")
-    layer_5: float = Field(default=0.5, ge=0.0, le=100.0, description="Layer 5 referral percentage")
 class SendMessagePayload(BaseModel):
     telegram_id: int = Field(..., description="Target user's Telegram ID")
     message: str = Field(..., min_length=1, description="Message text to send")

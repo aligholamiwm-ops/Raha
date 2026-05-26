@@ -1,4 +1,3 @@
-import uuid
 import logging
 from datetime import datetime, timezone
 
@@ -10,6 +9,8 @@ from app.config import get_settings, Settings
 from app.database import get_database
 from app.dependencies import get_current_user
 from app.models.user import UserModel, ReferralBenefitType
+from app.models.setting import get_setting_items
+from app.models.payment import PaymentModel
 from app.integrations.plisio import PlisioClient
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,7 @@ async def create_invoice(
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    plan_settings = await db.settings.find_one({"_id": "plans"})
-    plan_items: list[dict] = plan_settings.get("items", []) if plan_settings else []
+    plan_items = await get_setting_items(db, "plans")
     plan_doc = next((p for p in plan_items if p["plan_name"] == payload.plan_name), None)
     if not plan_doc:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -105,8 +105,7 @@ async def create_invoice(
     # Apply discount code
     discount_pct = 0.0
     if payload.discount_code:
-        discount_settings = await db.settings.find_one({"_id": "discounts"})
-        discount_items: list[dict] = discount_settings.get("items", []) if discount_settings else []
+        discount_items = await get_setting_items(db, "discounts")
         discount_doc = next((d for d in discount_items if d["code"] == payload.discount_code), None)
         if not discount_doc:
             raise HTTPException(status_code=404, detail="Discount code not found")
@@ -149,9 +148,19 @@ async def create_invoice(
         }
 
     # ── Fallback: create Plisio crypto invoice ────────────────────────────
-    payment_id = str(uuid.uuid4())
     base_url = str(request.base_url).rstrip("/")
     callback_url = f"{base_url}/api/v1/payments/webhook"
+
+    # Create the payment record first so we have the payment_id for Plisio order_number
+    payment = PaymentModel.for_plan(
+        telegram_id=current_user.telegram_id,
+        plan_name=payload.plan_name,
+        amount_usd=final_price,
+        traffic_gb=traffic_gb,
+        discount_code=payload.discount_code,
+        plisio_txn_id="",
+        invoice_url="",
+    )
 
     plisio = PlisioClient(
         api_key=settings.PLISIO_API_KEY,
@@ -160,7 +169,7 @@ async def create_invoice(
     try:
         invoice_data = await plisio.create_invoice(
             order_name=f"Raha VPN – {payload.plan_name}",
-            order_number=payment_id,
+            order_number=payment.payment_id,
             amount_usd=final_price,
             callback_url=callback_url,
         )
@@ -175,24 +184,13 @@ async def create_invoice(
         )
 
     invoice = invoice_data.get("data", {})
-
-    payment_doc = {
-        "payment_id": payment_id,
-        "telegram_id": current_user.telegram_id,
-        "plan_name": payload.plan_name,
-        "amount_usd": final_price,
-        "traffic_gb": traffic_gb,
-        "discount_code": payload.discount_code,
-        "status": "pending",
-        "plisio_txn_id": invoice.get("txn_id", ""),
-        "invoice_url": invoice.get("invoice_url", ""),
-        "created_at": datetime.now(timezone.utc),
-    }
-    await db.payments.insert_one(payment_doc)
+    payment.plisio_txn_id = invoice.get("txn_id", "")
+    payment.invoice_url = invoice.get("invoice_url", "")
+    await db.payments.insert_one(payment.to_dict())
 
     return {
         "status": "invoice_created",
-        "payment_id": payment_id,
+        "payment_id": payment.payment_id,
         "invoice_url": invoice.get("invoice_url", ""),
         "amount_usd": final_price,
         "plan_name": payload.plan_name,

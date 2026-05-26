@@ -1,16 +1,14 @@
-import uuid
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel
 
 from app.config import get_settings, Settings
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
 from app.models.loan import LoanModel, LoanCreate, LoanStatus
 from app.models.user import UserModel
+from app.models.payment import PaymentModel
 from app.integrations.plisio import PlisioClient
 
 logger = logging.getLogger(__name__)
@@ -51,10 +49,18 @@ async def pay_loan(
         raise HTTPException(status_code=400, detail="Loan is already settled")
 
     amount_usdt: float = loan_doc["amount_usdt"]
-    payment_id = str(uuid.uuid4())
 
     base_url = str(request.base_url).rstrip("/")
     callback_url = f"{base_url}/api/v1/payments/webhook"
+
+    # Create payment record first to get the payment_id for Plisio order_number
+    payment = PaymentModel.for_loan(
+        telegram_id=current_user.telegram_id,
+        loan_id=loan_id,
+        amount_usd=amount_usdt,
+        plisio_txn_id="",
+        invoice_url="",
+    )
 
     plisio = PlisioClient(
         api_key=settings.PLISIO_API_KEY,
@@ -63,7 +69,7 @@ async def pay_loan(
     try:
         invoice_data = await plisio.create_invoice(
             order_name=f"Raha VPN – Loan Settlement ({loan_id[:8]})",
-            order_number=payment_id,
+            order_number=payment.payment_id,
             amount_usd=amount_usdt,
             callback_url=callback_url,
         )
@@ -80,28 +86,23 @@ async def pay_loan(
     invoice = invoice_data.get("data", {})
 
     # Persist pending payment record (type=loan so webhook can handle settlement)
-    payment_doc = {
-        "payment_id": payment_id,
-        "telegram_id": current_user.telegram_id,
-        "plan_name": None,
-        "amount_usd": amount_usdt,
-        "status": "pending",
-        "type": "loan",
-        "loan_id": loan_id,
-        "plisio_txn_id": invoice.get("txn_id", ""),
-        "invoice_url": invoice.get("invoice_url", ""),
-        "created_at": datetime.now(timezone.utc),
-    }
-    await db.payments.insert_one(payment_doc)
+    payment = PaymentModel.for_loan(
+        telegram_id=current_user.telegram_id,
+        loan_id=loan_id,
+        amount_usd=amount_usdt,
+        plisio_txn_id=invoice.get("txn_id", ""),
+        invoice_url=invoice.get("invoice_url", ""),
+    )
+    await db.payments.insert_one(payment.to_dict())
 
     # Store payment_id on loan so we can track it
     await db.loans.update_one(
         {"loan_id": loan_id},
-        {"$set": {"payment_id": payment_id}},
+        {"$set": {"payment_id": payment.payment_id}},
     )
 
     return {
-        "payment_id": payment_id,
+        "payment_id": payment.payment_id,
         "invoice_url": invoice.get("invoice_url", ""),
         "amount_usdt": amount_usdt,
         "loan_id": loan_id,

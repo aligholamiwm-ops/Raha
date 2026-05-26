@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_database
 from app.dependencies import require_admin, get_current_user
 from app.models.user import UserModel
-from app.models.plan import PlanModel, PlanCreate, PlanUpdate
+from app.models.setting import PlanModel, PlanCreate, PlanUpdate, get_setting_items
 from app.config import get_settings, Settings
 
 logger = logging.getLogger(__name__)
@@ -13,16 +13,6 @@ router = APIRouter()
 
 SETTINGS_ID = "plans"
 DISCOUNTS_ID = "discounts"
-
-
-async def _get_plans(db: AsyncIOMotorDatabase) -> list[dict]:
-    doc = await db.settings.find_one({"_id": SETTINGS_ID})
-    return doc.get("items", []) if doc else []
-
-
-async def _get_discounts(db: AsyncIOMotorDatabase) -> list[dict]:
-    doc = await db.settings.find_one({"_id": DISCOUNTS_ID})
-    return doc.get("items", []) if doc else []
 
 
 @router.get(
@@ -33,7 +23,7 @@ async def _get_discounts(db: AsyncIOMotorDatabase) -> list[dict]:
 async def list_plans(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[PlanModel]:
-    items = await _get_plans(db)
+    items = await get_setting_items(db, SETTINGS_ID)
     return [PlanModel(**i) for i in items]
 
 
@@ -48,7 +38,7 @@ async def create_plan(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> PlanModel:
-    items = await _get_plans(db)
+    items = await get_setting_items(db, SETTINGS_ID)
     if any(i["plan_name"] == payload.plan_name for i in items):
         raise HTTPException(status_code=409, detail="Plan name already exists")
     plan = PlanModel(**payload.model_dump())
@@ -74,8 +64,7 @@ async def update_plan(
     update_data = payload.to_dict()
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    doc = await db.settings.find_one({"_id": SETTINGS_ID})
-    items: list[dict] = doc.get("items", []) if doc else []
+    items = await get_setting_items(db, SETTINGS_ID)
     idx = next((i for i, x in enumerate(items) if x["plan_name"] == plan_name), None)
     if idx is None:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -113,7 +102,7 @@ async def buy_plan_with_wallet(
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    plans = await _get_plans(db)
+    plans = await get_setting_items(db, SETTINGS_ID)
     plan = next((p for p in plans if p["plan_name"] == plan_name), None)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -124,7 +113,7 @@ async def buy_plan_with_wallet(
     # Apply discount code
     discount_pct = 0.0
     if discount_code:
-        discounts = await _get_discounts(db)
+        discounts = await get_setting_items(db, DISCOUNTS_ID)
         discount = next((d for d in discounts if d["code"] == discount_code), None)
         if not discount:
             raise HTTPException(status_code=404, detail="Discount code not found")
@@ -168,4 +157,3 @@ async def buy_plan_with_wallet(
         "traffic_gb_added": traffic_gb,
         "amount_paid": final_price,
     }
-
