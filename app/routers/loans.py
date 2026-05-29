@@ -1,7 +1,10 @@
 import logging
+from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel, Field
 
 from app.config import get_settings, Settings
 from app.database import get_database
@@ -161,3 +164,49 @@ async def get_user_loans(
         doc.pop("_id", None)
         results.append(LoanModel(**doc))
     return results
+
+
+class LoanAdminUpdate(BaseModel):
+    """Admin payload to update a loan's amount and/or status."""
+    amount_usdt: Optional[float] = Field(default=None, gt=0)
+    status: Optional[LoanStatus] = None
+    note: Optional[str] = None
+
+
+@router.put(
+    "/admin/{loan_id}",
+    response_model=LoanModel,
+    summary="Edit loan amount and/or settlement status (admin)",
+)
+async def admin_update_loan(
+    loan_id: str,
+    payload: LoanAdminUpdate,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> LoanModel:
+    loan_doc = await db.loans.find_one({"loan_id": loan_id})
+    if not loan_doc:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    update_fields: dict = {}
+    if payload.amount_usdt is not None:
+        update_fields["amount_usdt"] = payload.amount_usdt
+    if payload.status is not None:
+        update_fields["status"] = payload.status.value
+        if payload.status == LoanStatus.settled and not loan_doc.get("settled_at"):
+            update_fields["settled_at"] = datetime.now(timezone.utc)
+        elif payload.status == LoanStatus.unpaid:
+            update_fields["settled_at"] = None
+    if payload.note is not None:
+        update_fields["note"] = payload.note
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    result = await db.loans.find_one_and_update(
+        {"loan_id": loan_id},
+        {"$set": update_fields},
+        return_document=True,
+    )
+    result.pop("_id", None)
+    return LoanModel(**result)

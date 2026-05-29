@@ -137,3 +137,55 @@ async def add_balance(
     result.pop("_id", None)
     return UserModel(**result)
 
+
+@router.post(
+    "/{telegram_id}/adjust_wallet",
+    response_model=UserModel,
+    summary="Adjust wallet balance by delta (admin, supports negative)",
+)
+async def adjust_wallet_balance(
+    telegram_id: int,
+    delta: float,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserModel:
+    if delta == 0:
+        raise HTTPException(status_code=400, detail="Delta must not be zero")
+    user_doc = await db.users.find_one({"telegram_id": telegram_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_balance = (user_doc.get("wallet_balance_usd") or 0.0) + delta
+    result = await db.users.find_one_and_update(
+        {"telegram_id": telegram_id},
+        {"$set": {"wallet_balance_usd": max(0.0, new_balance)}},
+        return_document=True,
+    )
+    result.pop("_id", None)
+    return UserModel(**result)
+
+
+@router.post(
+    "/{telegram_id}/adjust_traffic",
+    response_model=UserModel,
+    summary="Adjust traffic balance by delta GB (admin, supports negative)",
+)
+async def adjust_traffic_balance(
+    telegram_id: int,
+    delta: float,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserModel:
+    if delta == 0:
+        raise HTTPException(status_code=400, detail="Delta must not be zero")
+    user_doc = await db.users.find_one({"telegram_id": telegram_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_balance = (user_doc.get("traffic_balance_gb") or 0.0) + delta
+    result = await db.users.find_one_and_update(
+        {"telegram_id": telegram_id},
+        {"$set": {"traffic_balance_gb": max(0.0, new_balance)}},
+        return_document=True,
+    )
+    result.pop("_id", None)
+    return UserModel(**result)
+

@@ -19,23 +19,31 @@ function parseDuration(planName) {
   return planName
 }
 
-function planMeta(planName) {
-  const p = (planName || '').toLowerCase()
-  if (p.includes('1year') || p.includes('12month')) return {
-    gradient: 'from-purple-500 to-indigo-600', badge: 'Best Value',
-    badgeColor: 'bg-amber-400 text-amber-900', icon: FiAward, popular: true
-  }
-  if (p.includes('6month')) return {
-    gradient: 'from-blue-500 to-cyan-600', badge: 'Popular',
-    badgeColor: 'bg-blue-200 text-blue-900', icon: FiStar, popular: true
-  }
-  if (p.includes('3month')) return {
-    gradient: 'from-teal-500 to-emerald-600', badge: null,
-    badgeColor: '', icon: FiZap, popular: false
-  }
-  return {
+function planMeta(trafficGb) {
+  const gb = trafficGb || 0
+  if (gb <= 10) return {
     gradient: 'from-emerald-500 to-green-600', badge: null,
     badgeColor: '', icon: FiPackage, popular: false
+  }
+  if (gb <= 30) return {
+    gradient: 'from-teal-500 to-cyan-600', badge: null,
+    badgeColor: '', icon: FiZap, popular: false
+  }
+  if (gb <= 60) return {
+    gradient: 'from-blue-500 to-indigo-600', badge: 'Popular',
+    badgeColor: 'bg-blue-200 text-blue-900', icon: FiStar, popular: true
+  }
+  if (gb <= 120) return {
+    gradient: 'from-violet-500 to-purple-600', badge: 'Best Value',
+    badgeColor: 'bg-amber-400 text-amber-900', icon: FiAward, popular: true
+  }
+  if (gb <= 200) return {
+    gradient: 'from-purple-600 to-fuchsia-600', badge: 'Premium',
+    badgeColor: 'bg-fuchsia-200 text-fuchsia-900', icon: FiAward, popular: true
+  }
+  return {
+    gradient: 'from-amber-500 to-orange-600', badge: '🔥 Unlimited',
+    badgeColor: 'bg-amber-300 text-amber-900', icon: FiAward, popular: true
   }
 }
 
@@ -97,12 +105,12 @@ function TabBar({ active, onChange, hasLoanBadge }) {
 }
 
 function PlanCard({ plan, onBuy, buying, walletBalance }) {
-  const meta = planMeta(plan.plan_name)
+  const meta = planMeta(plan.traffic_gb)
   const Icon = meta.icon
   const canAfford = (walletBalance || 0) >= (plan.price_usd || 0)
 
   return (
-    <div className={`relative bg-slate-800 border rounded-2xl overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+    <div className={`relative bg-slate-800 border rounded-2xl overflow-hidden flex-shrink-0 w-44 transition-all duration-200 active:scale-[0.97] ${
       meta.popular ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'border-slate-700'
     }`}>
       {/* Gradient header */}
@@ -318,6 +326,8 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
   )
 }
 
+const DEPOSIT_PRESETS = [5, 10, 20, 50]
+
 function DepositTab({ onDeposit, buying }) {
   const [amount, setAmount] = useState('')
 
@@ -338,7 +348,7 @@ function DepositTab({ onDeposit, buying }) {
         <div>
           <p className="text-xs text-slate-400 mb-2">Quick amounts</p>
           <div className="grid grid-cols-4 gap-2">
-            {presets.map(p => (
+            {DEPOSIT_PRESETS.map(p => (
               <button
                 key={p}
                 onClick={() => setAmount(String(p))}
@@ -676,9 +686,9 @@ export default function Store() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-48 bg-slate-800 rounded-2xl animate-pulse" />
+                <div key={i} className="h-48 w-44 flex-shrink-0 bg-slate-800 rounded-2xl animate-pulse snap-start" />
               ))}
             </div>
           ) : plans.length === 0 ? (
@@ -687,15 +697,16 @@ export default function Store() {
               <p className="text-slate-400 text-sm">No plans available</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {plans.map(plan => (
-                <PlanCard
-                  key={plan.plan_name}
-                  plan={plan}
-                  onBuy={handleBuy}
-                  buying={buyingPlan}
-                  walletBalance={user?.wallet_balance_usd || 0}
-                />
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
+              {[...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0)).map(plan => (
+                <div key={plan.plan_name} className="snap-start">
+                  <PlanCard
+                    plan={plan}
+                    onBuy={handleBuy}
+                    buying={buyingPlan}
+                    walletBalance={user?.wallet_balance_usd || 0}
+                  />
+                </div>
               ))}
             </div>
           )}

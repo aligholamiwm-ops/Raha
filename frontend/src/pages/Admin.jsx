@@ -148,10 +148,18 @@ export default function Admin() {
   const [foundUsers, setFoundUsers] = useState([]);
   const [userTickets, setUserTickets] = useState([]);
   const [userLoans, setUserLoans] = useState([]);
-  const [chargeAmount, setChargeAmount] = useState(0);
+  const [userConfigs, setUserConfigs] = useState([]);
+  const [userConfigsLoading, setUserConfigsLoading] = useState(false);
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [chargeType, setChargeType] = useState('wallet'); // 'wallet' or 'traffic'
+  const [chargeOp, setChargeOp] = useState('+'); // '+' or '-'
   const [loanAmount, setLoanAmount] = useState('');
   const [loanNote, setLoanNote] = useState('');
   const [allocatingLoan, setAllocatingLoan] = useState(false);
+  const [editingLoan, setEditingLoan] = useState(null); // loan object being edited
+  const [editLoanAmount, setEditLoanAmount] = useState('');
+  const [editLoanStatus, setEditLoanStatus] = useState('');
+  const [savingLoan, setSavingLoan] = useState(false);
   // Admin password for user management
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [settingAdminPwd, setSettingAdminPwd] = useState(false);
@@ -164,16 +172,15 @@ export default function Admin() {
   const [broadcastTarget, setBroadcastTarget] = useState('all');
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
-  // Top users
-  const [topFilter, setTopFilter] = useState('most_used_traffic');
+  // Top users - shown on stats tab
+  const [topFilter, setTopFilter] = useState('most_unused_traffic');
   const [topUsers, setTopUsers] = useState([]);
   const [topUsersLoading, setTopUsersLoading] = useState(false);
 
   useEffect(() => {
-    if (activeTab === "stats") fetchStats();
+    if (activeTab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
     if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
-    if (activeTab === "users") fetchTopUsers(topFilter);
   }, [activeTab]);
 
   const handleSendMessage = async () => {
@@ -344,6 +351,7 @@ export default function Admin() {
   const loadUserDetails = async (user) => {
     setFoundUser(user);
     setFoundUsers([]);
+    setUserConfigs([]);
     try {
       const [ticketsRes, loansRes] = await Promise.allSettled([
         client.get(`/api/v1/admin/users/${user.telegram_id}/tickets`),
@@ -354,14 +362,55 @@ export default function Admin() {
     } catch (err) {
       console.error("Failed to load user details", err);
     }
+    // Load configs separately (can be slow)
+    setUserConfigsLoading(true);
+    try {
+      const configsRes = await client.get(`/api/v1/configs/admin/user/${user.telegram_id}`);
+      setUserConfigs(configsRes.data || []);
+    } catch (err) {
+      console.error("Failed to load user configs", err);
+      setUserConfigs([]);
+    } finally {
+      setUserConfigsLoading(false);
+    }
   };
 
   const handleCharge = async () => {
+    const amount = parseFloat(chargeAmount);
+    if (!amount || amount <= 0) { toast("Enter a valid amount", 'error'); return; }
+    const delta = chargeOp === '-' ? -amount : amount;
     try {
-      await client.post(`/api/v1/users/${foundUser.telegram_id}/add_balance?amount=${chargeAmount}`);
+      if (chargeType === 'wallet') {
+        await client.post(`/api/v1/users/${foundUser.telegram_id}/adjust_wallet?delta=${delta}`);
+        toast(chargeOp === '+' ? `Wallet +$${amount}` : `Wallet -$${amount}`);
+      } else {
+        await client.post(`/api/v1/users/${foundUser.telegram_id}/adjust_traffic?delta=${delta}`);
+        toast(chargeOp === '+' ? `Traffic +${amount} GB` : `Traffic -${amount} GB`);
+      }
+      const refreshed = await client.get(`/api/v1/admin/users/search?q=${foundUser.telegram_id}`);
+      const results = refreshed.data || [];
+      if (results.length > 0) setFoundUser(results[0]);
+      setChargeAmount('');
+    } catch (err) { toast("Error: " + (err.response?.data?.detail || err.message), 'error'); }
+  };
+
+  const handleSaveLoan = async () => {
+    if (!editingLoan) return;
+    setSavingLoan(true);
+    try {
+      const payload = {};
+      const amt = parseFloat(editLoanAmount);
+      if (!isNaN(amt) && amt > 0) payload.amount_usdt = amt;
+      if (editLoanStatus) payload.status = editLoanStatus;
+      await client.put(`/api/v1/loans/admin/${editingLoan.loan_id}`, payload);
+      setEditingLoan(null);
       await loadUserDetails(foundUser);
-      toast("Balance added!");
-    } catch (err) { toast("Error charging user", 'error'); }
+      toast("Loan updated!");
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSavingLoan(false);
+    }
   };
 
   const handleRoleChange = async (newRole) => {
@@ -573,21 +622,60 @@ export default function Admin() {
       </div>
 
       {activeTab === "stats" && stats && (
-        <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <Card><div className="text-xs text-slate-400">Total Users</div><div className="text-xl font-bold text-white">{stats.total_users}</div></Card>
-          <Card><div className="text-xs text-slate-400">Revenue</div><div className="text-xl font-bold text-emerald-400">${stats.total_revenue_usd}</div></Card>
-          <Card><div className="text-xs text-slate-400">Active Configs</div><div className="text-xl font-bold text-blue-400">{stats.active_configs}</div></Card>
-          <Card><div className="text-xs text-slate-400">Open Tickets</div><div className="text-xl font-bold text-rose-400">{stats.open_tickets}</div></Card>
-          <Card><div className="text-xs text-slate-400">Unsettled Loans</div><div className="text-xl font-bold text-amber-400">${stats.total_unsettled_loans_usd ?? '—'}</div></Card>
-          <Card><div className="text-xs text-slate-400">Traffic Used</div><div className="text-xl font-bold text-purple-400">{stats.total_traffic_used_gb ?? '—'} GB</div></Card>
-          <div className="col-span-2">
-            <Card><div className="text-xs text-slate-400">Unused Traffic (all users)</div><div className="text-xl font-bold text-cyan-400">{stats.total_unused_traffic_gb ?? '—'} GB</div></Card>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="grid grid-cols-2 gap-4">
+            <Card><div className="text-xs text-slate-400">Total Users</div><div className="text-xl font-bold text-white">{stats.total_users}</div></Card>
+            <Card><div className="text-xs text-slate-400">Revenue</div><div className="text-xl font-bold text-emerald-400">${stats.total_revenue_usd}</div></Card>
+            <Card><div className="text-xs text-slate-400">Active Configs</div><div className="text-xl font-bold text-blue-400">{stats.active_configs}</div></Card>
+            <Card><div className="text-xs text-slate-400">Open Tickets</div><div className="text-xl font-bold text-rose-400">{stats.open_tickets}</div></Card>
+            <Card><div className="text-xs text-slate-400">Unsettled Loans</div><div className="text-xl font-bold text-amber-400">${stats.total_unsettled_loans_usd ?? '—'}</div></Card>
+            <Card><div className="text-xs text-slate-400">Unused Traffic</div><div className="text-xl font-bold text-cyan-400">{stats.total_unused_traffic_gb ?? '—'} GB</div></Card>
+            <div className="col-span-2">
+              <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(res => toast(`OK: ${res.data.servers_ok} | Failed: ${res.data.servers_failed} | Clients: ${res.data.total_clients}`)).catch(() => toast("Sync failed", 'error'))} className="w-full" icon={FiRefreshCw}>Test Server Connectivity</Button>
+              <p className="text-[10px] text-slate-500 mt-2 text-center italic">
+                * Tests connectivity to all XUI servers and returns live config counts.
+              </p>
+            </div>
           </div>
-          <div className="col-span-2">
-            <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(res => toast(`OK: ${res.data.servers_ok} | Failed: ${res.data.servers_failed} | Clients: ${res.data.total_clients}`)).catch(() => toast("Sync failed", 'error'))} className="w-full" icon={FiRefreshCw}>Test Server Connectivity</Button>
-            <p className="text-[10px] text-slate-500 mt-2 text-center italic">
-              * Tests connectivity to all XUI servers and returns live config counts.
-            </p>
+
+          {/* Top 5 Users */}
+          <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Top 5 Users</span>
+              {topUsersLoading && <span className="w-3.5 h-3.5 border border-slate-500 border-t-transparent rounded-full animate-spin" />}
+            </div>
+            <select
+              value={topFilter}
+              onChange={e => { setTopFilter(e.target.value); setTopUsers([]); fetchTopUsers(e.target.value); }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
+            >
+              <option value="most_unused_traffic">Most Unused Traffic</option>
+              <option value="most_purchases">Most Purchases</option>
+              <option value="most_unsettled_loans">Most Unsettled Loans</option>
+              <option value="most_configs">Most Configs</option>
+            </select>
+            {topUsers.length > 0 && (
+              <div className="space-y-1.5 mt-1">
+                {topUsers.map((u, idx) => (
+                  <div key={u.telegram_id} className="w-full p-2 bg-slate-800/60 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-500 w-4">#{idx + 1}</span>
+                        <div>
+                          <span className="text-xs font-bold text-white">{u.display_name}</span>
+                          {u.username && <span className="text-[10px] text-slate-400 ml-1">@{u.username}</span>}
+                          <div className="text-[10px] text-slate-500">{u.telegram_id}</div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-400">{u.value} <span className="text-[10px] text-slate-500">{u.metric}</span></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!topUsersLoading && topUsers.length === 0 && (
+              <p className="text-[10px] text-slate-600 text-center py-1">No data</p>
+            )}
           </div>
         </div>
       )}
@@ -630,9 +718,16 @@ export default function Admin() {
                   </div>
                   {serverTestResult?.name === s.name && (
                     <div className={`mt-2 p-2 rounded-lg text-xs ${serverTestResult.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                      {serverTestResult.status === 'success'
-                        ? `✓ Connected | Inbounds: ${serverTestResult.inbounds_count}`
-                        : `✗ Failed: ${serverTestResult.error}`}
+                      {serverTestResult.status === 'success' ? (
+                        <div className="space-y-0.5">
+                          <div>✓ Connected | Inbounds: {serverTestResult.inbounds_count}</div>
+                          <div className="flex gap-4 text-emerald-300 mt-1">
+                            <span>↑ Upload: {serverTestResult.inbound_up_gb ?? 0} GB</span>
+                            <span>↓ Download: {serverTestResult.inbound_down_gb ?? 0} GB</span>
+                            <span className="text-emerald-400 font-bold">Total: {((serverTestResult.inbound_up_gb ?? 0) + (serverTestResult.inbound_down_gb ?? 0)).toFixed(3)} GB</span>
+                          </div>
+                        </div>
+                      ) : `✗ Failed: ${serverTestResult.error}`}
                     </div>
                   )}
                 </div>
@@ -685,66 +780,6 @@ export default function Admin() {
             </Button>
           </div>
 
-          {/* Top users dropdown */}
-          {!foundUser && (
-            <div className="mb-4 p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Top 5 Users</span>
-                {topUsersLoading && <span className="w-3.5 h-3.5 border border-slate-500 border-t-transparent rounded-full animate-spin" />}
-              </div>
-              <select
-                value={topFilter}
-                onChange={e => handleTopFilterChange(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
-              >
-                <option value="most_used_traffic">Most Used Traffic</option>
-                <option value="most_unused_traffic">Most Unused Traffic</option>
-                <option value="most_purchases">Most Purchases</option>
-                <option value="most_unsettled_loans">Most Unsettled Loans</option>
-                <option value="most_configs">Most Configs</option>
-              </select>
-              {topUsers.length > 0 && (
-                <div className="space-y-1.5 mt-1">
-                  {topUsers.map((u, idx) => (
-                    <button
-                      key={u.telegram_id}
-                      onClick={async () => {
-                        setLoading(true);
-                        try {
-                          const res = await client.get(`/api/v1/admin/users/search?q=${u.telegram_id}`);
-                          const results = res.data || [];
-                          if (results.length > 0) {
-                            await loadUserDetails(results[0]);
-                          }
-                        } catch (err) {
-                          toast("Failed to load user: " + (err.response?.data?.detail || err.message), 'error');
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                      className="w-full p-2 bg-slate-800/60 rounded-lg border border-slate-700 text-left hover:border-emerald-500/50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-500 w-4">#{idx + 1}</span>
-                          <div>
-                            <span className="text-xs font-bold text-white">{u.display_name}</span>
-                            {u.username && <span className="text-[10px] text-slate-400 ml-1">@{u.username}</span>}
-                            <div className="text-[10px] text-slate-500">{u.telegram_id}</div>
-                          </div>
-                        </div>
-                        <span className="text-xs font-bold text-emerald-400">{u.value} <span className="text-[10px] text-slate-500">{u.metric}</span></span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {!topUsersLoading && topUsers.length === 0 && (
-                <p className="text-[10px] text-slate-600 text-center py-1">No data</p>
-              )}
-            </div>
-          )}
-
           {/* Multi-result list */}
           {foundUsers.length > 1 && !foundUser && (
             <div className="space-y-1.5 mb-3">
@@ -788,9 +823,12 @@ export default function Admin() {
                         {foundUser.nickname || foundUser.telegram_info?.first_name || `User ${foundUser.telegram_id}`}
                         {foundUser.telegram_info?.last_name && ` ${foundUser.telegram_info.last_name}`}
                       </div>
-                      {foundUser.telegram_info?.username && (
-                        <div className="text-[10px] text-slate-400">@{foundUser.telegram_info.username}</div>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {foundUser.telegram_info?.username && (
+                          <span className="text-[10px] text-slate-400">@{foundUser.telegram_info.username}</span>
+                        )}
+                        <span className="text-[10px] text-slate-500 font-mono">ID: {foundUser.telegram_id}</span>
+                      </div>
                     </div>
                   </div>
                   <Badge variant={foundUser.role === "admin" ? "warning" : "info"}>{foundUser.role}</Badge>
@@ -854,18 +892,29 @@ export default function Admin() {
                 )}
               </div>
 
-              {/* Add balance */}
-              <div className="flex gap-2 items-end p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                <div className="flex-1">
-                  <label className="block text-[10px] text-slate-400 mb-1">Add Balance ($)</label>
+              {/* Balance editor (wallet + traffic) */}
+              <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
+                <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Edit Balance</div>
+                <div className="flex gap-2">
+                  <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs font-bold">
+                    <button onClick={() => setChargeType('wallet')} className={`px-3 py-2 transition-colors ${chargeType === 'wallet' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Wallet $</button>
+                    <button onClick={() => setChargeType('traffic')} className={`px-3 py-2 transition-colors ${chargeType === 'traffic' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Traffic GB</button>
+                  </div>
+                  <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs font-bold">
+                    <button onClick={() => setChargeOp('+')} className={`px-3 py-2 transition-colors ${chargeOp === '+' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>+</button>
+                    <button onClick={() => setChargeOp('-')} className={`px-3 py-2 transition-colors ${chargeOp === '-' ? 'bg-rose-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>−</button>
+                  </div>
                   <input
                     type="number"
                     value={chargeAmount}
-                    onChange={e => setChargeAmount(parseFloat(e.target.value))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                    onChange={e => setChargeAmount(e.target.value)}
+                    placeholder="Amount"
+                    min="0.01"
+                    step="0.01"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
                   />
+                  <Button onClick={handleCharge} variant="primary" disabled={!chargeAmount}>Apply</Button>
                 </div>
-                <Button onClick={handleCharge} variant="primary">Add</Button>
               </div>
 
               {/* Send Message */}
@@ -896,7 +945,7 @@ export default function Admin() {
 
               {/* Loan Allocation */}
               <div className="p-3 bg-slate-900/50 rounded-xl border border-rose-500/20 space-y-2">
-                <div className="text-[10px] font-bold text-rose-400 uppercase tracking-wide">Loan</div>
+                <div className="text-[10px] font-bold text-rose-400 uppercase tracking-wide">Allocate Loan</div>
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -917,19 +966,68 @@ export default function Admin() {
                 </Button>
               </div>
 
-              {/* Loans list */}
+              {/* Loans list with edit */}
               {userLoans.length > 0 && (
                 <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-1.5">
                   <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Loans ({userLoans.length})</div>
                   {userLoans.map(loan => (
-                    <div key={loan.loan_id} className={`p-2 rounded-lg border flex items-center justify-between ${loan.status === 'settled' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                      <div>
-                        <span className="text-xs font-bold text-white">${loan.amount_usdt?.toFixed(2)}</span>
-                        <span className="text-[10px] text-slate-500 ml-1.5">{new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}</span>
+                    <div key={loan.loan_id}>
+                      <div className={`p-2 rounded-lg border flex items-center justify-between ${loan.status === 'settled' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                        <div>
+                          <span className="text-xs font-bold text-white">${loan.amount_usdt?.toFixed(2)}</span>
+                          <span className="text-[10px] text-slate-500 ml-1.5">{new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${loan.status === 'settled' ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30'}`}>
+                            {loan.status === 'settled' ? '✓ Settled' : 'Unpaid'}
+                          </span>
+                          <button
+                            onClick={() => { setEditingLoan(loan); setEditLoanAmount(String(loan.amount_usdt)); setEditLoanStatus(loan.status); }}
+                            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white rounded transition-colors"
+                          >
+                            <FiEdit2 size={11} />
+                          </button>
+                        </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${loan.status === 'settled' ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30'}`}>
-                        {loan.status === 'settled' ? '✓' : 'Unpaid'}
-                      </span>
+                      {editingLoan?.loan_id === loan.loan_id && (
+                        <div className="mt-1 p-2 bg-slate-900 rounded-lg border border-slate-600 space-y-2 animate-in zoom-in-95 duration-200">
+                          <div className="text-[10px] text-slate-400 font-bold uppercase">Edit Loan</div>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              value={editLoanAmount}
+                              onChange={e => setEditLoanAmount(e.target.value)}
+                              placeholder="Amount USDT"
+                              min="0.01"
+                              step="0.01"
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                            <select
+                              value={editLoanStatus}
+                              onChange={e => setEditLoanStatus(e.target.value)}
+                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                            >
+                              <option value="unpaid">Unpaid</option>
+                              <option value="settled">Settled</option>
+                            </select>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleSaveLoan}
+                              disabled={savingLoan}
+                              className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                            >
+                              {savingLoan ? '…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => setEditingLoan(null)}
+                              className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -951,6 +1049,46 @@ export default function Admin() {
                   ))}
                 </div>
               )}
+
+              {/* User Configs */}
+              <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Configs {userConfigs.length > 0 && `(${userConfigs.length})`}</div>
+                  {userConfigsLoading && <span className="w-3 h-3 border border-slate-500 border-t-transparent rounded-full animate-spin" />}
+                </div>
+                {!userConfigsLoading && userConfigs.length === 0 && (
+                  <p className="text-[10px] text-slate-600 text-center py-2">No configs found</p>
+                )}
+                {userConfigs.map(cfg => {
+                  const usedGb = ((cfg.usage_up || 0) + (cfg.usage_down || 0)) / (1024 ** 3);
+                  const totalGb = cfg.total_gb || 0;
+                  const pct = totalGb > 0 ? Math.min(100, Math.round((usedGb / totalGb) * 100)) : 0;
+                  const barColor = pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-amber-500' : 'bg-emerald-500';
+                  const expiryDate = cfg.expiry_date ? new Date(cfg.expiry_date) : null;
+                  const daysLeft = expiryDate ? Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                  const statusColor = cfg.status === 'active' ? 'text-emerald-400' : cfg.status === 'expired' ? 'text-amber-400' : 'text-slate-500';
+                  return (
+                    <div key={cfg.uuid} className="p-2.5 bg-slate-800/60 rounded-xl border border-slate-700/50 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-white">{cfg.name}</span>
+                          <span className="text-[10px] text-slate-500 ml-1.5">{cfg.server_name}</span>
+                        </div>
+                        <span className={`text-[10px] font-bold ${statusColor}`}>{cfg.status}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-500">
+                        <span>{usedGb.toFixed(2)} / {totalGb.toFixed(1)} GB ({pct}%)</span>
+                        {daysLeft !== null && (
+                          <span>{daysLeft > 0 ? `${daysLeft}d left` : 'Expired'}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </Card>

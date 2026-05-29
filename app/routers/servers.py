@@ -48,11 +48,19 @@ async def test_server_connection(
         inbounds = await xui.get_inbounds()
         inbound_id = int(server.get("inbound_id", 1))
         target_inbound = next((ib for ib in inbounds if ib.get("id") == inbound_id), None)
+        # Extract total inbound traffic (bytes)
+        inbound_up = 0
+        inbound_down = 0
+        if target_inbound:
+            inbound_up = target_inbound.get("up", 0) or 0
+            inbound_down = target_inbound.get("down", 0) or 0
         return {
             "status": "success",
             "server_name": server_name,
             "inbounds_count": len(inbounds),
             "target_inbound": target_inbound,
+            "inbound_up_gb": round(inbound_up / (1024 ** 3), 3),
+            "inbound_down_gb": round(inbound_down / (1024 ** 3), 3),
         }
     except Exception as exc:
         logger.error("test_server_connection failed for %s: %s", server_name, exc)

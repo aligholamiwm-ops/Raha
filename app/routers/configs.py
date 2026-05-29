@@ -122,6 +122,29 @@ async def get_my_configs(
             logger.warning("get_my_configs error on server %s: %s", server_name, exc)
     return results
 
+
+@router.get("/admin/user/{telegram_id}", response_model=list[VpnConfigResponse])
+async def get_user_configs_admin(
+    telegram_id: int,
+    _admin: UserModel = Depends(require_admin),
+    settings: Settings = Depends(get_settings),
+) -> list[VpnConfigResponse]:
+    """Get all configs for a specific user (admin)."""
+    prefix = f"{telegram_id}-"
+    results = []
+    for server in settings.get_enabled_servers():
+        server_name = server.get("name", server.get("server_name", ""))
+        try:
+            xui = build_xui_client(server)
+            clients = await xui.get_client_info()
+            for c in clients:
+                email = c.get("email", "")
+                if email.startswith(prefix):
+                    results.append(_client_to_response(c, server_name, telegram_id))
+        except Exception as exc:
+            logger.warning("get_user_configs_admin error on server %s: %s", server_name, exc)
+    return results
+
 @router.post("/create", response_model=VpnConfigResponse, status_code=201)
 async def create_config(
     payload: VpnConfigCreate,
