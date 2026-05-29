@@ -46,6 +46,8 @@ export const buyPlanWithWallet = (plan_name, discount_code) =>
   api.post(`/api/v1/plans/${encodeURIComponent(plan_name)}/buy`, null, { params: discount_code ? { discount_code } : {} }).then((r) => r.data)
 export const createInvoice = (plan_name, currency = 'USDT', discount_code = null) =>
   api.post('/api/v1/payments/create-invoice', { plan_name, currency, ...(discount_code ? { discount_code } : {}) }).then((r) => r.data)
+export const createDepositInvoice = (amount_usd, currency = 'USDT') =>
+  api.post('/api/v1/payments/create-deposit-invoice', { amount_usd, currency }).then((r) => r.data)
 export const getMyTickets = () => api.get('/api/v1/tickets/my').then((r) => r.data)
 export const createTicket = (payload) =>
   api.post('/api/v1/tickets/', payload).then((r) => r.data)

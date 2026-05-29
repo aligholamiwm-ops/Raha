@@ -26,6 +26,11 @@ class CreateInvoiceRequest(BaseModel):
     discount_code: str | None = None
 
 
+class CreateDepositInvoiceRequest(BaseModel):
+    amount_usd: float
+    currency: str = "USDT"
+
+
 async def _distribute_referral_bonuses(
     db: AsyncIOMotorDatabase,
     settings: Settings,
@@ -194,6 +199,67 @@ async def create_invoice(
         "invoice_url": invoice.get("invoice_url", ""),
         "amount_usd": final_price,
         "plan_name": payload.plan_name,
+    }
+
+
+@router.post(
+    "/create-deposit-invoice",
+    summary="Deposit USDT to wallet — creates a Plisio invoice for the given amount",
+)
+async def create_deposit_invoice(
+    payload: CreateDepositInvoiceRequest,
+    request: Request,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    if payload.amount_usd <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
+    base_url = str(request.base_url).rstrip("/")
+    callback_url = f"{base_url}/api/v1/payments/webhook"
+
+    # Create payment record with traffic_gb=0 so webhook credits wallet balance
+    payment = PaymentModel(
+        telegram_id=current_user.telegram_id,
+        plan_name=None,
+        amount_usd=payload.amount_usd,
+        traffic_gb=0.0,
+        plisio_txn_id="",
+        invoice_url="",
+    )
+
+    plisio = PlisioClient(
+        api_key=settings.PLISIO_API_KEY,
+        secret_key=settings.PLISIO_SECRET_KEY,
+    )
+    try:
+        invoice_data = await plisio.create_invoice(
+            order_name=f"Raha VPN – Wallet Deposit",
+            order_number=payment.payment_id,
+            amount_usd=payload.amount_usd,
+            callback_url=callback_url,
+        )
+    except Exception as exc:
+        logger.error("Plisio deposit invoice creation failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Payment gateway error") from exc
+
+    if invoice_data.get("status") != "success":
+        raise HTTPException(
+            status_code=502,
+            detail=f"Plisio error: {invoice_data.get('data', {}).get('message', 'Unknown')}",
+        )
+
+    invoice = invoice_data.get("data", {})
+    payment.plisio_txn_id = invoice.get("txn_id", "")
+    payment.invoice_url = invoice.get("invoice_url", "")
+    await db.payments.insert_one(payment.to_dict())
+
+    return {
+        "status": "invoice_created",
+        "payment_id": payment.payment_id,
+        "invoice_url": invoice.get("invoice_url", ""),
+        "amount_usd": payload.amount_usd,
     }
 
 
