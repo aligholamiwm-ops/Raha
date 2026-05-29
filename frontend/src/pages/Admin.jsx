@@ -152,7 +152,6 @@ export default function Admin() {
   const [userConfigsLoading, setUserConfigsLoading] = useState(false);
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeType, setChargeType] = useState('wallet'); // 'wallet' or 'traffic'
-  const [chargeOp, setChargeOp] = useState('+'); // '+' or '-'
   const [loanAmount, setLoanAmount] = useState('');
   const [loanNote, setLoanNote] = useState('');
   const [allocatingLoan, setAllocatingLoan] = useState(false);
@@ -182,6 +181,16 @@ export default function Admin() {
     if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
     if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
   }, [activeTab]);
+
+  // Sync balance input when switching between wallet/traffic types
+  useEffect(() => {
+    if (!foundUser) return;
+    setChargeAmount(String(
+      chargeType === 'wallet'
+        ? (foundUser.wallet_balance_usd ?? 0)
+        : (foundUser.traffic_balance_gb ?? 0)
+    ));
+  }, [chargeType, foundUser]);
 
   const handleSendMessage = async () => {
     if (!sendMsgText.trim() || !foundUser) return;
@@ -352,6 +361,12 @@ export default function Admin() {
     setFoundUser(user);
     setFoundUsers([]);
     setUserConfigs([]);
+    // Pre-populate balance editor with the user's current balance
+    setChargeAmount(String(
+      chargeType === 'wallet'
+        ? (user.wallet_balance_usd ?? 0)
+        : (user.traffic_balance_gb ?? 0)
+    ));
     try {
       const [ticketsRes, loansRes] = await Promise.allSettled([
         client.get(`/api/v1/admin/users/${user.telegram_id}/tickets`),
@@ -377,20 +392,25 @@ export default function Admin() {
 
   const handleCharge = async () => {
     const amount = parseFloat(chargeAmount);
-    if (!amount || amount <= 0) { toast("Enter a valid amount", 'error'); return; }
-    const delta = chargeOp === '-' ? -amount : amount;
+    if (isNaN(amount) || amount < 0) { toast("Enter a valid non-negative amount", 'error'); return; }
     try {
       if (chargeType === 'wallet') {
-        await client.post(`/api/v1/users/${foundUser.telegram_id}/adjust_wallet?delta=${delta}`);
-        toast(chargeOp === '+' ? `Wallet +$${amount}` : `Wallet -$${amount}`);
+        await client.post(`/api/v1/users/${foundUser.telegram_id}/set_wallet?amount=${amount}`);
+        toast(`Wallet set to $${amount}`);
       } else {
-        await client.post(`/api/v1/users/${foundUser.telegram_id}/adjust_traffic?delta=${delta}`);
-        toast(chargeOp === '+' ? `Traffic +${amount} GB` : `Traffic -${amount} GB`);
+        await client.post(`/api/v1/users/${foundUser.telegram_id}/set_traffic?amount=${amount}`);
+        toast(`Traffic set to ${amount} GB`);
       }
       const refreshed = await client.get(`/api/v1/admin/users/search?q=${foundUser.telegram_id}`);
       const results = refreshed.data || [];
-      if (results.length > 0) setFoundUser(results[0]);
-      setChargeAmount('');
+      if (results.length > 0) {
+        setFoundUser(results[0]);
+        setChargeAmount(String(
+          chargeType === 'wallet'
+            ? (results[0].wallet_balance_usd ?? 0)
+            : (results[0].traffic_balance_gb ?? 0)
+        ));
+      }
     } catch (err) { toast("Error: " + (err.response?.data?.detail || err.message), 'error'); }
   };
 
@@ -900,21 +920,18 @@ export default function Admin() {
                     <button onClick={() => setChargeType('wallet')} className={`px-3 py-2 transition-colors ${chargeType === 'wallet' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Wallet $</button>
                     <button onClick={() => setChargeType('traffic')} className={`px-3 py-2 transition-colors ${chargeType === 'traffic' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Traffic GB</button>
                   </div>
-                  <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs font-bold">
-                    <button onClick={() => setChargeOp('+')} className={`px-3 py-2 transition-colors ${chargeOp === '+' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>+</button>
-                    <button onClick={() => setChargeOp('-')} className={`px-3 py-2 transition-colors ${chargeOp === '-' ? 'bg-rose-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>−</button>
-                  </div>
                   <input
                     type="number"
                     value={chargeAmount}
                     onChange={e => setChargeAmount(e.target.value)}
-                    placeholder="Amount"
-                    min="0.01"
+                    placeholder={chargeType === 'wallet' ? 'Exact $ value' : 'Exact GB value'}
+                    min="0"
                     step="0.01"
                     className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
                   />
-                  <Button onClick={handleCharge} variant="primary" disabled={!chargeAmount}>Apply</Button>
+                  <Button onClick={handleCharge} variant="primary" disabled={chargeAmount === ''}>Set</Button>
                 </div>
+                <div className="text-[10px] text-slate-500">Enter the exact new value to set — lower than current decreases, higher increases.</div>
               </div>
 
               {/* Send Message */}
