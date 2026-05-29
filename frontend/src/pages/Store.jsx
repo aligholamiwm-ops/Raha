@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { createInvoice, getMyLoans, payLoan, validateDiscount } from '../api/client'
+import { createInvoice, createDepositInvoice, getMyLoans, payLoan, validateDiscount } from '../api/client'
 import {
   FiShoppingCart, FiArrowUp, FiArrowDown, FiCreditCard,
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
@@ -42,8 +42,8 @@ function planMeta(trafficGb) {
     badgeColor: 'bg-fuchsia-200 text-fuchsia-900', icon: FiAward, popular: true
   }
   return {
-    gradient: 'from-amber-500 to-orange-600', badge: '🔥 Unlimited',
-    badgeColor: 'bg-amber-300 text-amber-900', icon: FiAward, popular: true
+    gradient: 'from-orange-500 to-red-600', badge: '🔥 Unlimited',
+    badgeColor: 'bg-red-200 text-red-900', icon: FiAward, popular: true
   }
 }
 
@@ -612,21 +612,15 @@ export default function Store() {
   }
 
   const handleDeposit = async (amount) => {
-    const customPlan = { plan_name: `CustomDeposit_${Date.now()}`, price_usd: amount, traffic_gb: 0 }
-    setBuyingPlan(customPlan.plan_name)
+    setBuyingPlan(`deposit_${amount}`)
     setError(null); setSuccess(null)
     try {
-      const result = await createInvoice(customPlan.plan_name, 'USDT')
-      if (result?.status === 'wallet_payment') {
-        setSuccess('Deposit successful!')
-        await refreshUser()
-      } else {
-        const url = result?.invoice_url || result?.url || result
-        if (url && typeof url === 'string') {
-          const tg = window.Telegram?.WebApp
-          tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
-          setSuccess('Invoice created! Complete payment in the opened window.')
-        }
+      const result = await createDepositInvoice(amount, 'USDT')
+      const url = result?.invoice_url || result?.url || result
+      if (url && typeof url === 'string') {
+        const tg = window.Telegram?.WebApp
+        tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+        setSuccess('Invoice created! Complete payment in the opened window.')
       }
     } catch (e) {
       setError(e?.response?.data?.detail || 'Failed to create deposit invoice.')
