@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -153,7 +154,12 @@ async def create_invoice(
         }
 
     # ── Fallback: create Plisio crypto invoice ────────────────────────────
+    # Force https:// because FastAPI runs behind an Nginx TLS proxy and
+    # request.base_url resolves to http://.  Plisio sends a POST to the
+    # callback URL; an Nginx 301 redirect to HTTPS would drop the body.
     base_url = str(request.base_url).rstrip("/")
+    if base_url.startswith("http://"):
+        base_url = "https://" + base_url[7:]
     callback_url = f"{base_url}/api/v1/payments/webhook"
 
     # Create the payment record first so we have the payment_id for Plisio order_number
@@ -216,7 +222,10 @@ async def create_deposit_invoice(
     if payload.amount_usd <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
 
+    # Force https:// — same reason as create_invoice (Nginx TLS proxy).
     base_url = str(request.base_url).rstrip("/")
+    if base_url.startswith("http://"):
+        base_url = "https://" + base_url[7:]
     callback_url = f"{base_url}/api/v1/payments/webhook"
 
     # Create payment record with traffic_gb=0 so webhook credits wallet balance
@@ -272,18 +281,24 @@ async def payment_webhook(
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    try:
-        data = await request.json()
-    except Exception:
-        data = dict(await request.form())
+    # Read the raw body once so that verify_webhook can hash the exact bytes
+    # that Plisio signed — no JSON parse-then-re-serialise mutations.
+    raw_body = await request.body()
 
     plisio = PlisioClient(
         api_key=settings.PLISIO_API_KEY,
         secret_key=settings.PLISIO_SECRET_KEY,
     )
 
-    if not plisio.verify_webhook(data):
+    if not plisio.verify_webhook(raw_body):
+        logger.warning("Plisio webhook signature verification failed")
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    try:
+        data = json.loads(raw_body)
+    except Exception:
+        logger.warning("Plisio webhook body is not valid JSON")
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     txn_id: str = data.get("txn_id", "")
     order_number: str = data.get("order_number", "")

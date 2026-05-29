@@ -39,19 +39,30 @@ class PlisioClient:
             resp.raise_for_status()
             return resp.json()
 
-    def verify_webhook(self, data: dict) -> bool:
+    def verify_webhook(self, raw_body: bytes) -> bool:
         """
         Verify a Plisio IPN/webhook callback.
 
+        Accepts the raw request body bytes so that no serialization mutations
+        (e.g. float formatting, key ordering) occur before hashing.
+
         Plisio signs the payload as:
-            md5(secret_key + json_sorted_data_without_verify_hash)
+            md5(secret_key + json_encode_without_verify_hash)
+        where json_encode matches PHP's default (no key sorting, no extra spaces).
         """
+        try:
+            data = json.loads(raw_body)
+        except (json.JSONDecodeError, ValueError):
+            return False
+
         verify_hash = data.get("verify_hash")
         if not verify_hash:
             return False
 
         filtered = {k: v for k, v in data.items() if k != "verify_hash"}
-        data_str = json.dumps(filtered, separators=(",", ":"), sort_keys=True)
+        # Do NOT sort keys — Plisio's PHP sdk uses json_encode() without ksort,
+        # so preserving the original key order avoids a signature mismatch.
+        data_str = json.dumps(filtered, separators=(",", ":"))
         # MD5 is required by the Plisio IPN specification — not our choice.
         # See: https://plisio.net/documentation/endpoints/callbacks
         # usedforsecurity=False tells static-analysis tools this is a
