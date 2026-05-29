@@ -189,3 +189,52 @@ async def adjust_traffic_balance(
     result.pop("_id", None)
     return UserModel(**result)
 
+
+@router.post(
+    "/{telegram_id}/set_wallet",
+    response_model=UserModel,
+    summary="Set wallet balance to exact value (admin)",
+)
+async def set_wallet_balance(
+    telegram_id: int,
+    amount: float,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserModel:
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Amount must not be negative")
+    user_doc = await db.users.find_one({"telegram_id": telegram_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    result = await db.users.find_one_and_update(
+        {"telegram_id": telegram_id},
+        {"$set": {"wallet_balance_usd": amount}},
+        return_document=True,
+    )
+    result.pop("_id", None)
+    return UserModel(**result)
+
+
+@router.post(
+    "/{telegram_id}/set_traffic",
+    response_model=UserModel,
+    summary="Set traffic balance to exact value in GB (admin)",
+)
+async def set_traffic_balance(
+    telegram_id: int,
+    amount: float,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserModel:
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Amount must not be negative")
+    user_doc = await db.users.find_one({"telegram_id": telegram_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    result = await db.users.find_one_and_update(
+        {"telegram_id": telegram_id},
+        {"$set": {"traffic_balance_gb": amount}},
+        return_document=True,
+    )
+    result.pop("_id", None)
+    return UserModel(**result)
