@@ -146,7 +146,7 @@ async def buy_plan_with_wallet(
         )
 
     # Distribute referral bonuses using settings-based layer percentages
-    if current_user.referrer_id and price_usd > 0:
+    if current_user.referral.referrer_id and price_usd > 0:
         from app.routers.payments import _distribute_referral_bonuses
         await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price)
 

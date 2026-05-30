@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import client from '../api/client'
@@ -40,6 +40,8 @@ export default function Referral() {
   const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
   const [togglingType, setTogglingType] = useState(false)
+  const [referrals, setReferrals] = useState(null)
+  const [referralsLoading, setReferralsLoading] = useState(false)
 
   const botUsername = import.meta.env.VITE_BOT_USERNAME?.trim()
   const hasBotUsername = Boolean(botUsername)
@@ -47,11 +49,17 @@ export default function Referral() {
     ? `https://t.me/${botUsername}?start=${user.telegram_id}` 
     : '—'
 
-  const benefitType = user?.referral_benefit_type || 'usdt'
+  const benefitType = user?.referral?.benefit_type || 'usdt'
   const isTraffic = benefitType === 'traffic'
 
-  const referralBonusUsd = user?.referred_bonus_usd || 0
-  const referralBonusGb = user?.referred_bonus_gb || 0
+  useEffect(() => {
+    if (!user) return
+    setReferralsLoading(true)
+    client.get('/api/v1/users/me/referrals')
+      .then(res => setReferrals(res.data))
+      .catch(() => setReferrals([]))
+      .finally(() => setReferralsLoading(false))
+  }, [user?.telegram_id])
 
   const handleCopy = async () => {
     if (!user?.telegram_id || !hasBotUsername) return
@@ -93,6 +101,9 @@ export default function Referral() {
       setTogglingType(false)
     }
   }
+
+  const totalUsd = (referrals || []).filter(r => r.type === 'usdt').reduce((s, r) => s + r.amount, 0)
+  const totalGb = (referrals || []).filter(r => r.type === 'traffic').reduce((s, r) => s + r.amount, 0)
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -175,30 +186,30 @@ export default function Referral() {
         </div>
       </div>
 
-      {/* Bonus display */}
+      {/* Bonus summary */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
         <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Your Referral Bonuses</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
             <p className="text-slate-500 text-[10px] mb-1">USDT Bonus</p>
-            {loading ? (
+            {referralsLoading ? (
               <div className="skeleton h-6 w-16" />
             ) : (
-              <p className="text-emerald-400 font-bold text-lg">${referralBonusUsd.toFixed(2)}</p>
+              <p className="text-emerald-400 font-bold text-lg">${totalUsd.toFixed(2)}</p>
             )}
           </div>
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
             <p className="text-slate-500 text-[10px] mb-1">Traffic Bonus</p>
-            {loading ? (
+            {referralsLoading ? (
               <div className="skeleton h-6 w-16" />
             ) : (
-              <p className="text-blue-400 font-bold text-lg">{referralBonusGb.toFixed(2)} GB</p>
+              <p className="text-blue-400 font-bold text-lg">{totalGb.toFixed(2)} GB</p>
             )}
           </div>
         </div>
         <button
           onClick={handleWithdraw}
-          disabled={referralBonusUsd <= 0}
+          disabled={totalUsd <= 0}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
         >
           <WithdrawIcon />
@@ -206,25 +217,45 @@ export default function Referral() {
         </button>
       </div>
 
-      {/* How it works */}
+      {/* Referrals table */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
-        <h3 className="text-slate-300 font-semibold text-sm">How It Works</h3>
-        <div className="space-y-2">
-          {[
-            { step: '1', text: 'Share your referral link with friends' },
-            { step: '2', text: 'Friends start the bot using your link (automatic assignment)' },
-            { step: '3', text: 'Earn bonus USDT or GB traffic when they purchase plans' },
-            { step: '4', text: 'Toggle above to choose whether you receive USDT or GB traffic rewards' },
-            { step: '5', text: 'Withdraw USDT bonus via support ticket (provide USDT wallet & network)' },
-          ].map(({ step, text }) => (
-            <div key={step} className="flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                {step}
-              </span>
-              <p className="text-slate-400 text-xs">{step === '4' ? <span className="text-blue-400">{text}</span> : text}</p>
-            </div>
-          ))}
-        </div>
+        <h3 className="text-slate-300 font-semibold text-sm">Your Referrals</h3>
+        {referralsLoading ? (
+          <div className="skeleton h-20 w-full rounded-xl" />
+        ) : !referrals || referrals.length === 0 ? (
+          <p className="text-slate-500 text-xs text-center py-4">No referral bonuses yet. Share your link to earn!</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-700">
+                  <th className="text-left pb-2 pr-3">User</th>
+                  <th className="text-left pb-2 pr-3">Type</th>
+                  <th className="text-right pb-2 pr-3">Amount</th>
+                  <th className="text-right pb-2">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {referrals.map((r, i) => (
+                  <tr key={i} className="text-slate-300">
+                    <td className="py-2 pr-3 truncate max-w-[80px]">{r.username || r.referred_id}</td>
+                    <td className="py-2 pr-3">
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${r.type === 'traffic' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                        {r.type === 'traffic' ? 'GB' : 'USDT'}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono">
+                      {r.type === 'traffic' ? `${r.amount.toFixed(2)} GB` : `$${r.amount.toFixed(2)}`}
+                    </td>
+                    <td className="py-2 text-right text-slate-500">
+                      {new Date(r.date).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

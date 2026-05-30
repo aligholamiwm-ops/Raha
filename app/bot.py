@@ -15,7 +15,7 @@ from telegram import (
 from telegram.ext import Application, CommandHandler, ContextTypes
 from app.config import get_settings
 from app.database import connect_db, get_database, close_db
-from app.models.user import UserModel, TelegramInfo
+from app.models.user import UserModel, TelegramInfo, ReferralInfo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,7 +77,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             new_user = UserModel(
                 telegram_id=telegram_id,
-                referrer_id=referrer_id,
+                referral=ReferralInfo(referrer_id=referrer_id),
                 telegram_info=tg_info,
                 created_at=datetime.now(timezone.utc),
             )
