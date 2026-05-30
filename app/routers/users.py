@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
+from typing import List, Optional
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
-from app.models.user import UserModel, UserUpdate
+from app.models.user import UserModel, UserUpdate, ReferralRecord
 
 router = APIRouter()
 
@@ -66,16 +67,57 @@ async def update_my_profile(
     update_data.pop("traffic_balance_gb", None)
     update_data.pop("role", None)
 
-    if not update_data:
+    # referral_benefit_type maps to the nested referral.benefit_type field
+    benefit_type = update_data.pop("referral_benefit_type", None)
+
+    if not update_data and benefit_type is None:
         return current_user
+
+    set_fields: dict = {k: v for k, v in update_data.items()}
+    if benefit_type is not None:
+        set_fields["referral.benefit_type"] = benefit_type
 
     await db.users.update_one(
         {"telegram_id": current_user.telegram_id},
-        {"$set": update_data},
+        {"$set": set_fields},
     )
     doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
     doc.pop("_id", None)
     return UserModel(**doc)
+
+
+class ReferralRecordWithUsername(ReferralRecord):
+    username: Optional[str] = None
+
+
+@router.get(
+    "/me/referrals",
+    response_model=List[ReferralRecordWithUsername],
+    summary="Get current user's referral bonus records",
+)
+async def get_my_referrals(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> List[ReferralRecordWithUsername]:
+    records = current_user.referral.records
+    if not records:
+        return []
+
+    referred_ids = list({r.referred_id for r in records})
+    cursor = db.users.find(
+        {"telegram_id": {"$in": referred_ids}},
+        {"telegram_id": 1, "telegram_info.username": 1, "nickname": 1},
+    )
+    username_map: dict = {}
+    async for doc in cursor:
+        tid = doc["telegram_id"]
+        tg_info = doc.get("telegram_info") or {}
+        username_map[tid] = doc.get("nickname") or tg_info.get("username") or str(tid)
+
+    return [
+        ReferralRecordWithUsername(**r.model_dump(), username=username_map.get(r.referred_id))
+        for r in records
+    ]
 
 
 @router.get(

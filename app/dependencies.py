@@ -13,7 +13,7 @@ from slowapi.util import get_remote_address
 
 from app.config import get_settings, Settings
 from app.database import get_database
-from app.models.user import UserModel, UserRole, TelegramInfo
+from app.models.user import UserModel, UserRole, TelegramInfo, ReferralInfo
 from app.utils.security import verify_password
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ async def get_current_user(
 
         new_user = UserModel(
             telegram_id=telegram_id,
-            referrer_id=referrer_id,
+            referral=ReferralInfo(referrer_id=referrer_id),
             telegram_info=tg_info,
             created_at=datetime.now(timezone.utc),
         )

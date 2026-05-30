@@ -39,8 +39,10 @@ async def _distribute_referral_bonuses(
     amount_usd: float,
 ) -> None:
     """Walk the referral chain and credit each referrer according to their benefit preference."""
+    from datetime import datetime, timezone
     user_doc = await db.users.find_one({"telegram_id": buyer_telegram_id})
-    if not user_doc or not user_doc.get("referrer_id"):
+    referral_doc = (user_doc or {}).get("referral") or {}
+    if not user_doc or not referral_doc.get("referrer_id"):
         return
 
     # Read referral layer percentages from DB settings (fallback to env config)
@@ -51,7 +53,7 @@ async def _distribute_referral_bonuses(
             return float(data.get(f"layer_{layer}", 0.0))
         return settings.get_referral_layer_pct(layer)
 
-    current_referrer_id: int | None = user_doc["referrer_id"]
+    current_referrer_id: int | None = referral_doc["referrer_id"]
     for layer in range(FIRST_REFERRAL_LAYER, MAX_REFERRAL_LAYERS + 1):
         pct = get_layer_pct(layer)
         if pct <= 0 or not current_referrer_id:
@@ -64,26 +66,32 @@ async def _distribute_referral_bonuses(
         if not referrer_doc:
             break
 
-        benefit_type = referrer_doc.get("referral_benefit_type", ReferralBenefitType.usdt)
+        referrer_referral = (referrer_doc.get("referral") or {})
+        benefit_type = referrer_referral.get("benefit_type", ReferralBenefitType.usdt)
+        now = datetime.now(timezone.utc)
+        record = {
+            "referred_id": buyer_telegram_id,
+            "type": benefit_type,
+            "amount": bonus,
+            "date": now,
+        }
         if benefit_type == ReferralBenefitType.traffic:
-            # Credit traffic balance (1 USDT = 1 GB by convention) and track as GB bonus
-            inc_fields: dict = {"referred_bonus_gb": bonus, "traffic_balance_gb": bonus}
+            inc_fields: dict = {"traffic_balance_gb": bonus}
         else:
-            # Credit USDT wallet and track as USDT bonus
-            inc_fields = {"referred_bonus_usd": bonus, "wallet_balance_usd": bonus}
+            inc_fields = {"wallet_balance_usd": bonus}
 
         await db.users.update_one(
             {"telegram_id": current_referrer_id},
-            {"$inc": inc_fields},
+            {"$inc": inc_fields, "$push": {"referral.records": record}},
         )
         logger.info(
             "Layer %d referral bonus: %.4f to user %d from purchase by %d (type=%s)",
             layer, bonus, current_referrer_id, buyer_telegram_id, benefit_type,
         )
 
-        if not referrer_doc.get("referrer_id"):
+        if not referrer_referral.get("referrer_id"):
             break
-        current_referrer_id = referrer_doc["referrer_id"]
+        current_referrer_id = referrer_referral["referrer_id"]
 
 
 @router.post(
