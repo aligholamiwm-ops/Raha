@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 PLISIO_API_BASE = "https://plisio.net/api/v1"
 
-
 class PlisioClient:
     def __init__(self, api_key: str, secret_key: str) -> None:
         self.api_key = api_key
@@ -42,33 +41,32 @@ class PlisioClient:
     def verify_webhook(self, raw_body: bytes) -> bool:
         """
         Verify a Plisio IPN/webhook callback.
-
-        Accepts the raw request body bytes so that no serialization mutations
-        (e.g. float formatting, key ordering) occur before hashing.
-
-        Plisio signs the payload as:
-            md5(secret_key + json_encode_without_verify_hash)
-        where json_encode matches PHP's default (no key sorting, no extra spaces).
         """
         try:
             data = json.loads(raw_body)
         except (json.JSONDecodeError, ValueError):
             return False
-
         verify_hash = data.get("verify_hash")
         if not verify_hash:
             return False
-
         filtered = {k: v for k, v in data.items() if k != "verify_hash"}
-        # Do NOT sort keys — Plisio's PHP sdk uses json_encode() without ksort,
-        # so preserving the original key order avoids a signature mismatch.
-        data_str = json.dumps(filtered, separators=(",", ":"))
-        # MD5 is required by the Plisio IPN specification — not our choice.
-        # See: https://plisio.net/documentation/endpoints/callbacks
-        # usedforsecurity=False tells static-analysis tools this is a
-        # protocol-mandated checksum, not a password/secrets hash.
-        expected = hashlib.md5(  # noqa: S324
-            (self.secret_key + data_str).encode("utf-8"),
+        
+        # Try 1: Sorted keys (Plisio standard)
+        data_str_sorted = json.dumps(filtered, separators=(",", ":"), sort_keys=True)
+        expected_sorted = hashlib.md5(
+            (self.secret_key + data_str_sorted).encode("utf-8"),
             usedforsecurity=False,
         ).hexdigest()
-        return hmac.compare_digest(expected, verify_hash)
+        if hmac.compare_digest(expected_sorted, verify_hash):
+            return True
+            
+        # Try 2: Unsorted keys (Original order)
+        data_str_unsorted = json.dumps(filtered, separators=(",", ":"))
+        expected_unsorted = hashlib.md5(
+            (self.secret_key + data_str_unsorted).encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest()
+        if hmac.compare_digest(expected_unsorted, verify_hash):
+            return True
+            
+        return False
