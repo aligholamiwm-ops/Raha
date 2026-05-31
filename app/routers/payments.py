@@ -37,8 +37,17 @@ async def _distribute_referral_bonuses(
     settings: Settings,
     buyer_telegram_id: int,
     amount_usd: float,
+    traffic_gb: float = 0.0,
 ) -> None:
-    """Walk the referral chain and credit each referrer according to their benefit preference."""
+    """Walk the referral chain and record a pending bonus for each referrer.
+
+    Bonuses are stored in referral.records with charged=False.  They are NOT
+    immediately credited to the balance — the user must press "Charge my
+    balances" to apply them.
+
+    When the referrer has benefit_type=traffic the bonus is calculated as a
+    percentage of the traffic purchased (traffic_gb), not of the USD amount.
+    """
     from datetime import datetime, timezone
     user_doc = await db.users.find_one({"telegram_id": buyer_telegram_id})
     referral_doc = (user_doc or {}).get("referral") or {}
@@ -59,8 +68,6 @@ async def _distribute_referral_bonuses(
         if pct <= 0 or not current_referrer_id:
             break
 
-        bonus = (amount_usd * pct) / 100.0
-
         # Read referrer to determine benefit preference
         referrer_doc = await db.users.find_one({"telegram_id": current_referrer_id})
         if not referrer_doc:
@@ -68,24 +75,31 @@ async def _distribute_referral_bonuses(
 
         referrer_referral = (referrer_doc.get("referral") or {})
         benefit_type = referrer_referral.get("benefit_type", ReferralBenefitType.usdt)
+
+        # Bonus amount is calculated from traffic_gb when benefit_type is traffic,
+        # otherwise it is calculated from amount_usd.
+        if benefit_type == ReferralBenefitType.traffic:
+            bonus = (traffic_gb * pct) / 100.0
+        else:
+            bonus = (amount_usd * pct) / 100.0
+
         now = datetime.now(timezone.utc)
         record = {
             "referred_id": buyer_telegram_id,
             "type": benefit_type,
             "amount": bonus,
+            "layer": layer,
+            "charged": False,
             "date": now,
         }
-        if benefit_type == ReferralBenefitType.traffic:
-            inc_fields: dict = {"traffic_balance_gb": bonus}
-        else:
-            inc_fields = {"wallet_balance_usd": bonus}
 
+        # Store the pending bonus record — do NOT auto-credit the balance.
         await db.users.update_one(
             {"telegram_id": current_referrer_id},
-            {"$inc": inc_fields, "$push": {"referral.records": record}},
+            {"$push": {"referral.records": record}},
         )
         logger.info(
-            "Layer %d referral bonus: %.4f to user %d from purchase by %d (type=%s)",
+            "Layer %d referral bonus (pending): %.4f to user %d from purchase by %d (type=%s)",
             layer, bonus, current_referrer_id, buyer_telegram_id, benefit_type,
         )
 
@@ -148,7 +162,7 @@ async def create_invoice(
                 {"$addToSet": {"items.$.used_by": current_user.telegram_id}},
             )
 
-        await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price)
+        await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price, traffic_gb)
 
         logger.info(
             "User %d bought plan %s for %.2f USDT from wallet, +%.2f GB traffic",
@@ -396,7 +410,7 @@ async def payment_webhook(
                 )
                 logger.info("Payment %s completed: +%.2f USDT wallet to user %s", order_number, amount_usd, telegram_id)
 
-            await _distribute_referral_bonuses(db, settings, telegram_id, amount_usd)
+            await _distribute_referral_bonuses(db, settings, telegram_id, amount_usd, traffic_gb)
 
         await db.payments.update_one(
             {"payment_id": order_number},
