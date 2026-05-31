@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import client from '../api/client'
 
@@ -28,20 +27,19 @@ const ShareIcon = () => (
   </svg>
 )
 
-const WithdrawIcon = () => (
+const ChargeIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <polyline points="19 12 12 19 5 12" />
+    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
   </svg>
 )
 
 export default function Referral() {
   const { user, loading, refreshUser } = useApp()
-  const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
   const [togglingType, setTogglingType] = useState(false)
   const [referrals, setReferrals] = useState(null)
   const [referralsLoading, setReferralsLoading] = useState(false)
+  const [charging, setCharging] = useState(false)
 
   const botUsername = import.meta.env.VITE_BOT_USERNAME?.trim()
   const hasBotUsername = Boolean(botUsername)
@@ -52,13 +50,17 @@ export default function Referral() {
   const benefitType = user?.referral?.benefit_type || 'usdt'
   const isTraffic = benefitType === 'traffic'
 
-  useEffect(() => {
+  const fetchReferrals = () => {
     if (!user) return
     setReferralsLoading(true)
     client.get('/api/v1/users/me/referrals')
       .then(res => setReferrals(res.data))
       .catch(() => setReferrals([]))
       .finally(() => setReferralsLoading(false))
+  }
+
+  useEffect(() => {
+    fetchReferrals()
   }, [user?.telegram_id])
 
   const handleCopy = async () => {
@@ -84,8 +86,18 @@ export default function Referral() {
     }
   }
 
-  const handleWithdraw = () => {
-    navigate('/support', { state: { createWithdrawal: true } })
+  const handleCharge = async () => {
+    if (charging) return
+    setCharging(true)
+    try {
+      await client.post('/api/v1/users/me/charge-referral-bonuses')
+      await refreshUser()
+      fetchReferrals()
+    } catch (err) {
+      console.error('Failed to charge referral bonuses', err)
+    } finally {
+      setCharging(false)
+    }
   }
 
   const handleToggleBenefitType = async () => {
@@ -102,8 +114,10 @@ export default function Referral() {
     }
   }
 
-  const totalUsd = (referrals || []).filter(r => r.type === 'usdt').reduce((s, r) => s + r.amount, 0)
-  const totalGb = (referrals || []).filter(r => r.type === 'traffic').reduce((s, r) => s + r.amount, 0)
+  const pendingRecords = (referrals || []).filter(r => !r.charged)
+  const totalUsd = pendingRecords.filter(r => r.type === 'usdt').reduce((s, r) => s + r.amount, 0)
+  const totalGb = pendingRecords.filter(r => r.type === 'traffic').reduce((s, r) => s + r.amount, 0)
+  const hasPending = totalUsd > 0 || totalGb > 0
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -188,7 +202,7 @@ export default function Referral() {
 
       {/* Bonus summary */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
-        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Your Referral Bonuses</p>
+        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Pending Referral Bonuses</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
             <p className="text-slate-500 text-[10px] mb-1">USDT Bonus</p>
@@ -208,12 +222,12 @@ export default function Referral() {
           </div>
         </div>
         <button
-          onClick={handleWithdraw}
-          disabled={totalUsd <= 0}
+          onClick={handleCharge}
+          disabled={!hasPending || charging || referralsLoading}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
         >
-          <WithdrawIcon />
-          Withdraw USDT Bonus
+          <ChargeIcon />
+          {charging ? 'Charging…' : 'Charge my balances'}
         </button>
       </div>
 
@@ -230,6 +244,7 @@ export default function Referral() {
               <thead>
                 <tr className="text-slate-500 border-b border-slate-700">
                   <th className="text-left pb-2 pr-3">User</th>
+                  <th className="text-left pb-2 pr-3">Layer</th>
                   <th className="text-left pb-2 pr-3">Type</th>
                   <th className="text-right pb-2 pr-3">Amount</th>
                   <th className="text-right pb-2">Date</th>
@@ -239,6 +254,11 @@ export default function Referral() {
                 {referrals.map((r, i) => (
                   <tr key={i} className="text-slate-300">
                     <td className="py-2 pr-3 truncate max-w-[80px]">{r.username || r.referred_id}</td>
+                    <td className="py-2 pr-3">
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-700/60 text-slate-400">
+                        L{r.layer ?? 1}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3">
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${r.type === 'traffic' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
                         {r.type === 'traffic' ? 'GB' : 'USDT'}

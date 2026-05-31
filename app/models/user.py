@@ -35,6 +35,8 @@ class ReferralRecord(BaseModel):
     referred_id: int = Field(..., description="Telegram ID of the referred user whose purchase triggered this bonus")
     type: ReferralBenefitType = Field(..., description="Bonus type: usdt or traffic")
     amount: float = Field(..., ge=0.0, description="Bonus amount (USD or GB)")
+    layer: int = Field(default=1, ge=1, description="Referral chain layer (1 = direct referral)")
+    charged: bool = Field(default=False, description="Whether this bonus has been applied to the user's balance")
     date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

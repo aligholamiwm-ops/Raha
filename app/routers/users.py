@@ -120,6 +120,53 @@ async def get_my_referrals(
     ]
 
 
+@router.post(
+    "/me/charge-referral-bonuses",
+    response_model=UserModel,
+    summary="Apply all pending referral bonuses to the user's wallet and traffic balances",
+)
+async def charge_referral_bonuses(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> UserModel:
+    """Sum all uncharged referral records and credit them to the appropriate balance.
+
+    USDT records are added to wallet_balance_usd; traffic records are added to
+    traffic_balance_gb.  Records are marked as charged=True afterwards so they
+    cannot be applied again.
+    """
+    records = current_user.referral.records
+    uncharged = [r for r in records if not r.charged]
+    if not uncharged:
+        return current_user
+
+    usdt_total = sum(r.amount for r in uncharged if r.type == "usdt")
+    traffic_total = sum(r.amount for r in uncharged if r.type == "traffic")
+
+    inc_fields: dict = {}
+    if usdt_total > 0:
+        inc_fields["wallet_balance_usd"] = usdt_total
+    if traffic_total > 0:
+        inc_fields["traffic_balance_gb"] = traffic_total
+
+    # Mark all uncharged records as charged using positional-all operator
+    ops: dict = {
+        "$set": {"referral.records.$[elem].charged": True},
+    }
+    if inc_fields:
+        ops["$inc"] = inc_fields
+
+    await db.users.update_one(
+        {"telegram_id": current_user.telegram_id},
+        ops,
+        array_filters=[{"elem.charged": {"$ne": True}}],
+    )
+
+    doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
+    doc.pop("_id", None)
+    return UserModel(**doc)
+
+
 @router.get(
     "/",
     response_model=list[UserModel],
