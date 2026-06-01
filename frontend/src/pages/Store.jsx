@@ -5,7 +5,7 @@ import { createInvoice, createDepositInvoice, getMyLoans, payLoan, validateDisco
 import {
   FiShoppingCart, FiArrowUp, FiArrowDown, FiCreditCard,
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
-  FiPackage, FiZap, FiStar, FiAward, FiTag, FiX
+  FiPackage, FiTag, FiX
 } from 'react-icons/fi'
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -19,32 +19,72 @@ function parseDuration(planName) {
   return planName
 }
 
-function planMeta(trafficGb) {
+function cubeTheme(trafficGb) {
   const gb = trafficGb || 0
-  if (gb <= 10) return {
-    gradient: 'from-emerald-500 to-green-600', badge: null,
-    badgeColor: '', icon: FiPackage, popular: false
+  if (gb <= 10) return { top: '#6ee7b7', left: '#10b981', right: '#059669' }
+  if (gb <= 30) return { top: '#7dd3fc', left: '#3b82f6', right: '#1d4ed8' }
+  if (gb <= 60) return { top: '#a5b4fc', left: '#6366f1', right: '#4338ca' }
+  if (gb <= 120) return { top: '#d8b4fe', left: '#a855f7', right: '#7e22ce' }
+  if (gb <= 200) return { top: '#f9a8d4', left: '#ec4899', right: '#be185d' }
+  return { top: '#fca5a5', left: '#ef4444', right: '#b91c1c' }
+}
+
+/* ─── isometric cube SVG ──────────────────────────────────────── */
+function IsoCube({ topColor, leftColor, rightColor, size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      {/* Top face (diamond) */}
+      <path d="M10 1 L19 5.5 L10 10 L1 5.5 Z" fill={topColor} />
+      {/* Left face */}
+      <path d="M1 5.5 L10 10 L10 19 L1 14.5 Z" fill={leftColor} />
+      {/* Right face */}
+      <path d="M19 5.5 L10 10 L10 19 L19 14.5 Z" fill={rightColor} />
+    </svg>
+  )
+}
+
+/* ─── cube grid layout ────────────────────────────────────────── */
+const CUBE_COLS = 4
+const CUBE_ROWS = 5
+const CUBE_BASE = CUBE_COLS * CUBE_ROWS  // 20 per layer
+
+function CubeGrid({ count, theme }) {
+  const size = 20, gap = 2, lift = 10
+  const rowH = size + gap
+  const layers = Math.max(1, Math.ceil(count / CUBE_BASE))
+  const gridW = CUBE_COLS * size + (CUBE_COLS - 1) * gap
+  const baseRows = Math.min(CUBE_ROWS, Math.ceil(Math.min(count, CUBE_BASE) / CUBE_COLS))
+  const baseH = baseRows * size + Math.max(0, baseRows - 1) * gap
+  const totalH = baseH + (layers - 1) * lift
+
+  // Build flat list of rows across all Z-layers
+  const rowItems = []
+  for (let l = 0; l < layers; l++) {
+    const boxCount = Math.min(CUBE_BASE, count - l * CUBE_BASE)
+    const rowCount = Math.ceil(boxCount / CUBE_COLS)
+    for (let r = 0; r < rowCount; r++) {
+      rowItems.push({
+        key: `${l}-${r}`,
+        n: r < rowCount - 1 ? CUBE_COLS : boxCount - r * CUBE_COLS,
+        bottom: l * lift + r * rowH,
+      })
+    }
   }
-  if (gb <= 30) return {
-    gradient: 'from-teal-500 to-cyan-600', badge: null,
-    badgeColor: '', icon: FiZap, popular: false
-  }
-  if (gb <= 60) return {
-    gradient: 'from-blue-500 to-indigo-600', badge: 'Popular',
-    badgeColor: 'bg-blue-200 text-blue-900', icon: FiStar, popular: true
-  }
-  if (gb <= 120) return {
-    gradient: 'from-violet-500 to-purple-600', badge: 'Best Value',
-    badgeColor: 'bg-amber-400 text-amber-900', icon: FiAward, popular: true
-  }
-  if (gb <= 200) return {
-    gradient: 'from-purple-600 to-fuchsia-600', badge: 'Premium',
-    badgeColor: 'bg-fuchsia-200 text-fuchsia-900', icon: FiAward, popular: true
-  }
-  return {
-    gradient: 'from-orange-500 to-red-600', badge: '🔥 Unlimited',
-    badgeColor: 'bg-red-200 text-red-900', icon: FiAward, popular: true
-  }
+
+  return (
+    <div style={{ position: 'relative', width: gridW, height: totalH }}>
+      {rowItems.map(({ key, n, bottom }) => (
+        <div
+          key={key}
+          style={{ position: 'absolute', bottom, left: 0, display: 'flex', gap: '2px' }}
+        >
+          {Array.from({ length: n }, (_, i) => (
+            <IsoCube key={i} topColor={theme.top} leftColor={theme.left} rightColor={theme.right} size={size} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /* ─── sub-components ──────────────────────────────────────────── */
@@ -104,72 +144,45 @@ function TabBar({ active, onChange, hasLoanBadge }) {
   )
 }
 
-function PlanCard({ plan, onBuy, buying, walletBalance }) {
-  const meta = planMeta(plan.traffic_gb)
-  const Icon = meta.icon
-  const canAfford = (walletBalance || 0) >= (plan.price_usd || 0)
+/* ─── plan card (minimalist cube layout) ──────────────────────── */
+function CubePlanCard({ plan, minTrafficGb, onBuy, buying }) {
+  const cubeCount = Math.max(1, Math.ceil((plan.traffic_gb || 0) / minTrafficGb))
+  const theme = cubeTheme(plan.traffic_gb)
+  const isBuying = buying === plan.plan_name
 
   return (
-    <div className={`relative bg-slate-800 border rounded-2xl overflow-hidden flex-shrink-0 w-44 transition-all duration-200 active:scale-[0.97] ${
-      meta.popular ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'border-slate-700'
-    }`}>
-      {/* Gradient header */}
-      <div className={`bg-gradient-to-r ${meta.gradient} p-4 relative`}>
-        {meta.badge && (
-          <span className={`absolute top-2 right-2 text-[9px] font-bold px-2 py-0.5 rounded-full ${meta.badgeColor}`}>
-            {meta.badge}
-          </span>
-        )}
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center">
-            <Icon size={14} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-sm">{parseDuration(plan.plan_name)}</span>
-        </div>
-        <div className="flex items-end gap-1">
-          <span className="text-2xl font-black text-white">${(plan.price_usd || 0).toFixed(0)}</span>
-          <span className="text-white/70 text-xs mb-0.5">.{String((plan.price_usd || 0).toFixed(2)).split('.')[1]} USDT</span>
-        </div>
+    <div className="flex flex-col items-center gap-3 flex-shrink-0 w-24">
+      {/* Plan name */}
+      <p className="text-white font-semibold text-[11px] tracking-wide text-center leading-tight">
+        {parseDuration(plan.plan_name)}
+      </p>
+
+      {/* 3D cube visualization */}
+      <CubeGrid count={cubeCount} theme={theme} />
+
+      {/* Traffic & price */}
+      <div className="text-center space-y-0.5">
+        <p className="text-[11px] font-bold" style={{ color: theme.left }}>
+          {plan.traffic_gb} GB
+        </p>
+        <p className="text-white font-black text-sm">${(plan.price_usd || 0).toFixed(2)}</p>
       </div>
 
-      {/* Body */}
-      <div className="p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="text-sm font-bold text-emerald-400">{plan.traffic_gb} GB</span>
-          </div>
-          <span className="text-[10px] text-slate-500">Traffic</span>
-        </div>
-
-        {/* Affordability hint */}
-        {!canAfford && (
-          <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-500/10 rounded-lg px-2 py-1.5">
-            <FiInfo size={10} />
-            Need ${((plan.price_usd || 0) - walletBalance).toFixed(2)} more
-          </div>
-        )}
-
-        <button
-          onClick={() => onBuy(plan)}
-          disabled={buying === plan.plan_name}
-          className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
-            buying === plan.plan_name
-              ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-              : canAfford
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/20'
-                : 'bg-slate-700 hover:bg-slate-600 text-white'
-          }`}
-        >
-          {buying === plan.plan_name ? (
-            <><FiLoader size={12} className="animate-spin" /> Processing…</>
-          ) : canAfford ? (
-            <><FiCheck size={12} /> Buy Now</>
-          ) : (
-            <><FiShoppingCart size={12} /> Pay with Crypto</>
-          )}
-        </button>
-      </div>
+      {/* Buy button */}
+      <button
+        onClick={() => onBuy(plan)}
+        disabled={isBuying}
+        className={`w-full py-2 rounded-xl text-[10px] font-bold transition-all ${
+          isBuying
+            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+            : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white'
+        }`}
+      >
+        {isBuying
+          ? <FiLoader size={10} className="animate-spin mx-auto" />
+          : 'Buy'
+        }
+      </button>
     </div>
   )
 }
@@ -565,6 +578,8 @@ export default function Store() {
   }
 
   const totalUnpaidLoan = loans.filter(l => l.status === 'unpaid').reduce((s, l) => s + (l.amount_usdt || 0), 0)
+  const validGbs = plans.filter(p => (p.traffic_gb || 0) > 0).map(p => p.traffic_gb)
+  const minTrafficGb = validGbs.length > 0 ? Math.min(...validGbs) : 1
 
   const handlePayLoan = async (loan) => {
     setError(null); setSuccess(null)
@@ -680,9 +695,14 @@ export default function Store() {
           </div>
 
           {loading ? (
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+            <div className="flex gap-8 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-hide">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-48 w-44 flex-shrink-0 bg-slate-800 rounded-2xl animate-pulse snap-start" />
+                <div key={i} className="flex-shrink-0 w-24 flex flex-col items-center gap-3">
+                  <div className="h-3 w-16 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-20 w-[86px] bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-7 w-20 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-7 w-24 bg-slate-800 rounded-lg animate-pulse" />
+                </div>
               ))}
             </div>
           ) : plans.length === 0 ? (
@@ -691,16 +711,15 @@ export default function Store() {
               <p className="text-slate-400 text-sm">No plans available</p>
             </div>
           ) : (
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
+            <div className="flex gap-8 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide items-start">
               {[...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0)).map(plan => (
-                <div key={plan.plan_name} className="snap-start">
-                  <PlanCard
-                    plan={plan}
-                    onBuy={handleBuy}
-                    buying={buyingPlan}
-                    walletBalance={user?.wallet_balance_usd || 0}
-                  />
-                </div>
+                <CubePlanCard
+                  key={plan.plan_name}
+                  plan={plan}
+                  minTrafficGb={minTrafficGb}
+                  onBuy={handleBuy}
+                  buying={buyingPlan}
+                />
               ))}
             </div>
           )}
