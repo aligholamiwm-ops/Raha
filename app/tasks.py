@@ -36,8 +36,11 @@ def track_hourly_usage(self) -> dict:
     deltas, and persist them into the config_usages / inbound_usages bucket
     collections using MongoDB's $inc operator.
 
-    Only configs with client_status == "active" are tracked.
-    Disabled, expired, and deleted configs are skipped entirely.
+    Non-active (disabled/expired) configs that have just transitioned from
+    active will have their final delta captured before being skipped in
+    subsequent runs.  Configs already marked "deleted" in the DB, or those
+    that were non-active on the previous run with no new traffic, are skipped
+    entirely to avoid redundant work.
     """
     async def _run():
         db, mongo_client = _get_db()
@@ -89,8 +92,77 @@ def track_hourly_usage(self) -> dict:
                     else:
                         client_status = "active"
 
-                    # Skip non-active configs entirely
+                    # Hard-skip configs already marked "deleted" in the DB — they have
+                    # been fully accounted for by the delete API route.
+                    existing_doc = await db.config_usages.find_one(
+                        {"uuid": config_uuid, "date": today_midnight},
+                        {"client_status": 1, "_id": 0},
+                    )
+                    if existing_doc and existing_doc.get("client_status") == "deleted":
+                        continue
+
+                    # Retrieve the previous usage snapshot to compute delta and to
+                    # know whether this config was already non-active on the last run.
+                    snapshot = await db.usage_snapshots.find_one({"uuid": config_uuid})
+                    prev_up = float(snapshot["usage_up"]) if snapshot else 0.0
+                    prev_down = float(snapshot["usage_down"]) if snapshot else 0.0
+                    prev_status = snapshot.get("client_status", "active") if snapshot else "active"
+
+                    delta_up_bytes = max(0.0, usage_up - prev_up)
+                    delta_down_bytes = max(0.0, usage_down - prev_down)
+
+                    # For non-active configs: skip only if this config was already
+                    # non-active in the previous run AND produced no new traffic.
+                    # This ensures any bandwidth consumed right before a status change
+                    # (disabled/expired) is captured in the final delta pass.
                     if client_status != "active":
+                        if prev_status != "active" and delta_up_bytes == 0.0 and delta_down_bytes == 0.0:
+                            continue
+
+                        # Capture the final delta for this now-non-active config.
+                        empty_hourly = [{"u": 0.0, "d": 0.0} for _ in range(24)]
+                        await db.config_usages.update_one(
+                            {"uuid": config_uuid, "date": today_midnight},
+                            {
+                                "$set": {
+                                    "email": email,
+                                    "server_name": server_name,
+                                    "client_status": client_status,
+                                },
+                                "$setOnInsert": {"hourly_usage": empty_hourly},
+                            },
+                            upsert=True,
+                        )
+
+                        # Persist snapshot (including status) so the next run can
+                        # safely skip this config when it is still non-active.
+                        await db.usage_snapshots.update_one(
+                            {"uuid": config_uuid},
+                            {
+                                "$set": {
+                                    "usage_up": usage_up,
+                                    "usage_down": usage_down,
+                                    "client_status": client_status,
+                                    "updated_at": now,
+                                }
+                            },
+                            upsert=True,
+                        )
+
+                        delta_up_gb = round(delta_up_bytes / _BYTES_TO_GB, 2)
+                        delta_down_gb = round(delta_down_bytes / _BYTES_TO_GB, 2)
+                        if delta_up_gb > 0 or delta_down_gb > 0:
+                            await db.config_usages.update_one(
+                                {"uuid": config_uuid, "date": today_midnight},
+                                {
+                                    "$inc": {
+                                        f"hourly_usage.{hour}.u": delta_up_gb,
+                                        f"hourly_usage.{hour}.d": delta_down_gb,
+                                    }
+                                },
+                            )
+
+                        # Non-active configs do not contribute to inbound-level totals.
                         continue
 
                     empty_hourly = [{"u": 0.0, "d": 0.0} for _ in range(24)]
@@ -108,14 +180,6 @@ def track_hourly_usage(self) -> dict:
                         upsert=True,
                     )
 
-                    # Retrieve previous usage snapshot to compute delta
-                    snapshot = await db.usage_snapshots.find_one({"uuid": config_uuid})
-                    prev_up = float(snapshot["usage_up"]) if snapshot else 0.0
-                    prev_down = float(snapshot["usage_down"]) if snapshot else 0.0
-
-                    delta_up_bytes = max(0.0, usage_up - prev_up)
-                    delta_down_bytes = max(0.0, usage_down - prev_down)
-
                     # Persist snapshot update regardless of whether deltas are zero
                     await db.usage_snapshots.update_one(
                         {"uuid": config_uuid},
@@ -123,6 +187,7 @@ def track_hourly_usage(self) -> dict:
                             "$set": {
                                 "usage_up": usage_up,
                                 "usage_down": usage_down,
+                                "client_status": client_status,
                                 "updated_at": now,
                             }
                         },

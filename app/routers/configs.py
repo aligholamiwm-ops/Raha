@@ -261,11 +261,15 @@ async def toggle_config(
         raise HTTPException(status_code=502, detail=f"Failed to toggle config: {result.get('msg')}")
     clients = await xui.get_client_info(email=email)
     response = _client_to_response(clients[0] if clients else {**client, "enable": not client.get("enable")}, server_name, tid or current_user.telegram_id)
-    # Immediately reflect the new status in today's usage bucket (no upsert — only if doc exists)
-    try:
-        await _update_today_config_status(db, client["uuid"], response.status.value)
-    except Exception as exc:
-        logger.warning("toggle_config: failed to update usage status for %s: %s", client["uuid"], exc)
+    # Immediately reflect the new status in today's usage bucket.
+    # Always filter config_usages by uuid (not email) — emails can be duplicated
+    # across inbounds/servers, but uuid is the unique compound-index key.
+    config_uuid = client.get("uuid", "")
+    if config_uuid:
+        try:
+            await _update_today_config_status(db, config_uuid, response.status.value)
+        except Exception as exc:
+            logger.warning("toggle_config: failed to update usage status for %s: %s", config_uuid, exc)
     return response
 
 @router.put("/{email}/edit", response_model=VpnConfigResponse)
@@ -375,11 +379,15 @@ async def delete_config(
     refund_gb = max(0.0, total_gb - used_gb)
     if refund_gb > 0 and tid:
         await db.users.update_one({"telegram_id": tid}, {"$inc": {"traffic_balance_gb": refund_gb}})
-    # Immediately mark today's usage bucket as deleted so the scheduler stops tracking it
-    try:
-        await _update_today_config_status(db, client["uuid"], "deleted")
-    except Exception as exc:
-        logger.warning("delete_config: failed to mark usage status deleted for %s: %s", client["uuid"], exc)
+    # Immediately mark today's usage bucket as deleted so the scheduler stops tracking it.
+    # Always filter config_usages by uuid (not email) — emails can be duplicated
+    # across inbounds/servers, but uuid is the unique compound-index key.
+    config_uuid = client.get("uuid", "")
+    if config_uuid:
+        try:
+            await _update_today_config_status(db, config_uuid, "deleted")
+        except Exception as exc:
+            logger.warning("delete_config: failed to mark usage status deleted for %s: %s", config_uuid, exc)
 
 @router.get("/{config_uuid}/vless")
 async def get_vless_uri(
