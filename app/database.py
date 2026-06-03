@@ -39,3 +39,11 @@ async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.loans.create_index("loan_id", unique=True)
     await db.loans.create_index("telegram_id")
     await db.loans.create_index("status")
+    # Usage tracking collections
+    await db.config_usages.create_index([("uuid", 1), ("date", 1)], unique=True)
+    await db.config_usages.create_index("date")
+    await db.inbound_usages.create_index(
+        [("server_name", 1), ("inbound_id", 1), ("date", 1)], unique=True
+    )
+    await db.inbound_usages.create_index("date")
+    await db.usage_snapshots.create_index("uuid", unique=True)

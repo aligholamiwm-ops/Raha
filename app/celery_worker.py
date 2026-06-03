@@ -25,5 +25,9 @@ celery_app.conf.update(
             "task": "app.tasks.expire_old_configs",
             "schedule": 3600.0,
         },
+        "track-hourly-usage": {
+            "task": "app.tasks.track_hourly_usage",
+            "schedule": 3600.0,  # every hour
+        },
     },
 )

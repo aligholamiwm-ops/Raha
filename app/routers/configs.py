@@ -18,6 +18,39 @@ from app.integrations.xui_api import build_xui_client
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _today_midnight() -> datetime:
+    """Return today's date truncated to midnight UTC."""
+    now = datetime.now(timezone.utc)
+    return datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+
+
+async def _update_today_config_status(
+    db: AsyncIOMotorDatabase,
+    config_uuid: str,
+    new_status: str,
+    *,
+    email: str = "",
+    server_name: str = "",
+    upsert: bool = False,
+) -> None:
+    """Update (or optionally upsert) the client_status field in today's config_usages document."""
+    today = _today_midnight()
+    update: dict = {"$set": {"client_status": new_status}}
+    if email:
+        update["$set"]["email"] = email
+    if server_name:
+        update["$set"]["server_name"] = server_name
+    if upsert:
+        update["$setOnInsert"] = {
+            "hourly_usage": [{"u": 0.0, "d": 0.0} for _ in range(24)]
+        }
+    await db.config_usages.update_one(
+        {"uuid": config_uuid, "date": today},
+        update,
+        upsert=upsert,
+    )
+
 def _parse_telegram_id_from_email(email: str) -> Optional[int]:
     try:
         return int(email.split("-")[0])
@@ -185,12 +218,22 @@ async def create_config(
         {"$inc": {"traffic_balance_gb": -payload.total_gb}}
     )
     clients = await xui.get_client_info(email=email)
-    return _client_to_response(clients[0] if clients else {**client_data, "uuid": config_uuid, "subscription_link": xui.build_subscription_link(sub_id)}, server_name, current_user.telegram_id)
+    response = _client_to_response(clients[0] if clients else {**client_data, "uuid": config_uuid, "subscription_link": xui.build_subscription_link(sub_id)}, server_name, current_user.telegram_id)
+    # Immediately initialise today's usage bucket for the new config
+    try:
+        await _update_today_config_status(
+            db, config_uuid, response.status.value,
+            email=email, server_name=server_name, upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("create_config: failed to initialise usage bucket for %s: %s", config_uuid, exc)
+    return response
 
 @router.put("/{email}/toggle", response_model=VpnConfigResponse)
 async def toggle_config(
     email: str,
     current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> VpnConfigResponse:
     tid = _parse_telegram_id_from_email(email)
@@ -217,7 +260,13 @@ async def toggle_config(
     if not result.get("success"):
         raise HTTPException(status_code=502, detail=f"Failed to toggle config: {result.get('msg')}")
     clients = await xui.get_client_info(email=email)
-    return _client_to_response(clients[0] if clients else {**client, "enable": not client.get("enable")}, server_name, tid or current_user.telegram_id)
+    response = _client_to_response(clients[0] if clients else {**client, "enable": not client.get("enable")}, server_name, tid or current_user.telegram_id)
+    # Immediately reflect the new status in today's usage bucket (no upsert — only if doc exists)
+    try:
+        await _update_today_config_status(db, client["uuid"], response.status.value)
+    except Exception as exc:
+        logger.warning("toggle_config: failed to update usage status for %s: %s", client["uuid"], exc)
+    return response
 
 @router.put("/{email}/edit", response_model=VpnConfigResponse)
 async def edit_config(
@@ -326,6 +375,11 @@ async def delete_config(
     refund_gb = max(0.0, total_gb - used_gb)
     if refund_gb > 0 and tid:
         await db.users.update_one({"telegram_id": tid}, {"$inc": {"traffic_balance_gb": refund_gb}})
+    # Immediately mark today's usage bucket as deleted so the scheduler stops tracking it
+    try:
+        await _update_today_config_status(db, client["uuid"], "deleted")
+    except Exception as exc:
+        logger.warning("delete_config: failed to mark usage status deleted for %s: %s", client["uuid"], exc)
 
 @router.get("/{config_uuid}/vless")
 async def get_vless_uri(
