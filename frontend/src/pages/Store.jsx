@@ -19,103 +19,35 @@ function parseDuration(planName) {
   return planName
 }
 
-function cubeTheme(trafficGb) {
+/* ─── plan colour by traffic volume ──────────────────────────────── */
+function planColor(trafficGb) {
   const gb = trafficGb || 0
-  if (gb <= 10) return { top: '#6ee7b7', left: '#10b981', right: '#059669' }
-  if (gb <= 30) return { top: '#7dd3fc', left: '#3b82f6', right: '#1d4ed8' }
-  if (gb <= 60) return { top: '#a5b4fc', left: '#6366f1', right: '#4338ca' }
-  if (gb <= 120) return { top: '#d8b4fe', left: '#a855f7', right: '#7e22ce' }
-  if (gb <= 200) return { top: '#f9a8d4', left: '#ec4899', right: '#be185d' }
-  return { top: '#fca5a5', left: '#ef4444', right: '#b91c1c' }
+  if (gb <= 10)  return '#34d399'
+  if (gb <= 30)  return '#60a5fa'
+  if (gb <= 60)  return '#818cf8'
+  if (gb <= 120) return '#c084fc'
+  if (gb <= 200) return '#f472b6'
+  return '#f87171'
 }
 
-/* ─── isometric cube SVG with gradients ──────────────────────────── */
-function IsoCube({ topColor, leftColor, rightColor, size = 20 }) {
-  // Gradient IDs are derived from topColor – same theme → same ID, safe to reuse
-  const gid = topColor.replace('#', 'c')
+/* ─── flat 2D square (area ∝ traffic volume) ─────────────────────── */
+function FlatSquare({ side, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ display: 'block' }}>
-      <defs>
-        {/* Top face: bright highlight fading toward the back edge */}
-        <linearGradient id={`${gid}-t`} x1="1" y1="1" x2="19" y2="10" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.35)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0.05)" />
-        </linearGradient>
-        {/* Left face: slight light-to-shadow top-to-bottom */}
-        <linearGradient id={`${gid}-l`} x1="1" y1="5.5" x2="1" y2="19" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0.3)" />
-        </linearGradient>
-        {/* Right face: darker shadow */}
-        <linearGradient id={`${gid}-r`} x1="19" y1="5.5" x2="19" y2="19" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="rgba(0,0,0,0.05)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0.4)" />
-        </linearGradient>
-      </defs>
-
-      {/* Top face */}
-      <path d="M10 1 L19 5.5 L10 10 L1 5.5 Z" fill={topColor} />
-      <path d="M10 1 L19 5.5 L10 10 L1 5.5 Z" fill={`url(#${gid}-t)`} />
-
-      {/* Left face */}
-      <path d="M1 5.5 L10 10 L10 19 L1 14.5 Z" fill={leftColor} />
-      <path d="M1 5.5 L10 10 L10 19 L1 14.5 Z" fill={`url(#${gid}-l)`} />
-
-      {/* Right face */}
-      <path d="M19 5.5 L10 10 L10 19 L19 14.5 Z" fill={rightColor} />
-      <path d="M19 5.5 L10 10 L10 19 L19 14.5 Z" fill={`url(#${gid}-r)`} />
-
-      {/* Top ridge highlight – micro-thin white line defines the top peak */}
-      <polyline points="1,5.5 10,1 19,5.5" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.6" strokeLinejoin="round" />
-      {/* Centre vertical groove between left and right faces */}
-      <line x1="10" y1="10" x2="10" y2="19" stroke="rgba(0,0,0,0.35)" strokeWidth="0.6" />
-    </svg>
+    <div
+      style={{
+        width: side,
+        height: side,
+        background: color,
+        flexShrink: 0,
+      }}
+    />
   )
 }
 
-/* ─── cube grid layout (zero-gap tightly packed) ─────────────────── */
-const CUBE_COLS = 4
-const CUBE_ROWS = 5
-const CUBE_BASE = CUBE_COLS * CUBE_ROWS  // 20 per layer
-
-function CubeGrid({ count, theme }) {
-  // gap = 0 → cubes touch; the 1-px SVG-internal padding on each side
-  // creates a natural micro-thin groove between adjacent cube faces.
-  const size = 20, lift = 10
-  const layers = Math.max(1, Math.ceil(count / CUBE_BASE))
-  const gridW = CUBE_COLS * size                                    // 80px
-  const baseRows = Math.min(CUBE_ROWS, Math.ceil(Math.min(count, CUBE_BASE) / CUBE_COLS))
-  const baseH = baseRows * size                                     // rows × 20px
-  const totalH = baseH + (layers - 1) * lift
-
-  const rowItems = []
-  for (let l = 0; l < layers; l++) {
-    const boxCount = Math.min(CUBE_BASE, count - l * CUBE_BASE)
-    const rowCount = Math.ceil(boxCount / CUBE_COLS)
-    for (let r = 0; r < rowCount; r++) {
-      rowItems.push({
-        key: `${l}-${r}`,
-        n: r < rowCount - 1 ? CUBE_COLS : boxCount - r * CUBE_COLS,
-        bottom: l * lift + r * size,
-      })
-    }
-  }
-
-  return (
-    <div style={{ position: 'relative', width: gridW, height: totalH, margin: '0 auto' }}>
-      {rowItems.map(({ key, n, bottom }) => (
-        <div
-          key={key}
-          style={{ position: 'absolute', bottom, left: 0, display: 'flex' }}
-        >
-          {Array.from({ length: n }, (_, i) => (
-            <IsoCube key={i} topColor={theme.top} leftColor={theme.left} rightColor={theme.right} size={size} />
-          ))}
-        </div>
-      ))}
-    </div>
-  )
-}
+/* ─── grid layout constants ──────────────────────────────────────── */
+const COL_W    = 108  // px – fixed width per plan column
+const MAX_SIDE = 96   // px – square side for the largest plan
+const SQ_ROW_H = MAX_SIDE + 28  // fixed height for the square row
 
 /* ─── sub-components ──────────────────────────────────────────── */
 function BalanceCard({ walletUsd, trafficGb, unpaidLoan }) {
@@ -174,46 +106,89 @@ function TabBar({ active, onChange, hasLoanBadge }) {
   )
 }
 
-/* ─── plan card (transparent, all elements centred) ──────────────── */
-function CubePlanCard({ plan, minTrafficGb, onBuy, buying }) {
-  const cubeCount = Math.max(1, Math.ceil((plan.traffic_gb || 0) / minTrafficGb))
-  const theme = cubeTheme(plan.traffic_gb)
-  const isBuying = buying === plan.plan_name
+/* ─── plans grid – 5 strictly aligned rows across all plans ──────── */
+function PlansGrid({ plans, maxTrafficGb, onBuy, buying }) {
+  const sorted = [...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0))
+  const n   = sorted.length
+  const max = maxTrafficGb || 1
 
   return (
-    <div className="flex flex-col items-center gap-3 flex-shrink-0 w-[112px]">
-      {/* Plan name – centred */}
-      <p className="text-white font-semibold text-[11px] tracking-wide text-center leading-tight w-full">
-        {parseDuration(plan.plan_name)}
-      </p>
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: '4px', width: '100%' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${n}, ${COL_W}px)`,
+          gridTemplateRows: `auto ${SQ_ROW_H}px auto auto auto`,
+          columnGap: '8px',
+          rowGap: 0,
+          width: `${n * COL_W + (n - 1) * 8}px`,
+          minWidth: '100%',
+        }}
+      >
+        {sorted.map((plan, i) => {
+          const gb   = plan.traffic_gb || 0
+          const side = Math.max(18, Math.round(MAX_SIDE * Math.sqrt(gb) / Math.sqrt(max)))
+          const color = planColor(gb)
+          const col  = i + 1
+          const busy = buying === plan.plan_name
 
-      {/* 3D cube cluster – centred in its space */}
-      <div className="flex justify-center w-full">
-        <CubeGrid count={cubeCount} theme={theme} />
-      </div>
+          return (
+            <React.Fragment key={plan.plan_name}>
 
-      {/* Single horizontal baseline row: GB · Price · Buy */}
-      <div className="flex items-center justify-center gap-1.5 w-full">
-        <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: theme.left }}>
-          {plan.traffic_gb}&nbsp;GB
-        </span>
-        <span className="text-white font-black text-[11px] whitespace-nowrap">
-          ${(plan.price_usd || 0).toFixed(2)}
-        </span>
-        <button
-          onClick={() => onBuy(plan)}
-          disabled={isBuying}
-          className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all flex-shrink-0 flex items-center justify-center ${
-            isBuying
-              ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-              : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white'
-          }`}
-        >
-          {isBuying
-            ? <FiLoader size={8} className="animate-spin" />
-            : 'Buy'
-          }
-        </button>
+              {/* Row 1 – Plan name */}
+              <div style={{ gridColumn: col, gridRow: 1, textAlign: 'center', paddingBottom: '14px' }}>
+                <span className="text-white font-semibold tracking-wide" style={{ fontSize: '11px', lineHeight: 1.3 }}>
+                  {parseDuration(plan.plan_name)}
+                </span>
+              </div>
+
+              {/* Row 2 – Flat 2D square (proportional area) */}
+              <div
+                style={{
+                  gridColumn: col,
+                  gridRow: 2,
+                  height: SQ_ROW_H,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FlatSquare side={side} color={color} />
+              </div>
+
+              {/* Row 3 – Traffic volume */}
+              <div style={{ gridColumn: col, gridRow: 3, textAlign: 'center', paddingTop: '12px', paddingBottom: '4px' }}>
+                <span className="font-bold whitespace-nowrap" style={{ fontSize: '11px', color }}>
+                  {gb}&nbsp;GB
+                </span>
+              </div>
+
+              {/* Row 4 – Price */}
+              <div style={{ gridColumn: col, gridRow: 4, textAlign: 'center', paddingBottom: '10px' }}>
+                <span className="text-white font-black whitespace-nowrap" style={{ fontSize: '13px' }}>
+                  ${(plan.price_usd || 0).toFixed(2)}
+                </span>
+              </div>
+
+              {/* Row 5 – Buy button (uniform size across all plans) */}
+              <div style={{ gridColumn: col, gridRow: 5, display: 'flex', justifyContent: 'center' }}>
+                <button
+                  onClick={() => onBuy(plan)}
+                  disabled={busy}
+                  style={{ width: '72px', height: '30px' }}
+                  className={`rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${
+                    busy
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white'
+                  }`}
+                >
+                  {busy ? <FiLoader size={9} className="animate-spin" /> : 'Buy'}
+                </button>
+              </div>
+
+            </React.Fragment>
+          )
+        })}
       </div>
     </div>
   )
@@ -611,7 +586,7 @@ export default function Store() {
 
   const totalUnpaidLoan = loans.filter(l => l.status === 'unpaid').reduce((s, l) => s + (l.amount_usdt || 0), 0)
   const validGbs = plans.filter(p => (p.traffic_gb || 0) > 0).map(p => p.traffic_gb)
-  const minTrafficGb = validGbs.length > 0 ? Math.min(...validGbs) : 1
+  const maxTrafficGb = validGbs.length > 0 ? Math.max(...validGbs) : 1
 
   const handlePayLoan = async (loan) => {
     setError(null); setSuccess(null)
@@ -728,12 +703,14 @@ export default function Store() {
           </div>
 
           {loading ? (
-            <div className="flex flex-wrap gap-6 justify-center">
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ width: '100%' }}>
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="flex-shrink-0 w-[112px] flex flex-col items-center gap-3">
-                  <div className="h-3 w-16 bg-slate-800 rounded-lg animate-pulse" />
-                  <div className="h-20 w-20 bg-slate-800 rounded-lg animate-pulse" />
-                  <div className="h-5 w-full bg-slate-800 rounded-lg animate-pulse" />
+                <div key={i} className="flex flex-col items-center gap-3 flex-shrink-0" style={{ width: COL_W }}>
+                  <div className="h-3 w-14 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="bg-slate-800 rounded-sm animate-pulse" style={{ width: 40 + i * 18, height: 40 + i * 18 }} />
+                  <div className="h-3 w-10 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-4 w-12 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-[30px] w-[72px] bg-slate-800 rounded-lg animate-pulse" />
                 </div>
               ))}
             </div>
@@ -743,17 +720,12 @@ export default function Store() {
               <p className="text-slate-400 text-sm">No plans available</p>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-6 justify-center items-end">
-              {[...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0)).map(plan => (
-                <CubePlanCard
-                  key={plan.plan_name}
-                  plan={plan}
-                  minTrafficGb={minTrafficGb}
-                  onBuy={handleBuy}
-                  buying={buyingPlan}
-                />
-              ))}
-            </div>
+            <PlansGrid
+              plans={plans}
+              maxTrafficGb={maxTrafficGb}
+              onBuy={handleBuy}
+              buying={buyingPlan}
+            />
           )}
 
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl px-4 py-3 flex items-start gap-3 self-stretch">
