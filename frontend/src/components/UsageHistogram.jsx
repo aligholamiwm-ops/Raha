@@ -16,9 +16,19 @@ const WINDOWS = [
   { id: 'all', label: 'All' },
 ]
 
+// Parse a timestamp string as UTC (MongoDB returns naive UTC datetimes)
+function parseUtc(ts) {
+  if (!ts) return new Date(0)
+  // Append Z if no timezone info present
+  if (!ts.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ts)) {
+    return new Date(ts + 'Z')
+  }
+  return new Date(ts)
+}
+
 // Extract date/time parts in Tehran timezone
 function getTehranParts(ts) {
-  const date = new Date(ts)
+  const date = parseUtc(ts)
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Tehran',
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -29,24 +39,38 @@ function getTehranParts(ts) {
   return { year: get('year'), month: get('month'), day: get('day'), hour, minute: get('minute') }
 }
 
-// Convert Gregorian (Tehran local) to Shamsi date string "jM/jD"
+// Convert Gregorian (Tehran local) to Shamsi date string "jY/jM/jD"
 function toShamsi(year, month, day) {
   const j = jalaali.toJalaali(year, month, day)
+  return `${j.jy}/${j.jm}/${j.jd}`
+}
+
+// Short Shamsi without year "jM/jD"
+function toShamsiShort(year, month, day) {
+  const j = jalaali.toJalaali(year, month, day)
   return `${j.jm}/${j.jd}`
+}
+
+// Convert 24h hour to 12h label (e.g. 0→"12AM", 13→"1PM")
+function to12h(hour) {
+  if (hour === 0) return '12AM'
+  if (hour < 12) return `${hour}AM`
+  if (hour === 12) return '12PM'
+  return `${hour - 12}PM`
 }
 
 function formatXLabel(ts, timeframe, window) {
   const { year, month, day, hour } = getTehranParts(ts)
   if (timeframe === 'H') {
     if (window === '1D') {
-      // Show label every 6 hours
-      return hour % 6 === 0 ? `${String(hour).padStart(2, '0')}:00` : ''
+      // Show label every 6 hours: 12AM, 6AM, 12PM, 6PM
+      return hour % 6 === 0 ? to12h(hour) : ''
     }
     // 30D or all – show Shamsi date only at midnight (Tehran)
-    return hour === 0 ? toShamsi(year, month, day) : ''
+    return hour === 0 ? toShamsiShort(year, month, day) : ''
   }
   // Daily – show Shamsi date
-  return toShamsi(year, month, day)
+  return toShamsiShort(year, month, day)
 }
 
 function formatGB(value) {
@@ -56,13 +80,26 @@ function formatGB(value) {
   return `${value.toFixed(2)} GB`
 }
 
-// Y-axis tick always in GB
+// Y-axis tick formatter
 function formatYTick(v) {
   if (v === 0) return '0'
   if (v < 0.01) return `${v.toFixed(3)}`
   if (v < 0.1) return `${v.toFixed(2)}`
   if (v < 1) return `${v.toFixed(1)}`
   return `${v.toFixed(1)}`
+}
+
+// Build Shamsi interval string for a data range
+function buildIntervalLabel(data) {
+  if (!data || data.length === 0) return null
+  const first = getTehranParts(data[0].ts)
+  const last = getTehranParts(data[data.length - 1].ts)
+  const startStr = toShamsi(first.year, first.month, first.day)
+  const endStr = toShamsi(last.year, last.month, last.day)
+  if (startStr === endStr) {
+    return `${startStr} (تهران)`
+  }
+  return `${startStr} – ${endStr} (تهران)`
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -104,6 +141,7 @@ export default function UsageHistogram({ configs = [] }) {
 
   const totalGB = data.reduce((s, p) => s + p.gb, 0)
   const maxGB = data.reduce((m, p) => Math.max(m, p.gb), 0)
+  const intervalLabel = buildIntervalLabel(data)
 
   const barColor = (value) => {
     if (maxGB === 0) return '#10b981'
@@ -118,7 +156,12 @@ export default function UsageHistogram({ configs = [] }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-slate-300 font-semibold text-sm">Usage History</h2>
-        <span className="text-[10px] text-slate-500">{formatGB(totalGB)} total</span>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {intervalLabel && (
+            <span className="text-[10px] text-slate-500">{intervalLabel}</span>
+          )}
+          <span className="text-[10px] text-slate-500">{formatGB(totalGB)} total</span>
+        </div>
       </div>
 
       {/* Controls */}
@@ -184,12 +227,12 @@ export default function UsageHistogram({ configs = [] }) {
           <div className="h-full flex items-center justify-center text-xs text-slate-500">No data for this period</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barCategoryGap="20%">
+            <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }} barCategoryGap="20%">
               <XAxis
                 dataKey="ts"
                 tickFormatter={ts => formatXLabel(ts, timeframe, window)}
                 tick={{ fill: '#64748b', fontSize: 9 }}
-                axisLine={false}
+                axisLine={{ stroke: '#334155', strokeWidth: 1 }}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
@@ -198,7 +241,7 @@ export default function UsageHistogram({ configs = [] }) {
                 tick={{ fill: '#64748b', fontSize: 9 }}
                 axisLine={{ stroke: '#64748b', strokeWidth: 1 }}
                 tickLine={false}
-                width={42}
+                width={36}
                 label={{ value: 'GB', position: 'insideTopLeft', offset: 2, fill: '#94a3b8', fontSize: 9, fontWeight: 600 }}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
