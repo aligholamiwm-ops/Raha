@@ -65,12 +65,23 @@ def track_hourly_usage(self) -> dict:
                 # Accumulate inbound-level deltas: {inbound_id -> {"up": bytes, "down": bytes}}
                 inbound_deltas: dict = {}
 
+                # Load all known telegram IDs to filter configs belonging to telegram users
+                telegram_ids = set()
+                async for user_doc in db.users.find({}, {"telegram_id": 1, "_id": 0}):
+                    telegram_ids.add(str(user_doc["telegram_id"]))
+
                 for c in clients:
                     config_uuid = c.get("uuid", "")
                     if not config_uuid:
                         continue
 
                     email = c.get("email", "")
+
+                    # Only track configs belonging to telegram users.
+                    # Telegram user configs have emails in the format "{telegram_id}-{custom_name}".
+                    email_prefix = email.split("-")[0] if "-" in email else ""
+                    if email_prefix not in telegram_ids:
+                        continue
                     usage_up = float(c.get("usage_up", 0))
                     usage_down = float(c.get("usage_down", 0))
                     enable = c.get("enable", True)
