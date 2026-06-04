@@ -1,5 +1,4 @@
 import logging
-import re
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -506,41 +505,6 @@ async def set_admin_password(
         {"$set": {"admin_password": hashed}},
     )
     return {"status": "success", "message": f"Admin password set for user {telegram_id}"}
-
-
-@router.post("/cleanup-config-usages", summary="Remove config usages not belonging to telegram users")
-async def cleanup_config_usages(
-    _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> dict:
-    """
-    Delete all documents from config_usages whose email does not start with
-    a known telegram_id (i.e. non-telegram user configs).
-    Telegram user config emails follow the pattern '{telegram_id}-{custom_name}'.
-    """
-    try:
-        # Collect all known telegram IDs as strings
-        telegram_ids = set()
-        async for user_doc in db.users.find({}, {"telegram_id": 1, "_id": 0}):
-            telegram_ids.add(str(user_doc["telegram_id"]))
-
-        if not telegram_ids:
-            return {"deleted_count": 0, "message": "No telegram users found; nothing deleted"}
-
-        # Build regex patterns matching emails that start with a known telegram_id
-        # Pattern: email must start with one of the known telegram IDs followed by '-'
-        valid_prefixes = [re.escape(tid) + r"-" for tid in telegram_ids]
-        combined_pattern = "^(?:" + "|".join(valid_prefixes) + ")"
-
-        result = await db.config_usages.delete_many(
-            {"email": {"$not": {"$regex": combined_pattern}}}
-        )
-        deleted = result.deleted_count
-        logger.info("cleanup_config_usages: deleted %d non-telegram config usage docs", deleted)
-        return {"deleted_count": deleted, "message": f"Deleted {deleted} non-telegram config usage documents"}
-    except Exception as exc:
-        logger.error("cleanup_config_usages error: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to clean up config usages")
 
 
 @router.post("/verify-password", summary="Verify calling admin's 2FA password")
