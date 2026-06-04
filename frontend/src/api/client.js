@@ -90,6 +90,9 @@ export const updateNickname = (nickname) =>
 export const getUsageHistory = (timeframe = 'H', window = '1D', config = 'all') =>
   api.get('/api/v1/users/me/usage-history', { params: { timeframe, window, config } }).then((r) => r.data)
 
+export const getAdminInboundUsage = (timeframe = 'H', window = '1D') =>
+  api.get('/api/v1/admin/servers/inbound-usage', { params: { timeframe, window } }).then((r) => r.data)
+
 export const validateDiscount = (code) =>
   api.get(`/api/v1/discounts/validate/${encodeURIComponent(code)}`).then((r) => r.data)
 

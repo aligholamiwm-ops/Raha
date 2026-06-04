@@ -192,11 +192,15 @@ async def get_usage_history(
     ).sort("date", 1)
     docs = await cursor.to_list(length=None)
 
+    def _utc_day(day: datetime) -> datetime:
+        """Ensure the day datetime is UTC-aware (MongoDB returns naive UTC datetimes)."""
+        return day if day.tzinfo is not None else day.replace(tzinfo=timezone.utc)
+
     if timeframe == "H":
         # Key: (date, hour) → total bytes in GB
         bucket_map: dict = defaultdict(float)
         for doc in docs:
-            day: datetime = doc["date"]
+            day = _utc_day(doc["date"])
             for hour, bucket in enumerate(doc.get("hourly_usage", [])):
                 ts = (day + timedelta(hours=hour)).isoformat()
                 bucket_map[ts] += (bucket.get("u", 0) + bucket.get("d", 0))
@@ -205,7 +209,7 @@ async def get_usage_history(
         # Daily aggregation
         daily_map: dict = defaultdict(float)
         for doc in docs:
-            day: datetime = doc["date"]
+            day = _utc_day(doc["date"])
             day_str = day.isoformat()
             for bucket in doc.get("hourly_usage", []):
                 daily_map[day_str] += (bucket.get("u", 0) + bucket.get("d", 0))

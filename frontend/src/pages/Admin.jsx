@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser } from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminInboundUsage } from '../api/client';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
   FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap,
   FiSend, FiRadio, FiMessageSquare, FiLock, FiEye, FiEyeOff, FiAlertCircle
 } from 'react-icons/fi';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
 
 const Toast = ({ toasts }) => (
   <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
@@ -99,6 +102,177 @@ const Badge = ({ children, variant = "info" }) => {
   );
 };
 
+// ─── Inbound Usage Histogram (admin, no timezone conversion needed) ────────────
+
+const INBOUND_TIMEFRAMES = [
+  { id: 'H', label: 'Hourly' },
+  { id: 'D', label: 'Daily' },
+];
+const INBOUND_WINDOWS = [
+  { id: '1D', label: '1D' },
+  { id: '1W', label: '1W' },
+  { id: '1M', label: '1M' },
+  { id: 'all', label: 'All' },
+];
+
+function inboundFormatGB(value) {
+  if (value === 0) return '0 GB';
+  if (value < 0.001) return `${(value * 1024 * 1024).toFixed(0)} KB`;
+  if (value < 1) return `${(value * 1024).toFixed(1)} MB`;
+  return `${value.toFixed(2)} GB`;
+}
+
+function inboundFormatYTick(v) {
+  if (v === 0) return '0';
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}T`;
+  if (v >= 1) return `${v.toFixed(1)}`;
+  if (v < 0.01) return `${v.toFixed(3)}`;
+  if (v < 0.1) return `${v.toFixed(2)}`;
+  return `${v.toFixed(1)}`;
+}
+
+function inboundFormatXTick(ts, timeframe) {
+  if (!ts) return '';
+  // ts is ISO UTC string; display as-is UTC date/time
+  const d = new Date(ts.endsWith('Z') || ts.includes('+') ? ts : ts + 'Z');
+  if (timeframe === 'H') {
+    const h = d.getUTCHours();
+    if (h % 6 !== 0) return '';
+    return h === 0 ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}` : `${h}:00`;
+  }
+  // Daily
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
+const InboundTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const d = new Date(label && (label.endsWith('Z') || label.includes('+')) ? label : (label || '') + 'Z');
+  const dateStr = d.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  return (
+    <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-slate-400 mb-1">{dateStr}</p>
+      <p className="text-blue-400 font-bold">{inboundFormatGB(payload[0].value)}</p>
+    </div>
+  );
+};
+
+function InboundHistogram() {
+  const [timeframe, setTimeframe] = useState('H');
+  const [window, setWindow] = useState('1D');
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const points = await getAdminInboundUsage(timeframe, window);
+      setData(points);
+    } catch {
+      setError('Failed to load inbound usage data');
+    } finally {
+      setLoading(false);
+    }
+  }, [timeframe, window]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const totalGB = data.reduce((s, p) => s + p.gb, 0);
+  const maxGB = data.reduce((m, p) => Math.max(m, p.gb), 0);
+
+  const barColor = (value) => {
+    if (maxGB === 0) return '#3b82f6';
+    const ratio = value / maxGB;
+    if (ratio > 0.8) return '#ef4444';
+    if (ratio > 0.5) return '#f59e0b';
+    return '#3b82f6';
+  };
+
+  return (
+    <div className="bg-slate-900/40 rounded-xl border border-slate-700/50 p-4 space-y-3 mb-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-slate-300 font-semibold text-sm flex items-center gap-2">
+          <FiBarChart2 className="text-blue-400" size={14} />
+          Inbound Usage
+        </h3>
+        <span className="text-[10px] text-slate-500">{inboundFormatGB(totalGB)} total</span>
+      </div>
+
+      {/* Controls */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex rounded-lg overflow-hidden border border-slate-700">
+          {INBOUND_TIMEFRAMES.map(tf => (
+            <button
+              key={tf.id}
+              onClick={() => setTimeframe(tf.id)}
+              className={`px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                timeframe === tf.id ? 'bg-blue-500/20 text-blue-400' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {tf.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex rounded-lg overflow-hidden border border-slate-700">
+          {INBOUND_WINDOWS.map(w => (
+            <button
+              key={w.id}
+              onClick={() => setWindow(w.id)}
+              className={`px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                window === w.id ? 'bg-blue-500/20 text-blue-400' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="h-36">
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="skeleton h-full w-full rounded-lg" />
+          </div>
+        ) : error ? (
+          <div className="h-full flex items-center justify-center text-xs text-slate-500">{error}</div>
+        ) : data.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-xs text-slate-500">No data for this period</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }} barCategoryGap="20%">
+              <XAxis
+                dataKey="ts"
+                tickFormatter={ts => inboundFormatXTick(ts, timeframe)}
+                tick={{ fill: '#64748b', fontSize: 9 }}
+                axisLine={{ stroke: '#334155', strokeWidth: 1 }}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tickFormatter={inboundFormatYTick}
+                tick={{ fill: '#64748b', fontSize: 9 }}
+                axisLine={{ stroke: '#64748b', strokeWidth: 1 }}
+                tickLine={false}
+                width={36}
+                label={{ value: 'GB', position: 'insideTopLeft', offset: 2, fill: '#94a3b8', fontSize: 9, fontWeight: 600 }}
+              />
+              <Tooltip content={<InboundTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+              <Bar dataKey="gb" radius={[2, 2, 0, 0]} maxBarSize={24}>
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={barColor(entry.gb)} fillOpacity={0.85} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 export default function Admin() {
   const { user } = useApp();
@@ -702,6 +876,7 @@ export default function Admin() {
 
       {activeTab === "servers" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <InboundHistogram />
           <Card>
             <SectionHeader title="XUI Servers" icon={FiServer} />
             <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
