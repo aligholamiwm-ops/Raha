@@ -82,6 +82,11 @@ export const adminAllocateLoan = (data) => api.post('/api/v1/loans/admin/allocat
 export const adminGetUserLoans = (telegramId) => api.get(`/api/v1/loans/admin/user/${telegramId}`).then((r) => r.data)
 export const adminSearchUsers = (q) => api.get('/api/v1/admin/users/search', { params: { q } }).then((r) => r.data)
 
+export const checkNickname = (nickname) =>
+  api.get(`/api/v1/users/check-nickname/${encodeURIComponent(nickname)}`).then((r) => r.data)
+export const updateNickname = (nickname) =>
+  api.put('/api/v1/users/me/nickname', { nickname }).then((r) => r.data)
+
 export const validateDiscount = (code) =>
   api.get(`/api/v1/discounts/validate/${encodeURIComponent(code)}`).then((r) => r.data)
 

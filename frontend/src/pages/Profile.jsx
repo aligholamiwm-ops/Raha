@@ -1,0 +1,1237 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
+import {
+  createInvoice, createDepositInvoice, getMyLoans, payLoan, validateDiscount,
+  getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus,
+  checkNickname, updateNickname,
+} from '../api/client'
+import {
+  FiShoppingCart, FiArrowUp, FiArrowDown, FiCreditCard,
+  FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
+  FiPackage, FiTag, FiX, FiUser, FiEdit2, FiSend,
+  FiMessageSquare, FiPlus, FiChevronLeft, FiDollarSign, FiDatabase,
+} from 'react-icons/fi'
+
+/* ─── helpers ────────────────────────────────────────────────────── */
+function parseDuration(planName) {
+  if (!planName) return 'Plan'
+  const p = planName.toLowerCase()
+  if (p.includes('1year') || p.includes('12month')) return '1 Year'
+  if (p.includes('6month')) return '6 Months'
+  if (p.includes('3month')) return '3 Months'
+  if (p.includes('1month') || p.includes('month')) return '1 Month'
+  return planName
+}
+
+function planColor(trafficGb) {
+  const gb = trafficGb || 0
+  if (gb <= 10)  return '#34d399'
+  if (gb <= 30)  return '#60a5fa'
+  if (gb <= 60)  return '#818cf8'
+  if (gb <= 120) return '#c084fc'
+  if (gb <= 200) return '#f472b6'
+  return '#f87171'
+}
+
+function FlatSquare({ side, color }) {
+  return <div style={{ width: side, height: side, background: color, flexShrink: 0 }} />
+}
+
+function formatDate(d) {
+  if (!d) return ''
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const CATEGORIES = ['connection', 'help', 'withdrawal', 'cooperation']
+const COL_W = 108
+const MAX_SIDE = 96
+const SQ_ROW_H = MAX_SIDE + 28
+const DEPOSIT_PRESETS = [5, 10, 20, 50]
+
+/* ─── Top Tab Bar ─────────────────────────────────────────────────── */
+function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
+  const tabs = [
+    { id: 'account', icon: FiDollarSign, label: 'Account' },
+    { id: 'support', icon: FiMessageSquare, label: 'Support', badge: ticketBadge },
+    { id: 'me',      icon: FiUser,         label: 'Me' },
+  ]
+  return (
+    <div className="flex gap-1 bg-slate-800/80 border border-slate-700 rounded-2xl p-1">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+            active === t.id
+              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <t.icon size={14} />
+          <span>{t.label}</span>
+          {t.badge && (
+            <span className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+          )}
+          {t.id === 'account' && loanBadge && (
+            <span className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/* ─── Balance Cards ───────────────────────────────────────────────── */
+function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5">
+      <div className="bg-gradient-to-br from-emerald-900/60 to-emerald-800/40 border border-emerald-700/40 rounded-2xl p-3.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <FiDollarSign size={12} className="text-emerald-400" />
+          <p className="text-[10px] text-emerald-400 font-medium">Wallet</p>
+        </div>
+        <p className="text-lg font-bold text-white">${(walletUsd || 0).toFixed(2)}</p>
+        <p className="text-[9px] text-emerald-600 mt-0.5">USDT</p>
+      </div>
+      <div className="bg-gradient-to-br from-blue-900/60 to-blue-800/40 border border-blue-700/40 rounded-2xl p-3.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <FiDatabase size={12} className="text-blue-400" />
+          <p className="text-[10px] text-blue-400 font-medium">Traffic</p>
+        </div>
+        <p className="text-lg font-bold text-white">{(trafficGb || 0).toFixed(2)}</p>
+        <p className="text-[9px] text-blue-600 mt-0.5">GB</p>
+      </div>
+      {unpaidLoan > 0 && (
+        <div className="col-span-2 bg-rose-900/30 border border-rose-700/40 rounded-xl p-2.5 flex items-center gap-2.5">
+          <FiAlertCircle className="text-rose-400 flex-shrink-0" size={14} />
+          <div>
+            <p className="text-[10px] font-bold text-rose-400">Outstanding Loan</p>
+            <p className="text-xs font-bold text-white">${unpaidLoan.toFixed(2)} USDT unpaid</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Store Sub-tabs ──────────────────────────────────────────────── */
+function StoreTabBar({ active, onChange, loanBadge }) {
+  const tabs = [
+    { id: 'plans',      icon: FiShoppingCart, label: 'Plans' },
+    { id: 'deposit',    icon: FiArrowUp,      label: 'Deposit' },
+    { id: 'withdrawal', icon: FiArrowDown,    label: 'Withdraw' },
+    { id: 'loans',      icon: FiCreditCard,   label: 'Loans', badge: loanBadge },
+  ]
+  return (
+    <div className="flex gap-1 bg-slate-900/60 border border-slate-700/60 rounded-xl p-1">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`relative flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[9px] font-semibold transition-all ${
+            active === t.id
+              ? 'bg-slate-700 text-emerald-400'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <t.icon size={13} />
+          {t.label}
+          {t.badge && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/* ─── Plans Grid ──────────────────────────────────────────────────── */
+function PlansGrid({ plans, maxTrafficGb, onBuy, buying }) {
+  const sorted = [...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0))
+  const n = sorted.length
+  const max = maxTrafficGb || 1
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4, width: '100%' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${n}, ${COL_W}px)`,
+        gridTemplateRows: `auto ${SQ_ROW_H}px auto auto auto`,
+        columnGap: 8, rowGap: 0,
+        width: `${n * COL_W + (n - 1) * 8}px`,
+        minWidth: '100%',
+      }}>
+        {sorted.map((plan, i) => {
+          const gb = plan.traffic_gb || 0
+          const side = Math.max(18, Math.round(MAX_SIDE * Math.sqrt(gb) / Math.sqrt(max)))
+          const color = planColor(gb)
+          const col = i + 1
+          const busy = buying === plan.plan_name
+          return (
+            <React.Fragment key={plan.plan_name}>
+              <div style={{ gridColumn: col, gridRow: 1, textAlign: 'center', paddingBottom: 14 }}>
+                <span className="text-white font-semibold tracking-wide" style={{ fontSize: 11, lineHeight: 1.3 }}>
+                  {parseDuration(plan.plan_name)}
+                </span>
+              </div>
+              <div style={{ gridColumn: col, gridRow: 2, height: SQ_ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FlatSquare side={side} color={color} />
+              </div>
+              <div style={{ gridColumn: col, gridRow: 3, textAlign: 'center', paddingTop: 12, paddingBottom: 4 }}>
+                <span className="font-bold whitespace-nowrap" style={{ fontSize: 11, color }}>{gb}&nbsp;GB</span>
+              </div>
+              <div style={{ gridColumn: col, gridRow: 4, textAlign: 'center', paddingBottom: 10 }}>
+                <span className="text-white font-black whitespace-nowrap" style={{ fontSize: 13 }}>${(plan.price_usd || 0).toFixed(2)}</span>
+              </div>
+              <div style={{ gridColumn: col, gridRow: 5, display: 'flex', justifyContent: 'center' }}>
+                <button
+                  onClick={() => onBuy(plan)}
+                  disabled={busy}
+                  style={{ width: 72, height: 30 }}
+                  className={`rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${
+                    busy ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white'
+                  }`}
+                >
+                  {busy ? <FiLoader size={9} className="animate-spin" /> : 'Buy'}
+                </button>
+              </div>
+            </React.Fragment>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* ─── Buy Confirm Modal ───────────────────────────────────────────── */
+function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
+  const [discountCode, setDiscountCode] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [appliedDiscount, setAppliedDiscount] = useState(null)
+  const [discountError, setDiscountError] = useState(null)
+
+  const basePrice = plan?.price_usd || 0
+  const discountPct = appliedDiscount?.discount_percent || 0
+  const finalPrice = basePrice * (1 - discountPct / 100)
+  const canAfford = (walletBalance || 0) >= finalPrice
+
+  const handleApplyDiscount = async () => {
+    if (!discountCode.trim()) return
+    setValidating(true); setDiscountError(null); setAppliedDiscount(null)
+    try {
+      const result = await validateDiscount(discountCode.trim())
+      setAppliedDiscount(result)
+    } catch (e) {
+      setDiscountError(e?.response?.data?.detail || 'Invalid discount code')
+    } finally { setValidating(false) }
+  }
+
+  if (!plan) return null
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end justify-center px-4 pt-4 pb-24 animate-in fade-in duration-200">
+      <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-3xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h3 className="text-white font-bold text-base">Confirm Purchase</h3>
+          <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-700 text-slate-400">
+            <FiX size={16} />
+          </button>
+        </div>
+        <div className="px-5 pb-5 space-y-4">
+          <div className="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Plan</span>
+              <span className="text-white font-bold text-sm">{parseDuration(plan.plan_name)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Traffic</span>
+              <span className="text-emerald-400 font-bold text-sm">{plan.traffic_gb} GB</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Base Price</span>
+              <span className="text-white text-sm">${basePrice.toFixed(2)}</span>
+            </div>
+            {appliedDiscount && (
+              <div className="flex items-center justify-between text-emerald-400">
+                <span className="text-xs flex items-center gap-1"><FiTag size={10} /> Discount ({discountPct}%)</span>
+                <span className="text-sm font-bold">−${(basePrice - finalPrice).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+              <span className="text-slate-300 text-xs font-medium">You Pay</span>
+              <span className="text-white font-black text-base">${finalPrice.toFixed(2)} <span className="text-slate-400 text-xs font-normal">USDT</span></span>
+            </div>
+          </div>
+          {!appliedDiscount ? (
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Discount code"
+                  value={discountCode}
+                  onChange={e => { setDiscountCode(e.target.value); setDiscountError(null) }}
+                  onKeyDown={e => e.key === 'Enter' && handleApplyDiscount()}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={handleApplyDiscount}
+                  disabled={!discountCode.trim() || validating}
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl"
+                >
+                  {validating ? <FiLoader size={14} className="animate-spin" /> : 'Apply'}
+                </button>
+              </div>
+              {discountError && <p className="text-rose-400 text-xs mt-1 flex items-center gap-1"><FiAlertCircle size={11} />{discountError}</p>}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <FiTag className="text-emerald-400" size={14} />
+                <span className="text-emerald-400 font-bold text-sm">{appliedDiscount.code}</span>
+                <span className="text-emerald-300 text-xs">({discountPct}% off)</span>
+              </div>
+              <button onClick={() => { setAppliedDiscount(null); setDiscountCode('') }} className="text-slate-400 hover:text-rose-400">
+                <FiX size={14} />
+              </button>
+            </div>
+          )}
+          {!canAfford && (
+            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">
+              <FiInfo size={12} /> Insufficient wallet balance — will redirect to crypto payment
+            </div>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button onClick={onCancel} className="flex-1 py-3 rounded-2xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">Cancel</button>
+            <button
+              onClick={() => onConfirm(plan, appliedDiscount?.code || null)}
+              disabled={buying === plan.plan_name}
+              className={`flex-1 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 ${
+                buying === plan.plan_name ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
+              }`}
+            >
+              {buying === plan.plan_name ? <><FiLoader size={13} className="animate-spin" /> Processing…</> : <><FiCheck size={13} /> Confirm</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Account Tab ─────────────────────────────────────────────────── */
+function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewState, onWithdrawTicket }) {
+  const [storeTab, setStoreTab] = useState(renewState?.renewUuid ? 'plans' : 'plans')
+  const [buyingPlan, setBuyingPlan] = useState(null)
+  const [loans, setLoans] = useState([])
+  const [loansLoading, setLoansLoading] = useState(false)
+  const [payingLoan, setPayingLoan] = useState(null)
+  const [confirmPlan, setConfirmPlan] = useState(null)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
+
+  const totalUnpaidLoan = loans.filter(l => l.status === 'unpaid').reduce((s, l) => s + (l.amount_usdt || 0), 0)
+  const validGbs = plans.filter(p => (p.traffic_gb || 0) > 0).map(p => p.traffic_gb)
+  const maxTrafficGb = validGbs.length > 0 ? Math.max(...validGbs) : 1
+
+  useEffect(() => {
+    if (storeTab === 'loans') loadLoans()
+  }, [storeTab])
+
+  useEffect(() => {
+    if (error || success) {
+      const t = setTimeout(() => { setError(null); setSuccess(null) }, 6000)
+      return () => clearTimeout(t)
+    }
+  }, [error, success])
+
+  const loadLoans = async () => {
+    setLoansLoading(true)
+    try {
+      const data = await getMyLoans()
+      setLoans(Array.isArray(data) ? data : [])
+    } catch { setLoans([]) }
+    finally { setLoansLoading(false) }
+  }
+
+  const handlePayLoan = async (loan) => {
+    setPayingLoan(loan.loan_id)
+    try {
+      const result = await payLoan(loan.loan_id)
+      const url = result?.invoice_url
+      if (url) {
+        const tg = window.Telegram?.WebApp
+        tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+        setSuccess('Payment link opened.')
+      }
+    } catch (e) { setError(e?.response?.data?.detail || 'Failed to create payment.') }
+    finally { setPayingLoan(null) }
+  }
+
+  const handleDeposit = async (amount) => {
+    setBuyingPlan(`deposit_${amount}`)
+    try {
+      const result = await createDepositInvoice(amount, 'USDT')
+      const url = result?.invoice_url || result?.url || result
+      if (url && typeof url === 'string') {
+        const tg = window.Telegram?.WebApp
+        tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+        setSuccess('Invoice created!')
+      }
+    } catch (e) { setError(e?.response?.data?.detail || 'Failed to create deposit invoice.') }
+    finally { setBuyingPlan(null) }
+  }
+
+  const handleConfirmBuy = async (plan, discountCode) => {
+    setBuyingPlan(plan.plan_name)
+    try {
+      const result = await createInvoice(plan.plan_name, 'USDT', discountCode)
+      setConfirmPlan(null)
+      if (result?.status === 'wallet_payment') {
+        setSuccess(`+${result.traffic_gb_added} GB added to your balance.`)
+        await refreshUser()
+      } else {
+        const url = result?.invoice_url || result?.url || result
+        if (url && typeof url === 'string') {
+          const tg = window.Telegram?.WebApp
+          tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+          setSuccess('Invoice created! Complete payment in the opened window.')
+        }
+      }
+    } catch (e) { setError(e?.response?.data?.detail || 'Failed to process request.') }
+    finally { setBuyingPlan(null) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <BalanceCards
+        walletUsd={user?.wallet_balance_usd}
+        trafficGb={user?.traffic_balance_gb}
+        unpaidLoan={totalUnpaidLoan}
+      />
+
+      {(error || success) && (
+        <div className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 text-xs animate-in slide-in-from-top-2 duration-300 ${
+          error ? 'bg-rose-900/30 border border-rose-700/40 text-rose-300' : 'bg-emerald-900/30 border border-emerald-700/40 text-emerald-300'
+        }`}>
+          {error ? <FiAlertCircle size={13} className="flex-shrink-0 mt-0.5" /> : <FiCheck size={13} className="flex-shrink-0 mt-0.5" />}
+          {error || success}
+        </div>
+      )}
+
+      <StoreTabBar active={storeTab} onChange={setStoreTab} loanBadge={totalUnpaidLoan > 0} />
+
+      {/* Plans Tab */}
+      {storeTab === 'plans' && (
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2 self-start">
+            <FiShoppingCart className="text-emerald-400" size={14} />
+            <h2 className="text-slate-200 font-bold text-sm">Available Plans</h2>
+          </div>
+          {plansLoading ? (
+            <div className="flex gap-2 overflow-x-auto pb-1 w-full">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-3 flex-shrink-0" style={{ width: COL_W }}>
+                  <div className="h-3 w-14 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="bg-slate-800 rounded-sm animate-pulse" style={{ width: 40 + i * 18, height: 40 + i * 18 }} />
+                  <div className="h-3 w-10 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-4 w-12 bg-slate-800 rounded-lg animate-pulse" />
+                  <div className="h-[30px] w-[72px] bg-slate-800 rounded-lg animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : plans.length === 0 ? (
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center w-full">
+              <FiPackage className="text-slate-500 mx-auto mb-2" size={24} />
+              <p className="text-slate-400 text-sm">No plans available</p>
+            </div>
+          ) : (
+            <PlansGrid plans={plans} maxTrafficGb={maxTrafficGb} onBuy={p => { setError(null); setSuccess(null); setConfirmPlan(p) }} buying={buyingPlan} />
+          )}
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2.5 flex items-start gap-2 self-stretch">
+            <FiInfo className="text-slate-500 flex-shrink-0 mt-0.5" size={12} />
+            <p className="text-slate-500 text-[10px]">Sufficient wallet balance → instant purchase. Otherwise redirects to crypto payment.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Tab */}
+      {storeTab === 'deposit' && <DepositPanel onDeposit={handleDeposit} buying={buyingPlan} />}
+
+      {/* Withdrawal Tab */}
+      {storeTab === 'withdrawal' && (
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 text-center space-y-4">
+          <div className="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto">
+            <FiArrowDown className="text-amber-400" size={24} />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-sm mb-1.5">Withdraw Balance</h3>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Submit a withdrawal support ticket with your USDT wallet address and network.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            {['TRC20', 'BEP-20', 'TON'].map(net => (
+              <div key={net} className="bg-slate-900 border border-slate-700 rounded-xl py-2 text-slate-300 font-medium">{net}</div>
+            ))}
+          </div>
+          <button
+            onClick={onWithdrawTicket}
+            className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            <FiChevronRight size={15} /> Create Withdrawal Ticket
+          </button>
+        </div>
+      )}
+
+      {/* Loans Tab */}
+      {storeTab === 'loans' && <LoansPanel loans={loans} loading={loansLoading} onPayLoan={handlePayLoan} payingLoan={payingLoan} />}
+
+      {confirmPlan && (
+        <BuyConfirmModal
+          plan={confirmPlan}
+          walletBalance={user?.wallet_balance_usd || 0}
+          onConfirm={handleConfirmBuy}
+          onCancel={() => setConfirmPlan(null)}
+          buying={buyingPlan}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ─── Deposit Panel ───────────────────────────────────────────────── */
+function DepositPanel({ onDeposit, buying }) {
+  const [amount, setAmount] = useState('')
+  return (
+    <div className="space-y-3">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+            <FiArrowUp className="text-emerald-400" size={15} />
+          </div>
+          <div>
+            <h3 className="text-white font-bold text-sm">Deposit USDT</h3>
+            <p className="text-slate-400 text-xs">Add funds to your wallet</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 mb-2">Quick amounts</p>
+          <div className="grid grid-cols-4 gap-2">
+            {DEPOSIT_PRESETS.map(p => (
+              <button
+                key={p}
+                onClick={() => setAmount(String(p))}
+                className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                  amount === String(p) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-emerald-500/50'
+                }`}
+              >
+                ${p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 mb-2">Custom amount</p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-7 pr-3 py-3 text-white text-sm focus:outline-none focus:border-emerald-500"
+                min={1}
+              />
+            </div>
+            <button
+              onClick={() => { const a = parseFloat(amount); if (a > 0) onDeposit(a) }}
+              disabled={!amount || parseFloat(amount) <= 0 || !!buying}
+              className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-5 rounded-xl"
+            >
+              {buying ? <FiLoader size={16} className="animate-spin" /> : 'Deposit'}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2.5 flex items-start gap-2">
+        <FiInfo className="text-blue-400 flex-shrink-0 mt-0.5" size={12} />
+        <p className="text-xs text-blue-300">Payments processed in USDT via Plisio. Balance updates after confirmation.</p>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Loans Panel ─────────────────────────────────────────────────── */
+function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
+  const unpaid = loans.filter(l => l.status === 'unpaid')
+  const settled = loans.filter(l => l.status === 'settled')
+  const totalUnpaid = unpaid.reduce((s, l) => s + (l.amount_usdt || 0), 0)
+
+  if (loading) return (
+    <div className="space-y-2">
+      {[1, 2].map(i => <div key={i} className="h-20 bg-slate-800 rounded-2xl animate-pulse" />)}
+    </div>
+  )
+  if (loans.length === 0) return (
+    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center">
+      <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+        <FiCheck className="text-emerald-400" size={18} />
+      </div>
+      <p className="text-white font-semibold text-sm">No Loans</p>
+      <p className="text-slate-400 text-xs mt-1">You have no outstanding loans</p>
+    </div>
+  )
+  return (
+    <div className="space-y-3">
+      {totalUnpaid > 0 && (
+        <div className="bg-rose-900/30 border border-rose-700/40 rounded-2xl p-3.5 flex items-center gap-3">
+          <FiAlertCircle className="text-rose-400 flex-shrink-0" size={18} />
+          <div>
+            <p className="text-xs text-rose-400 font-medium">Outstanding Balance</p>
+            <p className="text-base font-bold text-white">${totalUnpaid.toFixed(2)} USDT</p>
+          </div>
+        </div>
+      )}
+      {unpaid.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Unpaid ({unpaid.length})</p>
+          <div className="space-y-2">
+            {unpaid.map(loan => (
+              <div key={loan.loan_id} className="bg-rose-900/20 border border-rose-700/30 rounded-2xl p-3.5">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-white font-bold text-sm">${loan.amount_usdt?.toFixed(2)} USDT</p>
+                    <p className="text-[10px] text-slate-500">{new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}</p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">Unpaid</span>
+                </div>
+                <button
+                  onClick={() => onPayLoan(loan)}
+                  disabled={payingLoan === loan.loan_id}
+                  className="w-full flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-400 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded-xl"
+                >
+                  {payingLoan === loan.loan_id ? <><FiLoader size={11} className="animate-spin" /> Processing…</> : <><FiCreditCard size={11} /> Pay Now</>}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {settled.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Settled ({settled.length})</p>
+          <div className="space-y-2">
+            {settled.map(loan => (
+              <div key={loan.loan_id} className="bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-white font-medium text-sm">${loan.amount_usdt?.toFixed(2)} USDT</p>
+                  <p className="text-[10px] text-slate-500">{new Date(loan.created_at).toLocaleDateString()}</p>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">✓ Settled</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Support Tab ─────────────────────────────────────────────────── */
+function StatusBadge({ status }) {
+  const styles = { open: 'bg-emerald-500/20 text-emerald-400', closed: 'bg-slate-600/50 text-slate-400', waiting_for_user: 'bg-yellow-500/20 text-yellow-400' }
+  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || styles.open}`}>{status.replace('_', ' ')}</span>
+}
+
+function SupportTab({ user, initialCategory, clearInitialCategory }) {
+  const [view, setView] = useState(initialCategory ? 'new' : 'list')
+  const [tickets, setTickets] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [selectedTicketId, setSelectedTicketId] = useState(null)
+  const [newCategory, setNewCategory] = useState(initialCategory || null)
+
+  const isStaff = useMemo(() => user?.role === 'admin' || user?.role === 'support', [user?.role])
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState('desc')
+
+  const loadTickets = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      let data
+      if (isStaff) {
+        const params = {}
+        if (filterStatus) params.status = filterStatus
+        if (filterCategory) params.category = filterCategory
+        params.sort_by = sortBy
+        params.sort_order = sortOrder
+        data = await getAllTickets(params)
+      } else {
+        data = await getMyTickets()
+      }
+      setTickets(Array.isArray(data) ? data : [])
+    } catch { setError('Failed to load tickets'); setTickets([]) }
+    finally { setLoading(false) }
+  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder])
+
+  useEffect(() => { loadTickets() }, [loadTickets])
+
+  useEffect(() => {
+    if (initialCategory) {
+      setNewCategory(initialCategory)
+      setView('new')
+    }
+  }, [initialCategory])
+
+  const handleTicketCreated = (ticket) => {
+    setSelectedTicketId(ticket.ticket_id)
+    setView('thread')
+    clearInitialCategory()
+    loadTickets()
+  }
+
+  if (view === 'new') {
+    return (
+      <NewTicketForm
+        onCreated={handleTicketCreated}
+        onCancel={() => { setView('list'); clearInitialCategory() }}
+        initialCategory={newCategory}
+      />
+    )
+  }
+
+  if (view === 'thread' && selectedTicketId) {
+    return (
+      <TicketThread
+        ticketId={selectedTicketId}
+        onBack={() => setView('list')}
+        isStaff={isStaff}
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-white">{isStaff ? 'Support Dashboard' : 'Support'}</h2>
+          <p className="text-slate-400 text-xs">{isStaff ? 'Manage tickets' : "We're here to help"}</p>
+        </div>
+        {!isStaff && (
+          <button
+            onClick={() => { setNewCategory(null); setView('new') }}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl"
+          >
+            <FiPlus size={13} /> New
+          </button>
+        )}
+      </div>
+
+      {isStaff && (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-3 space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
+              <option value="">All Status</option>
+              <option value="open">Open</option>
+              <option value="waiting_for_user">Waiting</option>
+              <option value="closed">Closed</option>
+            </select>
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500 capitalize">
+              <option value="">All Categories</option>
+              {CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
+              <option value="created_at">By Created</option>
+              <option value="updated_at">By Updated</option>
+            </select>
+            <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
+              <option value="desc">Newest First</option>
+              <option value="asc">Oldest First</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {error && <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-xs">{error}</div>}
+
+      <div className="space-y-2">
+        {loading ? (
+          [...Array(3)].map((_, i) => <div key={i} className="h-20 bg-slate-800 rounded-xl animate-pulse" />)
+        ) : tickets.length === 0 ? (
+          <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-8 text-center space-y-3">
+            <FiMessageSquare className="text-slate-500 mx-auto" size={24} />
+            <p className="text-slate-400 text-sm">No tickets yet</p>
+            {!isStaff && (
+              <button onClick={() => { setNewCategory(null); setView('new') }} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-4 py-2 rounded-lg">
+                Open a Ticket
+              </button>
+            )}
+          </div>
+        ) : (
+          tickets.map(ticket => (
+            <button
+              key={ticket.ticket_id}
+              onClick={() => { setSelectedTicketId(ticket.ticket_id); setView('thread') }}
+              className="w-full text-left bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-3.5 space-y-1.5 transition-all"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-white font-medium text-sm truncate">{ticket.title || `Ticket #${ticket.ticket_id?.slice(0, 8)}`}</span>
+                <StatusBadge status={ticket.status} />
+              </div>
+              {isStaff && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  {ticket.user_telegram_info?.photo_url && (
+                    <img src={ticket.user_telegram_info.photo_url} alt="" className="w-4 h-4 rounded-full object-cover" />
+                  )}
+                  <span className="font-medium text-slate-300">
+                    {[ticket.user_telegram_info?.first_name, ticket.user_telegram_info?.last_name].filter(Boolean).join(' ') || `ID: ${ticket.telegram_id}`}
+                  </span>
+                  {ticket.user_telegram_info?.username && <span className="text-slate-500">@{ticket.user_telegram_info.username}</span>}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">{ticket.category}</span>
+                <span className="text-slate-500 text-[10px]">{formatDate(ticket.created_at)}</span>
+              </div>
+              {ticket.messages?.[0]?.text && (
+                <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{ticket.messages[0].text.slice(0, 100)}</p>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── New Ticket Form ─────────────────────────────────────────────── */
+function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
+  const [category, setCategory] = useState(initialCategory || CATEGORIES[0])
+  const [title, setTitle] = useState('')
+  const [message, setMessage] = useState('')
+  const [usdtAddress, setUsdtAddress] = useState('')
+  const [usdtNetwork, setUsdtNetwork] = useState('TRC20')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!message.trim() || !title.trim()) return
+    if (category === 'withdrawal' && !usdtAddress.trim()) { setError('USDT address required'); return }
+    setSubmitting(true); setError(null)
+    try {
+      const payload = { title: title.trim(), category, initial_message: message.trim() }
+      if (category === 'withdrawal') { payload.usdt_address = usdtAddress.trim(); payload.usdt_network = usdtNetwork }
+      const ticket = await createTicket(payload)
+      onCreated(ticket)
+    } catch (err) { setError(err?.response?.data?.detail || 'Failed to create ticket') }
+    finally { setSubmitting(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <button onClick={onCancel} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white">
+          <FiChevronLeft size={16} />
+        </button>
+        <h2 className="text-white font-bold text-base">New Ticket</h2>
+      </div>
+
+      {error && <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-xs">{error}</div>}
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <input
+          type="text"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Brief title…"
+          className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
+          required
+        />
+        <select
+          value={category}
+          onChange={e => setCategory(e.target.value)}
+          className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 capitalize"
+          disabled={initialCategory !== null}
+        >
+          {CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+        </select>
+
+        {category === 'withdrawal' && (
+          <>
+            <input
+              type="text"
+              value={usdtAddress}
+              onChange={e => setUsdtAddress(e.target.value)}
+              placeholder="USDT wallet address"
+              className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
+              required
+            />
+            <select
+              value={usdtNetwork}
+              onChange={e => setUsdtNetwork(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="TRC20">TRC20 (Tron)</option>
+              <option value="BEP-20">BEP-20 (BSC)</option>
+              <option value="TON">TON</option>
+            </select>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2.5">
+              <p className="text-blue-300 text-xs">Double-check your wallet address. Incorrect info may cause loss of funds.</p>
+            </div>
+          </>
+        )}
+
+        <textarea
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          rows={5}
+          placeholder="Describe your issue…"
+          className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
+          required
+        />
+        <button
+          type="submit"
+          disabled={submitting || !message.trim() || !title.trim()}
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl"
+        >
+          {submitting ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FiSend size={14} /> Submit</>}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+/* ─── Ticket Thread ───────────────────────────────────────────────── */
+function TicketThread({ ticketId, onBack, isStaff }) {
+  const [ticket, setTicket] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState(null)
+  const messagesEndRef = useRef(null)
+
+  const loadTicket = useCallback(async () => {
+    try { const data = await getTicket(ticketId); setTicket(data) }
+    catch { setError('Failed to load ticket') }
+    finally { setLoading(false) }
+  }, [ticketId])
+
+  useEffect(() => { loadTicket() }, [loadTicket])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [ticket])
+
+  const handleReply = async (e) => {
+    e.preventDefault()
+    if (!replyText.trim()) return
+    setSending(true); setError(null)
+    try { await replyTicket(ticketId, replyText.trim()); setReplyText(''); await loadTicket() }
+    catch (err) { setError(err?.response?.data?.detail || 'Failed to send') }
+    finally { setSending(false) }
+  }
+
+  const handleClose = async () => {
+    if (!window.confirm('Close this ticket?')) return
+    try { await updateTicketStatus(ticketId, 'closed'); await loadTicket() }
+    catch (err) { setError(err?.response?.data?.detail || 'Failed to close') }
+  }
+
+  const messages = ticket?.messages || []
+  return (
+    <div className="flex flex-col" style={{ minHeight: '60vh' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex-shrink-0">
+          <FiChevronLeft size={16} />
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-semibold text-sm truncate">
+            {ticket?.title || `Ticket #${typeof ticketId === 'string' ? ticketId.slice(0, 8) : ticketId}`}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {ticket && <StatusBadge status={ticket.status} />}
+            {ticket?.category && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">{ticket.category}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isStaff && ticket?.status !== 'closed' && (
+            <button onClick={handleClose} className="text-rose-400 text-xs hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10">Close</button>
+          )}
+          <button onClick={loadTicket} className="text-emerald-400 text-xs hover:text-emerald-300">↻</button>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-2.5 mb-3 overflow-y-auto max-h-80">
+        {loading ? (
+          <div className="flex justify-center py-8"><div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>
+        ) : error ? (
+          <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-xs">{error}</div>
+        ) : messages.length === 0 ? (
+          <p className="text-slate-500 text-sm text-center py-8">No messages</p>
+        ) : (
+          messages.map((msg, idx) => {
+            const isUser = msg.sender_role === 'user' || msg.sender === 'user'
+            return (
+              <div key={msg.id ?? idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 space-y-0.5 ${isUser ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-700 text-slate-200 rounded-bl-sm'}`}>
+                  {!isUser && <p className="text-[10px] font-semibold text-emerald-400">{msg.sender_role === 'support' ? 'Support' : 'Admin'}</p>}
+                  <p className="text-sm leading-relaxed">{msg.text || ''}</p>
+                  <p className={`text-[10px] ${isUser ? 'text-blue-300' : 'text-slate-500'} text-right`}>{formatDate(msg.created_at)}</p>
+                </div>
+              </div>
+            )
+          })
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <form onSubmit={handleReply} className="flex items-end gap-2">
+        <textarea
+          value={replyText}
+          onChange={e => setReplyText(e.target.value)}
+          placeholder="Reply…"
+          rows={2}
+          className="flex-1 bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(e) } }}
+        />
+        <button
+          type="submit"
+          disabled={sending || !replyText.trim()}
+          className="w-10 h-10 flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl flex-shrink-0"
+        >
+          {sending ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSend size={14} />}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+/* ─── Me Tab ──────────────────────────────────────────────────────── */
+function MeTab({ user, refreshUser }) {
+  const tgInfo = user?.telegram_info || {}
+  const displayName = [tgInfo.first_name, tgInfo.last_name].filter(Boolean).join(' ') || 'Unknown'
+  const telegramUsername = tgInfo.username || null
+
+  const [editing, setEditing] = useState(false)
+  const [input, setInput] = useState(user?.nickname || '')
+  const [checking, setChecking] = useState(false)
+  const [availability, setAvailability] = useState(null) // null | {available, reason}
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const debounceRef = useRef(null)
+
+  useEffect(() => {
+    if (!editing) return
+    setInput(user?.nickname || '')
+    setAvailability(null)
+    setSaveError(null)
+    setSaveSuccess(false)
+  }, [editing, user?.nickname])
+
+  const handleInputChange = (val) => {
+    setInput(val)
+    setAvailability(null)
+    setSaveError(null)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (val.trim().length < 2) return
+    if (val.trim() === user?.nickname) { setAvailability({ available: true }); return }
+    debounceRef.current = setTimeout(async () => {
+      setChecking(true)
+      try {
+        const res = await checkNickname(val.trim())
+        setAvailability(res)
+      } catch { setAvailability(null) }
+      finally { setChecking(false) }
+    }, 500)
+  }
+
+  const handleSave = async () => {
+    const trimmed = input.trim()
+    if (trimmed.length < 2 || trimmed.length > 32) { setSaveError('Must be 2–32 characters'); return }
+    setSaving(true); setSaveError(null)
+    try {
+      await updateNickname(trimmed)
+      await refreshUser()
+      setSaveSuccess(true)
+      setEditing(false)
+    } catch (err) {
+      setSaveError(err?.response?.data?.detail || 'Failed to save')
+    } finally { setSaving(false) }
+  }
+
+  const nicknameStatus = (() => {
+    if (!editing) return null
+    const trimmed = input.trim()
+    if (trimmed.length < 2) return null
+    if (trimmed === user?.nickname) return 'same'
+    if (checking) return 'checking'
+    if (!availability) return null
+    return availability.available ? 'available' : 'taken'
+  })()
+
+  return (
+    <div className="space-y-4">
+      {/* User card */}
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex items-center gap-3.5">
+        {tgInfo.photo_url ? (
+          <img src={tgInfo.photo_url} alt="" className="w-14 h-14 rounded-2xl object-cover flex-shrink-0 ring-2 ring-slate-700" />
+        ) : (
+          <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl flex items-center justify-center flex-shrink-0 text-xl font-bold text-white">
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-base leading-tight truncate">{displayName}</p>
+          {telegramUsername && <p className="text-slate-400 text-xs mt-0.5">@{telegramUsername}</p>}
+          <p className="text-slate-500 text-[10px] mt-1">ID: {user?.telegram_id}</p>
+        </div>
+      </div>
+
+      {/* Username / nickname */}
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FiUser size={14} className="text-slate-400" />
+            <span className="text-slate-300 text-sm font-medium">Username</span>
+          </div>
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-xs font-medium px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 transition-colors"
+            >
+              <FiEdit2 size={12} /> Edit
+            </button>
+          )}
+        </div>
+
+        {!editing ? (
+          <div className="flex items-center gap-2">
+            <span className="text-white font-semibold text-sm">
+              {user?.nickname || <span className="text-slate-500 italic">Not set</span>}
+            </span>
+            {user?.nickname && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">unique</span>}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="relative">
+              <input
+                type="text"
+                value={input}
+                onChange={e => handleInputChange(e.target.value)}
+                placeholder="Enter username…"
+                minLength={2}
+                maxLength={32}
+                className={`w-full bg-slate-900 border rounded-xl px-3 py-2.5 pr-9 text-white text-sm focus:outline-none transition-colors ${
+                  nicknameStatus === 'available' || nicknameStatus === 'same'
+                    ? 'border-emerald-500'
+                    : nicknameStatus === 'taken'
+                    ? 'border-rose-500'
+                    : 'border-slate-700 focus:border-slate-500'
+                }`}
+                autoFocus
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {nicknameStatus === 'checking' && <FiLoader size={13} className="text-slate-400 animate-spin" />}
+                {nicknameStatus === 'available' && <FiCheck size={13} className="text-emerald-400" />}
+                {nicknameStatus === 'same' && <FiCheck size={13} className="text-emerald-400" />}
+                {nicknameStatus === 'taken' && <FiX size={13} className="text-rose-400" />}
+              </div>
+            </div>
+
+            {nicknameStatus === 'available' && input.trim() !== user?.nickname && (
+              <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> Available</p>
+            )}
+            {nicknameStatus === 'taken' && (
+              <p className="text-rose-400 text-xs flex items-center gap-1"><FiX size={10} /> {availability?.reason || 'Already taken'}</p>
+            )}
+            {saveError && <p className="text-rose-400 text-xs">{saveError}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setEditing(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || nicknameStatus === 'taken' || nicknameStatus === 'checking' || input.trim().length < 2}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-semibold flex items-center justify-center gap-1.5"
+              >
+                {saving ? <FiLoader size={13} className="animate-spin" /> : <><FiCheck size={13} /> Save</>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {saveSuccess && !editing && (
+          <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> Username updated!</p>
+        )}
+
+        <p className="text-slate-500 text-[10px]">2–32 characters · must be unique across all users</p>
+      </div>
+
+      {/* Role badge */}
+      {user?.role && user.role !== 'user' && (
+        <div className="bg-purple-900/30 border border-purple-700/40 rounded-xl px-4 py-2.5 flex items-center gap-2">
+          <span className="text-purple-400 text-xs font-semibold capitalize">{user.role}</span>
+          <span className="text-purple-500 text-xs">account</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Main Profile Page ───────────────────────────────────────────── */
+export default function Profile() {
+  const { user, plans, loading, refreshUser } = useApp()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('account')
+  const [withdrawCategory, setWithdrawCategory] = useState(null)
+
+  // Handle incoming navigation state
+  useEffect(() => {
+    if (location.state?.createWithdrawal) {
+      setActiveTab('support')
+      setWithdrawCategory('withdrawal')
+      // Clear the state so it doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} })
+    } else if (location.state?.tab) {
+      setActiveTab(location.state.tab)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, navigate, location.pathname])
+
+  const clearWithdrawCategory = () => setWithdrawCategory(null)
+
+  return (
+    <div className="px-4 py-4 space-y-4 pb-24">
+      <TopTabs active={activeTab} onChange={setActiveTab} loanBadge={false} ticketBadge={false} />
+
+      {activeTab === 'account' && (
+        <AccountTab
+          user={user}
+          plans={plans}
+          loading={loading}
+          refreshUser={refreshUser}
+          renewState={null}
+          onWithdrawTicket={() => { setActiveTab('support'); setWithdrawCategory('withdrawal') }}
+        />
+      )}
+
+      {activeTab === 'support' && (
+        <SupportTab
+          user={user}
+          initialCategory={withdrawCategory}
+          clearInitialCategory={clearWithdrawCategory}
+        />
+      )}
+
+      {activeTab === 'me' && (
+        <MeTab user={user} refreshUser={refreshUser} />
+      )}
+    </div>
+  )
+}

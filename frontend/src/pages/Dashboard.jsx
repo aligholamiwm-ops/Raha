@@ -50,7 +50,7 @@ export default function Dashboard() {
 
   const trafficBalanceGB = user?.traffic_balance_gb ?? 0
 
-  const handleCharge = () => navigate('/store')
+  const handleCharge = () => navigate('/profile')
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -126,7 +126,7 @@ export default function Dashboard() {
         <div className="flex gap-2">
           {trafficBalanceGB <= 0 ? (
             <button
-              onClick={() => navigate('/store')}
+              onClick={() => navigate('/profile')}
               className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
             >
               Buy Traffic
@@ -239,7 +239,7 @@ export default function Dashboard() {
               </button>
             ) : (
               <button
-                onClick={() => navigate('/store')}
+                onClick={() => navigate('/profile')}
                 className="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
                 Get a Plan

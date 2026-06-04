@@ -5,7 +5,7 @@ import BottomNav from './components/BottomNav'
 import Dashboard from './pages/Dashboard'
 import Store from './pages/Store'
 import Referral from './pages/Referral'
-import Support from './pages/Support'
+import Profile from './pages/Profile'
 import Admin from './pages/Admin'
 import api from './api/client'
 
@@ -103,7 +103,8 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/store" element={<Store />} />
             <Route path="/referral" element={<Referral />} />
-            <Route path="/support" element={<Support />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/support" element={<Navigate to="/profile" replace state={{ tab: 'support' }} />} />
             {user?.role?.toLowerCase() === 'admin' && <Route path="/admin" element={<Admin />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

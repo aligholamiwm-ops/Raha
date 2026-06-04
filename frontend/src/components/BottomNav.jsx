@@ -8,13 +8,6 @@ const GridIcon = () => (
     <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
   </svg>
 )
-const BagIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-    <line x1="3" y1="6" x2="21" y2="6" />
-    <path d="M16 10a4 4 0 0 1-8 0" />
-  </svg>
-)
 const UsersIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -23,10 +16,10 @@ const UsersIcon = () => (
     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
   </svg>
 )
-const HeadsetIcon = () => (
+const ProfileIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-    <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-    <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
   </svg>
 )
 const ShieldIcon = () => (
@@ -40,14 +33,11 @@ export default function BottomNav() {
   
   const tabs = [
     { to: '/', label: 'Dashboard', Icon: GridIcon },
-    { to: '/store', label: 'Store', Icon: BagIcon },
     { to: '/referral', label: 'Referral', Icon: UsersIcon },
-    { to: '/support', label: 'Support', Icon: HeadsetIcon },
+    { to: '/profile', label: 'Profile', Icon: ProfileIcon },
   ];
 
-  // Case-insensitive check for admin role
   const isAdmin = user?.role?.toLowerCase() === 'admin';
-
   if (isAdmin) {
     tabs.push({ to: '/admin', label: 'Admin', Icon: ShieldIcon });
   }

@@ -25,6 +25,26 @@ async def get_my_profile(
     return current_user
 
 
+@router.get(
+    "/check-nickname/{nickname}",
+    summary="Check if a nickname is available (not taken by another user)",
+)
+async def check_nickname(
+    nickname: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    if len(nickname) < 2 or len(nickname) > 32:
+        return {"available": False, "reason": "Nickname must be 2–32 characters"}
+    existing = await db.users.find_one(
+        {"nickname": {"$regex": f"^{nickname}$", "$options": "i"},
+         "telegram_id": {"$ne": current_user.telegram_id}}
+    )
+    if existing:
+        return {"available": False, "reason": "Nickname already taken"}
+    return {"available": True}
+
+
 @router.put(
     "/me/nickname",
     response_model=UserModel,
@@ -35,6 +55,12 @@ async def set_nickname(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> UserModel:
+    existing = await db.users.find_one(
+        {"nickname": {"$regex": f"^{payload.nickname}$", "$options": "i"},
+         "telegram_id": {"$ne": current_user.telegram_id}}
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Nickname already taken")
     await db.users.update_one(
         {"telegram_id": current_user.telegram_id},
         {"$set": {"nickname": payload.nickname}},
