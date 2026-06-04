@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -144,6 +146,70 @@ async def get_my_referrals(
         ReferralRecordWithUsername(**r.model_dump(), username=username_map.get(r.referred_id))
         for r in records
     ]
+
+
+class UsagePoint(BaseModel):
+    ts: str = Field(description="ISO-8601 UTC timestamp for this bucket")
+    gb: float = Field(description="Total traffic (upload + download) in GB")
+
+
+@router.get(
+    "/me/usage-history",
+    response_model=List[UsagePoint],
+    summary="Get the current user's config usage history as time-series points",
+)
+async def get_usage_history(
+    timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
+    window: str = Query(default="1D", pattern="^(1D|30D|all)$", description="Time window: 1D, 30D, or all"),
+    config: str = Query(default="all", description="Config UUID or 'all' for all configs"),
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> List[UsagePoint]:
+    tid = current_user.telegram_id
+    now = datetime.now(timezone.utc)
+    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+
+    query: dict = {}
+
+    # Date range filter
+    if window == "1D":
+        query["date"] = {"$gte": today}
+    elif window == "30D":
+        query["date"] = {"$gte": today - timedelta(days=29)}
+    # "all" → no date filter
+
+    # Config filter – always scope to the current user via email prefix
+    if config == "all":
+        query["email"] = {"$regex": f"^{tid}-"}
+    else:
+        # Ensure the requested config belongs to this user
+        query["uuid"] = config
+        query["email"] = {"$regex": f"^{tid}-"}
+
+    cursor = db.config_usages.find(
+        query,
+        {"date": 1, "hourly_usage": 1, "_id": 0},
+    ).sort("date", 1)
+    docs = await cursor.to_list(length=None)
+
+    if timeframe == "H":
+        # Key: (date, hour) → total bytes in GB
+        bucket_map: dict = defaultdict(float)
+        for doc in docs:
+            day: datetime = doc["date"]
+            for hour, bucket in enumerate(doc.get("hourly_usage", [])):
+                ts = (day + timedelta(hours=hour)).isoformat()
+                bucket_map[ts] += (bucket.get("u", 0) + bucket.get("d", 0))
+        return [UsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(bucket_map.items())]
+    else:
+        # Daily aggregation
+        daily_map: dict = defaultdict(float)
+        for doc in docs:
+            day: datetime = doc["date"]
+            day_str = day.isoformat()
+            for bucket in doc.get("hourly_usage", []):
+                daily_map[day_str] += (bucket.get("u", 0) + bucket.get("d", 0))
+        return [UsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(daily_map.items())]
 
 
 @router.post(

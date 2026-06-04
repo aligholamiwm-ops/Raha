@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
+import UsageHistogram from '../components/UsageHistogram'
 import { createConfig } from '../api/client'
 import { FiPlus, FiX, FiRefreshCw, FiSearch } from 'react-icons/fi'
 
@@ -142,6 +143,11 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Usage History Histogram */}
+      {configs.length > 0 && (
+        <UsageHistogram configs={configs} />
+      )}
 
       {/* Total Traffic Usage Summary */}
       {configs.length > 0 && (
