@@ -744,7 +744,7 @@ export default function Store() {
 
       {/* Withdrawal Tab */}
       {!renewState?.renewUuid && activeTab === 'withdrawal' && (
-        <WithdrawalTab onNavigate={() => navigate('/support', { state: { createWithdrawal: true } })} />
+        <WithdrawalTab onNavigate={() => navigate('/profile', { state: { createWithdrawal: true } })} />
       )}
 
       {/* Loans Tab */}
