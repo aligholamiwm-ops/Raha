@@ -97,4 +97,11 @@ app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
-    return FileResponse("frontend/dist/index.html")
+    return FileResponse(
+        "frontend/dist/index.html",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )

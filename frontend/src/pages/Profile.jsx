@@ -6,6 +6,39 @@ import {
   getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus,
   checkNickname, updateNickname,
 } from '../api/client'
+
+const PlanScene = React.lazy(() => import('../components/PlanScene'))
+
+function checkWebGLSupport() {
+  try {
+    const canvas = document.createElement('canvas')
+    return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')))
+  } catch (e) {
+    return false
+  }
+}
+
+class WebGLErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("WebGL Render Crash caught by boundary:", error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback
+    }
+    return this.props.children
+  }
+}
 import {
   FiShoppingCart, FiArrowUp, FiArrowDown, FiCreditCard,
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
@@ -34,8 +67,40 @@ function planColor(trafficGb) {
   return '#f87171'
 }
 
-function FlatSquare({ side, color }) {
-  return <div style={{ width: side, height: side, background: color, flexShrink: 0 }} />
+function VolumeCube({ side, color }) {
+  const gridBg = `linear-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.15) 1px, transparent 1px)`
+  const bgSize = '8px 8px'
+
+  const faceStyle = (opacity, transform) => ({
+    position: 'absolute', inset: 0,
+    background: color,
+    opacity, transform,
+    border: '1px solid rgba(255,255,255,0.2)',
+    backgroundImage: gridBg,
+    backgroundSize: bgSize,
+  })
+
+  return (
+    <div style={{ width: side, height: side, perspective: '1000px', flexShrink: 0, position: 'relative' }}>
+      <div style={{
+        width: '100%', height: '100%', position: 'absolute', transformStyle: 'preserve-3d',
+        transform: 'rotateX(-25deg) rotateY(40deg)',
+      }}>
+        {/* Front */}
+        <div style={faceStyle(0.9, `translateZ(${side / 2}px)`)} />
+        {/* Back */}
+        <div style={faceStyle(0.5, `rotateY(180deg) translateZ(${side / 2}px)`)} />
+        {/* Right */}
+        <div style={faceStyle(0.7, `rotateY(90deg) translateZ(${side / 2}px)`)} />
+        {/* Left */}
+        <div style={faceStyle(0.7, `rotateY(-90deg) translateZ(${side / 2}px)`)} />
+        {/* Top */}
+        <div style={{...faceStyle(1.0, `rotateX(90deg) translateZ(${side / 2}px)`), border: '1px solid rgba(255,255,255,0.4)'}} />
+        {/* Bottom */}
+        <div style={faceStyle(0.3, `rotateX(-90deg) translateZ(${side / 2}px)`)} />
+      </div>
+    </div>
+  )
 }
 
 function formatDate(d) {
@@ -45,7 +110,7 @@ function formatDate(d) {
 
 const CATEGORIES = ['connection', 'help', 'withdrawal', 'cooperation']
 const COL_W = 108
-const MAX_SIDE = 96
+const MAX_SIDE = 64
 const SQ_ROW_H = MAX_SIDE + 28
 const DEPOSIT_PRESETS = [5, 10, 20, 50]
 
@@ -145,7 +210,7 @@ function StoreTabBar({ active, onChange, loanBadge }) {
 }
 
 /* ─── Plans Grid ──────────────────────────────────────────────────── */
-function PlansGrid({ plans, maxTrafficGb, onBuy, buying }) {
+function PlansGrid({ plans, maxTrafficGb, onBuy, buying, selectedPlan, onSelectPlan }) {
   const sorted = [...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0))
   const n = sorted.length
   const max = maxTrafficGb || 1
@@ -158,6 +223,7 @@ function PlansGrid({ plans, maxTrafficGb, onBuy, buying }) {
         columnGap: 8, rowGap: 0,
         width: `${n * COL_W + (n - 1) * 8}px`,
         minWidth: '100%',
+        padding: '6px',
       }}>
         {sorted.map((plan, i) => {
           const gb = plan.traffic_gb || 0
@@ -165,29 +231,51 @@ function PlansGrid({ plans, maxTrafficGb, onBuy, buying }) {
           const color = planColor(gb)
           const col = i + 1
           const busy = buying === plan.plan_name
+          const isSelected = selectedPlan?.plan_name === plan.plan_name
           return (
             <React.Fragment key={plan.plan_name}>
-              <div style={{ gridColumn: col, gridRow: 1, textAlign: 'center', paddingBottom: 14 }}>
-                <span className="text-white font-semibold tracking-wide" style={{ fontSize: 11, lineHeight: 1.3 }}>
+              {/* Clickable Column Background Container Card */}
+              <div
+                onClick={() => onSelectPlan && onSelectPlan(plan)}
+                style={{
+                  gridColumn: col,
+                  gridRow: "1 / 6",
+                  background: isSelected ? `${color}12` : 'rgba(30, 41, 59, 0.25)',
+                  border: isSelected ? `2px solid ${color}` : '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  zIndex: 0,
+                  transform: isSelected ? 'scale(1.02)' : 'scale(1.0)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: isSelected ? `0 4px 20px ${color}20` : undefined,
+                  padding: '12px 0'
+                }}
+              />
+
+              <div style={{ gridColumn: col, gridRow: 1, textAlign: 'center', paddingBottom: 14, zIndex: 1, pointerEvents: 'none', paddingTop: 12 }}>
+                <span className="text-white font-bold tracking-wide" style={{ fontSize: 11, lineHeight: 1.3 }}>
                   {parseDuration(plan.plan_name)}
                 </span>
               </div>
-              <div style={{ gridColumn: col, gridRow: 2, height: SQ_ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <FlatSquare side={side} color={color} />
+              <div style={{ gridColumn: col, gridRow: 2, height: SQ_ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, pointerEvents: 'none' }}>
+                <VolumeCube side={side} color={color} />
               </div>
-              <div style={{ gridColumn: col, gridRow: 3, textAlign: 'center', paddingTop: 12, paddingBottom: 4 }}>
-                <span className="font-bold whitespace-nowrap" style={{ fontSize: 11, color }}>{gb}&nbsp;GB</span>
+              <div style={{ gridColumn: col, gridRow: 3, textAlign: 'center', paddingTop: 12, paddingBottom: 4, zIndex: 1, pointerEvents: 'none' }}>
+                <span className="font-extrabold whitespace-nowrap" style={{ fontSize: 11, color }}>{gb}&nbsp;GB</span>
               </div>
-              <div style={{ gridColumn: col, gridRow: 4, textAlign: 'center', paddingBottom: 10 }}>
+              <div style={{ gridColumn: col, gridRow: 4, textAlign: 'center', paddingBottom: 10, zIndex: 1, pointerEvents: 'none' }}>
                 <span className="text-white font-black whitespace-nowrap" style={{ fontSize: 13 }}>${(plan.price_usd || 0).toFixed(2)}</span>
               </div>
-              <div style={{ gridColumn: col, gridRow: 5, display: 'flex', justifyContent: 'center' }}>
+              <div style={{ gridColumn: col, gridRow: 5, display: 'flex', justifyContent: 'center', zIndex: 1, paddingBottom: 12 }}>
                 <button
-                  onClick={() => onBuy(plan)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onBuy(plan)
+                  }}
                   disabled={busy}
                   style={{ width: 72, height: 30 }}
                   className={`rounded-lg text-[10px] font-bold transition-all flex items-center justify-center ${
-                    busy ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white'
+                    busy ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md'
                   }`}
                 >
                   {busy ? <FiLoader size={9} className="animate-spin" /> : 'Buy'}
@@ -326,6 +414,19 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
+  const [isWebGLSupported, setIsWebGLSupported] = useState(true)
+  useEffect(() => {
+    setIsWebGLSupported(checkWebGLSupport())
+  }, [])
+
+  const [selectedPlan, setSelectedPlan] = useState(null)
+  useEffect(() => {
+    if (plans && plans.length > 0 && !selectedPlan) {
+      const sorted = [...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0))
+      setSelectedPlan(sorted[0])
+    }
+  }, [plans, selectedPlan])
+
   const totalUnpaidLoan = loans.filter(l => l.status === 'unpaid').reduce((s, l) => s + (l.amount_usdt || 0), 0)
   const validGbs = plans.filter(p => (p.traffic_gb || 0) > 0).map(p => p.traffic_gb)
   const maxTrafficGb = validGbs.length > 0 ? Math.max(...validGbs) : 1
@@ -442,7 +543,34 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
               <p className="text-slate-400 text-sm">No plans available</p>
             </div>
           ) : (
-            <PlansGrid plans={plans} maxTrafficGb={maxTrafficGb} onBuy={p => { setError(null); setSuccess(null); setConfirmPlan(p) }} buying={buyingPlan} />
+            <div className="space-y-4 w-full">
+              {isWebGLSupported && (
+                <WebGLErrorBoundary fallback={null}>
+                  <React.Suspense fallback={
+                    <div className="flex flex-col items-center justify-center h-[180px] bg-slate-800/40 border border-slate-700/50 rounded-2xl animate-pulse w-full">
+                      <FiLoader className="text-emerald-500 animate-spin mb-2" size={20} />
+                      <span className="text-xs text-slate-500 font-medium">Initializing 3D Visualizer...</span>
+                    </div>
+                  }>
+                    <PlanScene
+                      plans={plans}
+                      selectedPlan={selectedPlan}
+                      onSelectPlan={setSelectedPlan}
+                      maxTrafficGb={maxTrafficGb}
+                    />
+                  </React.Suspense>
+                </WebGLErrorBoundary>
+              )}
+
+              <PlansGrid
+                plans={plans}
+                maxTrafficGb={maxTrafficGb}
+                onBuy={p => { setError(null); setSuccess(null); setConfirmPlan(p) }}
+                buying={buyingPlan}
+                selectedPlan={selectedPlan}
+                onSelectPlan={setSelectedPlan}
+              />
+            </div>
           )}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2.5 flex items-start gap-2 self-stretch">
             <FiInfo className="text-slate-500 flex-shrink-0 mt-0.5" size={12} />
