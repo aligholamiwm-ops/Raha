@@ -116,7 +116,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-export default function UsageHistogram({ configs = [] }) {
+export default function UsageHistogram({ configs = [], fetchUsageHistory: customFetch }) {
   const [timeframe, setTimeframe] = useState('H')
   const [window, setWindow] = useState('1D')
   const [selectedConfig, setSelectedConfig] = useState('all')
@@ -128,14 +128,15 @@ export default function UsageHistogram({ configs = [] }) {
     setLoading(true)
     setError(null)
     try {
-      const points = await getUsageHistory(timeframe, window, selectedConfig)
+      const fn = customFetch || getUsageHistory
+      const points = await fn(timeframe, window, selectedConfig)
       setData(points)
     } catch {
       setError('Failed to load usage data')
     } finally {
       setLoading(false)
     }
-  }, [timeframe, window, selectedConfig])
+  }, [timeframe, window, selectedConfig, customFetch])
 
   useEffect(() => { fetchData() }, [fetchData])
 

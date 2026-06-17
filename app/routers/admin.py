@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -282,9 +283,30 @@ async def get_top_users(
             })
         return results
 
+    if filter == "recently_joined":
+        results = []
+        async for doc in db.users.find(
+            {},
+            {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "created_at": 1},
+        ).sort("created_at", -1).limit(LIMIT):
+            doc.pop("_id", None)
+            created_at = doc.get("created_at")
+            results.append({
+                "telegram_id": doc.get("telegram_id"),
+                "display_name": (
+                    doc.get("nickname")
+                    or (doc.get("telegram_info") or {}).get("first_name")
+                    or f"ID:{doc.get('telegram_id')}"
+                ),
+                "username": (doc.get("telegram_info") or {}).get("username"),
+                "value": created_at.isoformat() if created_at else "",
+                "metric": "joined",
+            })
+        return results
+
     raise HTTPException(status_code=400, detail=(
         "Invalid filter. Use one of: most_used_traffic, most_unused_traffic, "
-        "most_purchases, most_unsettled_loans, most_configs"
+        "most_purchases, most_unsettled_loans, most_configs, recently_joined"
     ))
 
 
@@ -411,6 +433,58 @@ async def change_user_role(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"status": "success", "message": f"User role updated to {payload.role.value}"}
+@router.get("/users/{telegram_id}/usage-history", summary="Get a specific user's config usage history (admin)")
+async def get_admin_user_usage_history(
+    telegram_id: int,
+    timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
+    window: str = Query(default="1D", pattern="^(1D|30D|all)$", description="Time window: 1D, 30D, or all"),
+    config: str = Query(default="all", description="Config UUID or 'all' for all configs"),
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> list[dict]:
+    """Return usage history points for a given user, same format as /me/usage-history."""
+    now = datetime.now(timezone.utc)
+    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+
+    query: dict = {}
+    if window == "1D":
+        query["date"] = {"$gte": today}
+    elif window == "30D":
+        query["date"] = {"$gte": today - timedelta(days=29)}
+
+    if config == "all":
+        query["email"] = {"$regex": f"^{telegram_id}-"}
+    else:
+        query["uuid"] = config
+        query["email"] = {"$regex": f"^{telegram_id}-"}
+
+    cursor = db.config_usages.find(
+        query,
+        {"date": 1, "hourly_usage": 1, "_id": 0},
+    ).sort("date", 1)
+    docs = await cursor.to_list(length=None)
+
+    def _utc_day(day: datetime) -> datetime:
+        return day if day.tzinfo is not None else day.replace(tzinfo=timezone.utc)
+
+    if timeframe == "H":
+        bucket_map: dict = defaultdict(float)
+        for doc in docs:
+            day = _utc_day(doc["date"])
+            for hour, bucket in enumerate(doc.get("hourly_usage", [])):
+                ts = (day + timedelta(hours=hour)).isoformat()
+                bucket_map[ts] += (bucket.get("u", 0) + bucket.get("d", 0))
+        return [{"ts": ts, "gb": round(v, 4)} for ts, v in sorted(bucket_map.items())]
+    else:
+        daily_map: dict = defaultdict(float)
+        for doc in docs:
+            day = _utc_day(doc["date"])
+            day_str = day.isoformat()
+            for bucket in doc.get("hourly_usage", []):
+                daily_map[day_str] += (bucket.get("u", 0) + bucket.get("d", 0))
+        return [{"ts": ts, "gb": round(v, 4)} for ts, v in sorted(daily_map.items())]
+
+
 @router.get("/users/{telegram_id}/tickets", response_model=list[TicketModel], summary="Get user's tickets (admin)")
 async def get_user_tickets(
     telegram_id: int,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminInboundUsage } from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminInboundUsage, getAdminUserUsageHistory } from '../api/client';
+import UsageHistogram from '../components/UsageHistogram';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
   FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap,
@@ -349,6 +350,12 @@ export default function Admin() {
   const [topFilter, setTopFilter] = useState('most_unused_traffic');
   const [topUsers, setTopUsers] = useState([]);
   const [topUsersLoading, setTopUsersLoading] = useState(false);
+
+  const fetchUsageForFoundUser = useCallback(async (timeframe, window, config) => {
+    if (!foundUser) return [];
+    const res = await getAdminUserUsageHistory(foundUser.telegram_id, timeframe, window, config);
+    return res;
+  }, [foundUser?.telegram_id]);
 
   useEffect(() => {
     if (activeTab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
@@ -847,6 +854,7 @@ export default function Admin() {
               <option value="most_purchases">Most Purchases</option>
               <option value="most_unsettled_loans">Most Unsettled Loans</option>
               <option value="most_configs">Most Configs</option>
+              <option value="recently_joined">Recently Joined</option>
             </select>
             {topUsers.length > 0 && (
               <div className="space-y-1.5 mt-1">
@@ -861,7 +869,15 @@ export default function Admin() {
                           <div className="text-[10px] text-slate-500">{u.telegram_id}</div>
                         </div>
                       </div>
-                      <span className="text-xs font-bold text-emerald-400">{u.value} <span className="text-[10px] text-slate-500">{u.metric}</span></span>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-emerald-400">
+                          {topFilter === 'recently_joined' ? '' : u.value}
+                          <span className="text-[10px] text-slate-500"> {u.metric}</span>
+                        </span>
+                        {topFilter === 'recently_joined' && u.value && (
+                          <div className="text-[9px] text-slate-400">{new Date(u.value).toLocaleString()}</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1240,6 +1256,11 @@ export default function Admin() {
                     </div>
                   ))}
                 </div>
+              )}
+
+              {/* Usage History */}
+              {foundUser && (
+                <UsageHistogram configs={userConfigs} fetchUsageHistory={fetchUsageForFoundUser} />
               )}
 
               {/* User Configs */}
