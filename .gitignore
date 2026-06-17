@@ -8,3 +8,10 @@ frontend/.env.local
 # Frontend
 frontend/node_modules/
 frontend/dist/
+
+# AL tools
+.agents/
+.opencode/
+graphify-out/
+GEMINI.md
+skills-lock.json

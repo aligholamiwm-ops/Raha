@@ -118,6 +118,18 @@ class ReferralRecordWithUsername(ReferralRecord):
     username: Optional[str] = None
 
 
+class ReferralSummaryResponse(BaseModel):
+    total_referred_users: int = Field(..., description="Number of distinct users who were directly referred by the current user")
+
+
+class LeaderboardEntry(BaseModel):
+    telegram_id: int
+    username: Optional[str] = Field(default=None, description="Display name (nickname or telegram username) of the referrer")
+    referred_count: int = Field(..., description="Number of users this person has referred")
+    total_usdt_bonus: float = Field(default=0.0, description="Total USDT bonus earned from referrals")
+    total_traffic_bonus: float = Field(default=0.0, description="Total traffic bonus earned from referrals (GB)")
+
+
 @router.get(
     "/me/referrals",
     response_model=List[ReferralRecordWithUsername],
@@ -146,6 +158,88 @@ async def get_my_referrals(
         ReferralRecordWithUsername(**r.model_dump(), username=username_map.get(r.referred_id))
         for r in records
     ]
+
+
+@router.get(
+    "/me/referral-summary",
+    response_model=ReferralSummaryResponse,
+    summary="Get total number of users referred by the current user",
+)
+async def get_my_referral_summary(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> ReferralSummaryResponse:
+    count = await db.users.count_documents({"referral.referrer_id": current_user.telegram_id})
+    return ReferralSummaryResponse(total_referred_users=count)
+
+
+@router.get(
+    "/referral-leaderboard",
+    response_model=List[LeaderboardEntry],
+    summary="Get top 5 users with the most referred users",
+)
+async def get_referral_leaderboard(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_user),
+) -> List[LeaderboardEntry]:
+    pipeline = [
+        {"$match": {"referral.referrer_id": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$referral.referrer_id", "referred_count": {"$sum": 1}}},
+        {"$sort": {"referred_count": -1}},
+        {"$limit": 5},
+        {"$lookup": {
+            "from": "users",
+            "localField": "_id",
+            "foreignField": "telegram_id",
+            "as": "referrer",
+        }},
+        {"$unwind": {"path": "$referrer", "preserveNullAndEmptyArrays": True}},
+        {"$addFields": {
+            "total_usdt_bonus": {
+                "$reduce": {
+                    "input": {"$ifNull": ["$referrer.referral.records", []]},
+                    "initialValue": 0,
+                    "in": {
+                        "$add": [
+                            "$$value",
+                            {"$cond": [{"$eq": ["$$this.type", "usdt"]}, "$$this.amount", 0]},
+                        ]
+                    },
+                },
+            },
+            "total_traffic_bonus": {
+                "$reduce": {
+                    "input": {"$ifNull": ["$referrer.referral.records", []]},
+                    "initialValue": 0,
+                    "in": {
+                        "$add": [
+                            "$$value",
+                            {"$cond": [{"$eq": ["$$this.type", "traffic"]}, "$$this.amount", 0]},
+                        ]
+                    },
+                },
+            },
+        }},
+        {"$project": {
+            "telegram_id": "$_id",
+            "referred_count": 1,
+            "username": {
+                "$cond": {
+                    "if": {"$ne": ["$referrer.nickname", None]},
+                    "then": "$referrer.nickname",
+                    "else": "$referrer.telegram_info.username",
+                }
+            },
+            "total_usdt_bonus": {"$round": ["$total_usdt_bonus", 2]},
+            "total_traffic_bonus": {"$round": ["$total_traffic_bonus", 2]},
+            "_id": 0,
+        }},
+    ]
+    cursor = db.users.aggregate(pipeline)
+    result = []
+    async for doc in cursor:
+        result.append(LeaderboardEntry(**doc))
+    return result
 
 
 class UsagePoint(BaseModel):

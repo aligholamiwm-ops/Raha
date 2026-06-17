@@ -33,6 +33,17 @@ const ChargeIcon = () => (
   </svg>
 )
 
+const TrophyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C9 4 6 9 6 9z" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C15 4 18 9 18 9z" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+)
+
 export default function Referral() {
   const { user, loading, refreshUser } = useApp()
   const [copied, setCopied] = useState(false)
@@ -40,6 +51,9 @@ export default function Referral() {
   const [referrals, setReferrals] = useState(null)
   const [referralsLoading, setReferralsLoading] = useState(false)
   const [charging, setCharging] = useState(false)
+  const [totalReferredUsers, setTotalReferredUsers] = useState(0)
+  const [leaderboard, setLeaderboard] = useState([])
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
 
   const botUsername = import.meta.env.VITE_BOT_USERNAME?.trim()
   const hasBotUsername = Boolean(botUsername)
@@ -49,6 +63,21 @@ export default function Referral() {
 
   const benefitType = user?.referral?.benefit_type || 'usdt'
   const isTraffic = benefitType === 'traffic'
+
+  const fetchReferralSummary = () => {
+    if (!user) return
+    client.get('/api/v1/users/me/referral-summary')
+      .then(res => setTotalReferredUsers(res.data.total_referred_users))
+      .catch(() => setTotalReferredUsers(0))
+  }
+
+  const fetchLeaderboard = () => {
+    setLeaderboardLoading(true)
+    client.get('/api/v1/users/referral-leaderboard')
+      .then(res => setLeaderboard(res.data))
+      .catch(() => setLeaderboard([]))
+      .finally(() => setLeaderboardLoading(false))
+  }
 
   const fetchReferrals = () => {
     if (!user) return
@@ -61,6 +90,8 @@ export default function Referral() {
 
   useEffect(() => {
     fetchReferrals()
+    fetchReferralSummary()
+    fetchLeaderboard()
   }, [user?.telegram_id])
 
   const handleCopy = async () => {
@@ -125,6 +156,56 @@ export default function Referral() {
       <div>
         <h1 className="text-xl font-bold text-white">Referral Program</h1>
         <p className="text-slate-400 text-sm">Earn bonus by inviting friends</p>
+      </div>
+
+      {/* Leaderboard */}
+      <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-amber-400">
+          <TrophyIcon />
+          <span className="font-semibold text-sm">Referral Leaderboard</span>
+        </div>
+        {leaderboardLoading ? (
+          <div className="skeleton h-20 w-full rounded-xl" />
+        ) : leaderboard.length === 0 ? (
+          <p className="text-slate-500 text-xs text-center py-4">No referrals yet. Be the first to invite friends!</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-700">
+                  <th className="text-left pb-2 pr-3">#</th>
+                  <th className="text-left pb-2 pr-3">User</th>
+                  <th className="text-right pb-2 pr-3">Referred</th>
+                  <th className="text-right pb-2">Bonuses</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {leaderboard.map((entry, i) => (
+                  <tr key={entry.telegram_id} className="text-slate-300">
+                    <td className="py-2 pr-3">
+                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
+                        i === 0 ? 'bg-amber-500/20 text-amber-400' :
+                        i === 1 ? 'bg-slate-400/20 text-slate-300' :
+                        i === 2 ? 'bg-amber-700/20 text-amber-600' :
+                        'bg-slate-700/60 text-slate-500'
+                      }`}>
+                        {i + 1}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 truncate max-w-[100px]">{entry.username || entry.telegram_id}</td>
+                    <td className="py-2 pr-3 text-right font-medium">{entry.referred_count}</td>
+                    <td className="py-2 text-right text-[10px] whitespace-nowrap">
+                      {entry.total_usdt_bonus > 0 && <span className="text-emerald-400">${entry.total_usdt_bonus.toFixed(2)}</span>}
+                      {entry.total_usdt_bonus > 0 && entry.total_traffic_bonus > 0 && <span className="text-slate-600"> | </span>}
+                      {entry.total_traffic_bonus > 0 && <span className="text-blue-400">{entry.total_traffic_bonus.toFixed(2)} GB</span>}
+                      {entry.total_usdt_bonus === 0 && entry.total_traffic_bonus === 0 && <span className="text-slate-500">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Referral link card */}
@@ -202,6 +283,9 @@ export default function Referral() {
 
       {/* Bonus summary */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
+        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">
+          Users Referred: <span className="text-white font-bold">{totalReferredUsers}</span>
+        </p>
         <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Pending Referral Bonuses</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
