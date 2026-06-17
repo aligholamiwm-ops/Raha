@@ -150,7 +150,7 @@ function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
 /* ─── Balance Cards ───────────────────────────────────────────────── */
 function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div className="grid grid-cols-3 gap-2.5">
       <div className="bg-gradient-to-br from-emerald-900/60 to-emerald-800/40 border border-emerald-700/40 rounded-2xl p-3.5">
         <div className="flex items-center gap-1.5 mb-1.5">
           <FiDollarSign size={12} className="text-emerald-400" />
@@ -167,15 +167,14 @@ function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
         <p className="text-lg font-bold text-white">{(trafficGb || 0).toFixed(2)}</p>
         <p className="text-[9px] text-blue-600 mt-0.5">GB</p>
       </div>
-      {unpaidLoan > 0 && (
-        <div className="col-span-2 bg-rose-900/30 border border-rose-700/40 rounded-xl p-2.5 flex items-center gap-2.5">
-          <FiAlertCircle className="text-rose-400 flex-shrink-0" size={14} />
-          <div>
-            <p className="text-[10px] font-bold text-rose-400">Outstanding Loan</p>
-            <p className="text-xs font-bold text-white">${unpaidLoan.toFixed(2)} USDT unpaid</p>
-          </div>
+      <div className="bg-gradient-to-br from-rose-900/60 to-rose-800/40 border border-rose-700/40 rounded-2xl p-3.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <FiAlertCircle size={12} className="text-rose-400" />
+          <p className="text-[10px] text-rose-400 font-medium">Loan</p>
         </div>
-      )}
+        <p className="text-lg font-bold text-white">${(unpaidLoan || 0).toFixed(2)}</p>
+        <p className="text-[9px] text-rose-600 mt-0.5">USDT</p>
+      </div>
     </div>
   )
 }
