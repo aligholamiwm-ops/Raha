@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
 import UsageHistogram from '../components/UsageHistogram'
-import { createConfig } from '../api/client'
-import { FiPlus, FiX, FiRefreshCw, FiSearch } from 'react-icons/fi'
+import { createConfig, getInboundOptions } from '../api/client'
+import { FiPlus, FiX, FiRefreshCw, FiSearch, FiAlertCircle, FiLoader } from 'react-icons/fi'
 
 function bytesToGB(bytes) {
   if (!bytes || bytes === 0) return 0
@@ -34,13 +34,14 @@ function SkeletonCard() {
 }
 
 export default function Dashboard() {
-  const { user, configs, loading, refreshConfigs, refreshUser } = useApp()
+  const { user, configs, loading, configsError, setConfigsError, refreshConfigs, refreshUser } = useApp()
   const navigate = useNavigate()
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: '', total_gb: 1, duration_days: 30 })
+  const [inboundOptions, setInboundOptions] = useState([])
+  const [loadingInbounds, setLoadingInbounds] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', total_gb: 1, duration_days: 30, inbound_ids: [] })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('creation')
 
@@ -53,10 +54,17 @@ export default function Dashboard() {
 
   const handleCharge = () => navigate('/profile')
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await Promise.all([refreshConfigs(), refreshUser()])
-    setRefreshing(false)
+  const openCreateModal = async () => {
+    setShowCreateModal(true)
+    setLoadingInbounds(true)
+    try {
+      const options = await getInboundOptions()
+      setInboundOptions(options)
+    } catch (err) {
+      console.error('Failed to load inbound options', err)
+    } finally {
+      setLoadingInbounds(false)
+    }
   }
 
   const handleCreateConfig = async (e) => {
@@ -72,7 +80,7 @@ export default function Dashboard() {
     try {
       await createConfig({ ...createForm, name: createForm.name.trim() })
       setShowCreateModal(false)
-      setCreateForm({ name: '', total_gb: 1, duration_days: 30 })
+      setCreateForm({ name: '', total_gb: 1, duration_days: 30, inbound_ids: [] })
       // Refresh both configs and user (to update traffic balance)
       await Promise.all([refreshConfigs(), refreshUser()])
     } catch (err) {
@@ -134,7 +142,7 @@ export default function Dashboard() {
             </button>
           ) : (
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
               className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
             >
               <FiPlus size={16} />
@@ -143,6 +151,26 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Configs Error Banner */}
+      {configsError && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FiAlertCircle size={16} className="text-rose-400 flex-shrink-0" />
+            <div>
+              <p className="text-rose-400 text-sm font-medium">Failed to load configs</p>
+              <p className="text-rose-300/70 text-xs mt-0.5">{configsError}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setConfigsError(null); refreshConfigs(); refreshUser(); }}
+            className="flex items-center gap-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <FiRefreshCw size={12} />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Usage History Histogram */}
       {configs.length > 0 && (
@@ -180,17 +208,7 @@ export default function Dashboard() {
 
       {/* Configs Section */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-slate-300 font-semibold text-sm">My Configs</h2>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors"
-            title="Refresh"
-          >
-            <FiRefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        <h2 className="text-slate-300 font-semibold text-sm">My Configs</h2>
 
         {/* Search & Sort */}
         {configs.length > 0 && (
@@ -238,7 +256,7 @@ export default function Dashboard() {
             <p className="text-slate-400 text-sm">No configs found</p>
             {trafficBalanceGB > 0 ? (
               <button
-                onClick={() => setShowCreateModal(true)}
+                onClick={openCreateModal}
                 className="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
                 Create Config
@@ -324,9 +342,40 @@ export default function Dashboard() {
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Inbound Selection</label>
+                  {loadingInbounds ? (
+                    <div className="flex items-center gap-2 text-slate-500 text-xs">
+                      <FiLoader className="animate-spin" size={14} /> Loading options...
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg p-2">
+                      {inboundOptions.length === 0 ? (
+                        <p className="text-xs text-slate-500 text-center py-2">No inbounds available</p>
+                      ) : (
+                        inboundOptions.map((opt) => (
+                          <label key={`${opt.server_name}-${opt.id}`} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-700 rounded">
+                            <input
+                              type="checkbox"
+                              checked={createForm.inbound_ids.includes(opt.id)}
+                              onChange={(e) => {
+                                const newIds = e.target.checked
+                                  ? [...createForm.inbound_ids, opt.id]
+                                  : createForm.inbound_ids.filter(id => id !== opt.id)
+                                setCreateForm({ ...createForm, inbound_ids: newIds })
+                              }}
+                              className="accent-emerald-500"
+                            />
+                            <span className="text-xs text-slate-300">{opt.server_name} - {opt.remark || opt.port}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="submit"
-                  disabled={creating}
+                  disabled={creating || loadingInbounds}
                   className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors"
                 >
                   {creating ? 'Creating…' : 'Create Config'}

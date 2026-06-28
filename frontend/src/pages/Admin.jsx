@@ -358,10 +358,16 @@ export default function Admin() {
   }, [foundUser?.telegram_id]);
 
   useEffect(() => {
-    if (activeTab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
-    if (activeTab === "servers") { fetchServers(); fetchCleanIps(); }
-    if (activeTab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
-  }, [activeTab]);
+    fetchStats();
+    fetchTopUsers(topFilter);
+  }, []);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
+    if (tab === "servers") { fetchServers(); fetchCleanIps(); }
+    if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
+  };
 
   // Sync balance input when switching between wallet/traffic types
   useEffect(() => {
@@ -563,9 +569,17 @@ export default function Admin() {
     try {
       const configsRes = await client.get(`/api/v1/configs/admin/user/${user.telegram_id}`);
       setUserConfigs(configsRes.data || []);
+      const errorsHeader = configsRes.headers?.['x-config-errors'];
+      if (errorsHeader) {
+        try {
+          const errors = JSON.parse(errorsHeader);
+          errors.forEach(e => toast(e, 'error'));
+        } catch {}
+      }
     } catch (err) {
       console.error("Failed to load user configs", err);
       setUserConfigs([]);
+      toast("Failed to load user configs: " + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setUserConfigsLoading(false);
     }
@@ -811,7 +825,7 @@ export default function Admin() {
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id)}
             className={`px-4 py-2 rounded-full text-sm font-medium capitalize transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === tab.id ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
             }`}

@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +9,8 @@ from typing import List, Optional
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
 from app.models.user import UserModel, UserUpdate, ReferralRecord
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -69,7 +72,8 @@ async def set_nickname(
     )
     doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
     doc.pop("_id", None)
-    return UserModel(**doc)
+    result = UserModel(**doc)
+    return result
 
 
 @router.put(
@@ -276,9 +280,7 @@ async def get_usage_history(
     if config == "all":
         query["email"] = {"$regex": f"^{tid}-"}
     else:
-        # Ensure the requested config belongs to this user
-        query["uuid"] = config
-        query["email"] = {"$regex": f"^{tid}-"}
+        query["email"] = config
 
     cursor = db.config_usages.find(
         query,
@@ -414,7 +416,8 @@ async def add_balance(
     if not result:
         raise HTTPException(status_code=404, detail="User not found")
     result.pop("_id", None)
-    return UserModel(**result)
+    user = UserModel(**result)
+    return user
 
 
 @router.post(
@@ -440,7 +443,8 @@ async def adjust_wallet_balance(
         return_document=True,
     )
     result.pop("_id", None)
-    return UserModel(**result)
+    user = UserModel(**result)
+    return user
 
 
 @router.post(
@@ -466,7 +470,8 @@ async def adjust_traffic_balance(
         return_document=True,
     )
     result.pop("_id", None)
-    return UserModel(**result)
+    user = UserModel(**result)
+    return user
 
 
 @router.post(
@@ -491,7 +496,8 @@ async def set_wallet_balance(
         return_document=True,
     )
     result.pop("_id", None)
-    return UserModel(**result)
+    user = UserModel(**result)
+    return user
 
 
 @router.post(
@@ -516,4 +522,5 @@ async def set_traffic_balance(
         return_document=True,
     )
     result.pop("_id", None)
-    return UserModel(**result)
+    user = UserModel(**result)
+    return user

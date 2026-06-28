@@ -70,7 +70,8 @@ async def update_plan(
         raise HTTPException(status_code=404, detail="Plan not found")
     items[idx].update(update_data)
     await db.settings.update_one({"_id": SETTINGS_ID}, {"$set": {"items": items}})
-    return PlanModel(**items[idx])
+    plan = PlanModel(**items[idx])
+    return plan
 
 
 @router.delete(

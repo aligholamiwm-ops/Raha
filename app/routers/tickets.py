@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -19,6 +20,8 @@ from app.models.ticket import (
     USDTNetwork,
     TicketWithUserInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -204,7 +207,8 @@ async def reply_to_ticket(
         return_document=True,
     )
     result.pop("_id", None)
-    return TicketModel(**result)
+    ticket = TicketModel(**result)
+    return ticket
 
 
 @router.put(
@@ -235,4 +239,5 @@ async def update_ticket_status(
     if not result:
         raise HTTPException(status_code=404, detail="Ticket not found")
     result.pop("_id", None)
-    return TicketModel(**result)
+    ticket = TicketModel(**result)
+    return ticket

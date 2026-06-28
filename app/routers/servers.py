@@ -27,8 +27,12 @@ async def list_servers(
             "name": s.get("name", s.get("server_name", "")),
             "ip": s.get("ip", s.get("ip_address", "")),
             "port": s.get("port", s.get("panel_port", 2053)),
+            "scheme": s.get("scheme", "http"),
+            "base_path": s.get("base_path", ""),
             "inbound_id": s.get("inbound_id", 1),
             "status": s.get("status", "enabled"),
+            "auth_mode": "api_token" if s.get("api_token") else ("password" if s.get("password") else "none"),
+            "has_sub_uri": bool(s.get("sub_uri")),
         }
         for s in servers
     ]
@@ -54,7 +58,6 @@ async def test_server_connection(
         inbounds = await xui.get_inbounds()
         inbound_id = int(server.get("inbound_id", 1))
         target_inbound = next((ib for ib in inbounds if ib.get("id") == inbound_id), None)
-        # Extract total inbound traffic (bytes)
         inbound_up = 0
         inbound_down = 0
         if target_inbound:

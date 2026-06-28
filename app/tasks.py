@@ -50,27 +50,37 @@ def track_hourly_usage(self) -> dict:
             today_midnight = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
             hour = now.hour
 
-            for server in settings.get_enabled_servers():
+            async def _fetch_server(server: dict) -> tuple[dict, list, dict]:
                 server_name = server.get("name", "")
                 try:
                     xui = build_xui_client(server)
                     clients = await xui.get_client_info()
+                    try:
+                        online_emails = await xui.get_online_emails()
+                    except Exception:
+                        online_emails = []
+                    return server, clients, {"online": online_emails}
                 except Exception as exc:
-                    logger.error(
-                        "track_hourly_usage: failed to fetch clients from server %s: %s",
-                        server_name, exc,
-                    )
-                    continue
+                    logger.error("track_hourly_usage: failed to fetch clients from server %s: %s", server_name, exc)
+                    return server, [], {}
 
+            tasks = [_fetch_server(s) for s in settings.get_enabled_servers()]
+            server_results = await asyncio.gather(*tasks)
+
+            telegram_ids = set()
+            async for user_doc in db.users.find({}, {"telegram_id": 1, "_id": 0}):
+                telegram_ids.add(str(user_doc["telegram_id"]))
+
+            for server, clients, meta in server_results:
+                if not clients: continue
+                server_name = server.get("name", "")
+                online_emails = meta.get("online", [])
+                
                 # Accumulate inbound-level deltas: {inbound_id -> {"up": bytes, "down": bytes}}
                 inbound_deltas: dict = {}
 
-                # Load all known telegram IDs to filter configs belonging to telegram users
-                telegram_ids = set()
-                async for user_doc in db.users.find({}, {"telegram_id": 1, "_id": 0}):
-                    telegram_ids.add(str(user_doc["telegram_id"]))
-
                 for c in clients:
+                    c["is_online"] = c.get("email", "") in online_emails
                     config_uuid = c.get("uuid", "")
                     if not config_uuid:
                         continue
@@ -219,7 +229,6 @@ def track_hourly_usage(self) -> dict:
                                 }
                             },
                         )
-
                     # Accumulate inbound-level deltas
                     inbound_id = c.get("inbound_id", server.get("inbound_id", 1))
                     if inbound_id not in inbound_deltas:
@@ -264,6 +273,180 @@ def track_hourly_usage(self) -> dict:
         return asyncio.run(_run())
     except Exception as exc:
         logger.error("track_hourly_usage failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60)
+
+
+# ---------------------------------------------------------------------------
+# Config status sync (every 10 minutes)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(name="app.tasks.sync_config_statuses", bind=True, max_retries=3)
+def sync_config_statuses(self) -> dict:
+    """Iterate all enabled servers and update config statuses in the
+    config_usages collection to reflect live panel state."""
+    async def _run():
+        db, mongo_client = _get_db()
+        try:
+            settings = get_settings()
+            now = datetime.now(timezone.utc)
+            today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+            total_updated = 0
+            server_count = 0
+            changed_events: list[tuple[str, str]] = []
+
+            async def _fetch_server(server: dict) -> tuple[dict, list]:
+                server_name = server.get("name", "")
+                try:
+                    xui = build_xui_client(server)
+                    clients = await xui.get_client_info()
+                    return server, clients
+                except Exception as exc:
+                    logger.error("sync_config_statuses: failed to fetch clients from %s: %s", server_name, exc)
+                    return server, []
+
+            tasks = [_fetch_server(s) for s in settings.get_enabled_servers()]
+            results = await asyncio.gather(*tasks)
+
+            for server, clients in results:
+                server_name = server.get("name", "")
+                if not clients: continue
+                server_count += 1
+                for c in clients:
+                    config_uuid = c.get("uuid", "")
+                    if not config_uuid:
+                        continue
+                    email = c.get("email", "")
+                    usage_up = float(c.get("usage_up", 0))
+                    usage_down = float(c.get("usage_down", 0))
+                    enable = c.get("enable", True)
+                    total_gb = c.get("total_gb", 0.0)
+                    expiry_ms = c.get("expiry_time_ms", 0)
+                    expiry_date = (
+                        datetime.fromtimestamp(expiry_ms / 1000, tz=timezone.utc)
+                        if expiry_ms and expiry_ms > 0
+                        else None
+                    )
+                    used_gb = (usage_up + usage_down) / _BYTES_TO_GB
+
+                    if not enable:
+                        client_status = "disabled"
+                    elif (total_gb > 0 and used_gb >= total_gb) or (
+                        expiry_date and expiry_date < now
+                    ):
+                        client_status = "expired"
+                    else:
+                        client_status = "active"
+
+                    existing = await db.config_usages.find_one(
+                        {"uuid": config_uuid, "date": today},
+                        {"client_status": 1},
+                    )
+                    old_status = existing.get("client_status") if existing else None
+
+                    result = await db.config_usages.update_one(
+                        {"uuid": config_uuid, "date": today},
+                        {
+                            "$set": {
+                                "client_status": client_status,
+                                "email": email,
+                                "server_name": server_name,
+                                "updated_at": now,
+                            },
+                            "$setOnInsert": {
+                                "hourly_usage": [{"u": 0.0, "d": 0.0} for _ in range(24)],
+                            },
+                        },
+                        upsert=True,
+                    )
+                    if result.modified_count > 0 or result.upserted_id:
+                        total_updated += 1
+
+                    if old_status and old_status != client_status and "-" in email:
+                        tid_str = email.split("-")[0]
+                        changed_events.append((tid_str, email))
+
+            logger.info("sync_config_statuses: %d servers, %d configs updated, %d status changes", server_count, total_updated, len(changed_events))
+            return {"ok": True, "servers": server_count, "updated": total_updated}
+        finally:
+            mongo_client.close()
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.error("sync_config_statuses failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60)
+
+
+@celery_app.task(name="app.tasks.expire_old_configs", bind=True, max_retries=3)
+def expire_old_configs(self) -> dict:
+    """Find expired configs on each server and disable them on the panel
+    by calling bulk_disable_clients. Also marks them as expired in the DB."""
+    async def _run():
+        db, mongo_client = _get_db()
+        try:
+            settings = get_settings()
+            now = datetime.now(timezone.utc)
+            today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+            total_disabled = 0
+            server_count = 0
+
+            async def _fetch_server(server: dict) -> tuple[dict, list]:
+                server_name = server.get("name", "")
+                try:
+                    xui = build_xui_client(server)
+                    clients = await xui.get_client_info()
+                    return server, clients
+                except Exception as exc:
+                    logger.error("expire_old_configs: failed to fetch clients from %s: %s", server_name, exc)
+                    return server, []
+
+            tasks = [_fetch_server(s) for s in settings.get_enabled_servers()]
+            results = await asyncio.gather(*tasks)
+
+            for server, clients in results:
+                server_name = server.get("name", "")
+                if not clients: continue
+                server_count += 1
+                expired_emails: list[str] = []
+                # Re-create xui client to use inside the loop for bulk action if needed, 
+                # though it was already created inside _fetch_server. 
+                # Actually, can just create it again or pass it through.
+                # Let's recreate it simply.
+                xui = build_xui_client(server)
+                for c in clients:
+                    if not c.get("enable", True): continue
+                    total_gb = c.get("total_gb", 0.0)
+                    used_gb = (float(c.get("usage_up", 0)) + float(c.get("usage_down", 0))) / _BYTES_TO_GB
+                    expiry_ms = c.get("expiry_time_ms", 0)
+                    expiry_date = datetime.fromtimestamp(expiry_ms / 1000, tz=timezone.utc) if expiry_ms and expiry_ms > 0 else None
+                    if (total_gb > 0 and used_gb >= total_gb) or (expiry_date and expiry_date < now):
+                        email = c.get("email", "")
+                        if email:
+                            expired_emails.append(email)
+                            config_uuid = c.get("uuid", "")
+                            if config_uuid:
+                                await db.config_usages.update_one({"uuid": config_uuid, "date": today}, {"$set": {"client_status": "expired"}}, upsert=True)
+
+                if expired_emails:
+                    try:
+                        result = await xui.bulk_disable_clients(expired_emails)
+                        if result.get("success"):
+                            total_disabled += len(expired_emails)
+                            logger.info("expire_old_configs: disabled %d configs on %s", len(expired_emails), server_name)
+                        else:
+                            logger.warning("expire_old_configs: bulk disable returned failure on %s: %s", server_name, result.get("msg"))
+                    except Exception as exc:
+                        logger.error("expire_old_configs: failed to disable configs on %s: %s", server_name, exc)
+            
+            logger.info("expire_old_configs: %d servers, %d expired configs disabled", server_count, total_disabled)
+            return {"ok": True, "servers": server_count, "disabled": total_disabled}
+        finally:
+            mongo_client.close()
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.error("expire_old_configs failed: %s", exc)
         raise self.retry(exc=exc, countdown=60)
 
 

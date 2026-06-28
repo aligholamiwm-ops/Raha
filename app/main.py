@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
+
 from app.config import get_settings
 from app.database import connect_db, close_db
 from app.routers import (
@@ -85,7 +87,6 @@ app.include_router(clean_ips.router, prefix="/api/v1/clean-ips", tags=["Clean IP
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["Tickets"])
 app.include_router(servers.router, prefix="/api/v1/admin/servers", tags=["Servers"])
 app.include_router(loans.router, prefix="/api/v1/loans", tags=["Loans"])
-
 
 @app.get("/health")
 async def health_check():

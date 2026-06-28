@@ -16,6 +16,7 @@ class VpnConfigCreate(BaseModel):
     total_gb: float = Field(..., gt=0, description="Total traffic in GB to allocate")
     duration_days: int = Field(default=0, ge=0, description="Config duration in days (0 = unlimited)")
     server_name: Optional[str] = Field(default=None, description="Preferred server name (optional)")
+    inbound_ids: Optional[list[int]] = Field(default=None, description="Optional list of inbound IDs")
 class VpnConfigUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     name: Optional[str] = Field(default=None, min_length=1, max_length=32)
@@ -40,3 +41,5 @@ class VpnConfigResponse(BaseModel):
     is_online: bool
     domain_name: str
     subscription_link: str = Field(default="", description="XUI subscription link URL")
+    inbound_ids: list[int] = Field(default_factory=list, description="Inbound IDs the client is attached to")
+    inbound_names: list[str] = Field(default_factory=list, description="Human-readable inbound labels")

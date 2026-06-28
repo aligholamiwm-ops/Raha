@@ -33,7 +33,7 @@ api.interceptors.response.use(
   }
 )
 export const getUser = () => api.get('/api/v1/users/me').then((r) => r.data)
-export const getMyConfigs = () => api.get('/api/v1/configs/my').then((r) => r.data)
+export const getInboundOptions = () => api.get('/api/v1/configs/inbound-options').then((r) => r.data)
 export const getVlessUri = (uuid, isp_name = 'default') =>
   api.get('/api/v1/configs/' + uuid + '/vless', { params: { isp_name } }).then((r) => r.data)
 export const createConfig = (data) => api.post('/api/v1/configs/create', data).then((r) => r.data)
@@ -95,6 +95,8 @@ export const getAdminInboundUsage = (timeframe = 'H', window = '1D') =>
 
 export const getAdminUserUsageHistory = (telegramId, timeframe = 'H', window = '1D', config = 'all') =>
   api.get(`/api/v1/admin/users/${telegramId}/usage-history`, { params: { timeframe, window, config } }).then((r) => r.data)
+
+export const getMyConfigs = () => api.get('/api/v1/configs/my').then((r) => r.data)
 
 export const validateDiscount = (code) =>
   api.get(`/api/v1/discounts/validate/${encodeURIComponent(code)}`).then((r) => r.data)

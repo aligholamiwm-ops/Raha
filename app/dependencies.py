@@ -15,7 +15,6 @@ from app.config import get_settings, Settings
 from app.database import get_database
 from app.models.user import UserModel, UserRole, TelegramInfo, ReferralInfo
 from app.utils.security import verify_password
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------

@@ -27,8 +27,13 @@ class Settings(BaseSettings):
     # Frontend / Mini App
     MINI_APP_URL: str = ""       # e.g. https://yourdomain.com
     FRONTEND_ORIGIN: str = ""    # same value, or a different CDN domain
-    # Servers — JSON array of server config objects, stored in .env
-    # Example: [{"name":"s1","ip":"1.2.3.4","port":2053,"username":"admin","password":"secret","inbound_id":1,"status":"enabled"}]
+    # Servers — JSON array of server config objects, stored in .env.
+    # Required: name, ip (or url), inbound_id, status (enabled|disabled).
+    # Auth (either, api_token preferred): api_token  OR  username + password.
+    # Optional: scheme (http|https), port, base_path (e.g. "/xui"),
+    #           sub_uri, sub_port (override subscription link host/port).
+    # Example: [{"name":"s1","scheme":"https","ip":"1.2.3.4","port":2053,
+    #            "api_token":"abcdef...","inbound_id":1,"status":"enabled"}]
     SERVERS: str = "[]"
     # Referral layer percentages (0–100). Each layer represents a deeper referral level.
     REFERRAL_LAYER_1_PCT: float = 5.0
@@ -51,6 +56,7 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
+        "extra": "ignore",
     }
 
     def get_server_list(self) -> list[dict]:

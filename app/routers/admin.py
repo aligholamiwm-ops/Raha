@@ -83,24 +83,34 @@ async def get_stats(
     total_traffic_used_gb = max(0.0, total_purchased_traffic_gb - total_unused_traffic_gb)
 
     # Count configs live from XUI — only those belonging to telegram users (numeric id prefix)
-    total_configs = 0
     active_configs = 0
-    for server in settings.get_enabled_servers():
+    total_configs = 0
+
+    async def _fetch(server: dict) -> tuple[int, int]:
         try:
             xui = build_xui_client(server)
             clients = await xui.get_client_info()
+            ac = 0
+            tc = 0
             for c in clients:
                 email = c.get("email", "")
-                # Only count configs whose email starts with a numeric telegram_id
                 try:
                     int(email.split("-")[0].strip())
                 except (ValueError, IndexError):
                     continue
-                total_configs += 1
+                tc += 1
                 if c.get("enable", True):
-                    active_configs += 1
+                    ac += 1
+            return ac, tc
         except Exception as exc:
             logger.warning("Stats: could not reach server %s: %s", server.get("name"), exc)
+            return 0, 0
+
+    server_tasks = [_fetch(s) for s in settings.get_enabled_servers()]
+    task_results = await asyncio.gather(*server_tasks)
+    for ac, tc in task_results:
+        active_configs += ac
+        total_configs += tc
     return {
         "total_users": total_users,
         "active_configs": active_configs,
@@ -246,7 +256,9 @@ async def get_top_users(
     if filter == "most_configs":
         # Count per-telegram-id configs from XUI (only telegram-user configs)
         config_counts: dict[int, int] = {}
-        for server in settings.get_enabled_servers():
+
+        async def _fetch(server: dict) -> dict[int, int]:
+            local_counts = {}
             try:
                 xui = build_xui_client(server)
                 clients = await xui.get_client_info()
@@ -254,11 +266,18 @@ async def get_top_users(
                     email = c.get("email", "")
                     try:
                         tid = int(email.split("-")[0].strip())
-                        config_counts[tid] = config_counts.get(tid, 0) + 1
+                        local_counts[tid] = local_counts.get(tid, 0) + 1
                     except (ValueError, IndexError):
                         pass
             except Exception as exc:
                 logger.warning("top users most_configs: server error: %s", exc)
+            return local_counts
+
+        server_tasks = [_fetch(s) for s in settings.get_enabled_servers()]
+        task_results = await asyncio.gather(*server_tasks)
+        for local_counts in task_results:
+            for tid, count in local_counts.items():
+                config_counts[tid] = config_counts.get(tid, 0) + count
 
         if not config_counts:
             return []
@@ -385,7 +404,9 @@ async def broadcast_message(
     elif payload.target == "active_configs":
         # Get all active config emails from XUI servers
         active_tids: set[int] = set()
-        for server in settings.get_enabled_servers():
+
+        async def _fetch(server: dict) -> list[int]:
+            tids = []
             try:
                 xui = build_xui_client(server)
                 clients = await xui.get_client_info()
@@ -393,12 +414,18 @@ async def broadcast_message(
                     if c.get("enable", True):
                         email = c.get("email", "")
                         try:
-                            tid = int(email.split("-")[0])
-                            active_tids.add(tid)
+                            tids.append(int(email.split("-")[0]))
                         except (ValueError, IndexError):
                             pass
             except Exception as exc:
                 logger.warning("broadcast active_configs: server error: %s", exc)
+            return tids
+
+        server_tasks = [_fetch(s) for s in settings.get_enabled_servers()]
+        task_results = await asyncio.gather(*server_tasks)
+        for tids in task_results:
+            active_tids.update(tids)
+
         target_ids = list(active_tids)
     else:
         raise HTTPException(status_code=400, detail="Invalid target. Use 'all', 'unpaid_loans', or 'active_configs'")
@@ -455,8 +482,7 @@ async def get_admin_user_usage_history(
     if config == "all":
         query["email"] = {"$regex": f"^{telegram_id}-"}
     else:
-        query["uuid"] = config
-        query["email"] = {"$regex": f"^{telegram_id}-"}
+        query["email"] = config
 
     cursor = db.config_usages.find(
         query,
@@ -501,21 +527,31 @@ async def sync_configs(
     _admin: UserModel = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    servers_ok = 0
-    servers_failed = 0
-    total_clients = 0
-    errors = []
-    for server in settings.get_server_list():
+    async def _fetch(server: dict) -> tuple[bool, int, str | None]:
         server_name = server.get("name", server.get("server_name", ""))
         try:
             xui = build_xui_client(server)
             clients = await xui.get_client_info()
-            total_clients += len(clients)
-            servers_ok += 1
+            return True, len(clients), None
         except Exception as exc:
-            servers_failed += 1
-            errors.append(f"{server_name}: connection failed")
             logger.warning("sync_configs error for %s: %s", server_name, exc)
+            return False, 0, f"{server_name}: connection failed"
+
+    server_tasks = [_fetch(s) for s in settings.get_server_list()]
+    task_results = await asyncio.gather(*server_tasks)
+
+    servers_ok = 0
+    servers_failed = 0
+    total_clients = 0
+    errors = []
+    for ok, count, err in task_results:
+        if ok:
+            servers_ok += 1
+            total_clients += count
+        else:
+            servers_failed += 1
+            errors.append(err)
+    
     return {
         "servers_ok": servers_ok,
         "servers_failed": servers_failed,

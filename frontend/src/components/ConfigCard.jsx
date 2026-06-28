@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi'
 import { MdQrCode } from 'react-icons/md'
 import { toggleConfig, editConfig, regenerateConfigKey, deleteConfig } from '../api/client'
+import { useApp } from '../context/AppContext'
 import QRModal from './QRModal'
 
 function daysLeft(dateStr) {
@@ -16,6 +17,7 @@ function daysLeft(dateStr) {
 }
 
 export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
+  const { setConfigs, refreshConfigs } = useApp()
   const [showQR, setShowQR] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,10 +42,21 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   const handleToggle = async () => {
     if (busy) return
     setBusy(true)
+    const prevEnable = config.enable
+    const targetUuid = config.uuid
+    if (!targetUuid) {
+      console.warn('handleToggle: targetUuid is missing/falsy', config)
+    }
+    setConfigs(prev => prev.map(c =>
+      c.uuid === targetUuid ? { ...c, enable: !prevEnable } : c
+    ))
     try {
       await toggleConfig(config.email)
-      await refreshAfterAction()
+      await refreshConfigs()
     } catch (err) {
+      setConfigs(prev => prev.map(c =>
+        c.uuid === targetUuid ? { ...c, enable: prevEnable } : c
+      ))
       console.error(err)
     } finally {
       setBusy(false)
@@ -85,10 +98,14 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   const handleDelete = async () => {
     if (!window.confirm('Delete this config? Unused traffic will be refunded to your balance.')) return
     setBusy(true)
+    const targetUuid = config.uuid
+    const deletedConfig = config
+    setConfigs(prev => prev.filter(c => c.uuid !== targetUuid))
     try {
       await deleteConfig(config.email)
       await refreshAfterAction()
     } catch (err) {
+      setConfigs(prev => [...prev, deletedConfig])
       console.error(err)
     } finally {
       setBusy(false)
@@ -151,6 +168,17 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
             <span>No expiry</span>
           )}
         </div>
+
+        {/* Inbound names */}
+        {config.inbound_names && config.inbound_names.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {config.inbound_names.map((name, i) => (
+              <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-700/60 text-slate-300 border border-slate-600/50">
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2">

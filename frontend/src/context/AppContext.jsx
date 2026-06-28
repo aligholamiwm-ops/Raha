@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { getUser, getMyConfigs, getPlans } from '../api/client'
 
 const AppContext = createContext(null)
@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [configsError, setConfigsError] = useState(null)
 
   const fetchUser = useCallback(async () => {
     try {
@@ -22,11 +23,14 @@ export function AppProvider({ children }) {
   }, [])
 
   const fetchConfigs = useCallback(async () => {
+    setConfigsError(null)
     try {
       const data = await getMyConfigs()
       setConfigs(Array.isArray(data) ? data : [])
       return data
     } catch (e) {
+      const detail = e.response?.data?.detail || e.message || 'Failed to load configs'
+      setConfigsError(detail)
       setConfigs([])
       return []
     }
@@ -49,7 +53,6 @@ export function AppProvider({ children }) {
     setLoading(false)
   }, [fetchUser, fetchConfigs, fetchPlans])
 
-  // Run once on mount; refreshAll is stable (useCallback with stable deps)
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg?.initData) {
@@ -68,6 +71,9 @@ export function AppProvider({ children }) {
         plans,
         loading,
         error,
+        configsError,
+        setConfigsError,
+        setConfigs,
         refreshUser: fetchUser,
         refreshConfigs: fetchConfigs,
         refreshPlans: fetchPlans,

@@ -210,7 +210,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
           >
             <option value="all">All configs</option>
             {configs.map(c => (
-              <option key={c.uuid} value={c.uuid}>{c.name || c.email}</option>
+              <option key={c.uuid} value={c.email}>{c.name || c.email}</option>
             ))}
           </select>
         )}
