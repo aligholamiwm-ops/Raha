@@ -279,6 +279,7 @@ export default function Admin() {
   const { user } = useApp();
   const [activeTab, setActiveTab] = useState("stats");
   const [stats, setStats] = useState(null);
+  const [statsError, setStatsError] = useState(null);
   const [loading, setLoading] = useState(false);
   
   // Toast notifications
@@ -418,9 +419,13 @@ export default function Admin() {
 
   const fetchStats = async () => {
     try {
+      setStatsError(null);
       const res = await client.get("/api/v1/admin/stats");
       setStats(res.data);
-    } catch (err) { console.error("Failed to fetch stats", err); }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+      setStatsError(err.response?.data?.detail || err.message || "Failed to load stats");
+    }
   };
 
   const fetchServers = async () => {
@@ -836,7 +841,20 @@ export default function Admin() {
         ))}
       </div>
 
-      {activeTab === "stats" && stats && (
+      {activeTab === "stats" && statsError && (
+        <div className="p-6 text-center">
+          <p className="text-rose-400 text-sm mb-2">⚠ Failed to load stats</p>
+          <p className="text-slate-500 text-xs">{statsError}</p>
+          <button onClick={fetchStats} className="mt-3 px-4 py-2 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-600 transition-colors">Retry</button>
+        </div>
+      )}
+      {activeTab === "stats" && !stats && !statsError && (
+        <div className="p-6 text-center">
+          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-500 text-xs mt-3">Loading stats…</p>
+        </div>
+      )}
+      {activeTab === "stats" && stats && !statsError && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="grid grid-cols-2 gap-4">
             <Card><div className="text-xs text-slate-400">Total Users</div><div className="text-xl font-bold text-white">{stats.total_users}</div></Card>
