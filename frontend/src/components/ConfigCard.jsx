@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
-import { 
-  FiCopy, FiEdit2, FiTrash2, FiRotateCcw, 
-  FiToggleLeft, FiToggleRight, FiLoader, FiClock, FiActivity 
+import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  FiCopy, FiTrash2, FiToggleLeft, FiToggleRight,
+  FiLoader, FiClock, FiZap, FiKey, FiMinus, FiPlus
 } from 'react-icons/fi'
 import { MdQrCode } from 'react-icons/md'
-import { toggleConfig, editConfig, regenerateConfigKey, deleteConfig } from '../api/client'
+import { toggleConfig, regenerateConfigKey, deleteConfig, editConfig } from '../api/client'
 import { useApp } from '../context/AppContext'
 import QRModal from './QRModal'
 
@@ -12,26 +13,24 @@ function daysLeft(dateStr) {
   if (!dateStr) return null
   const expiry = new Date(dateStr)
   const now = new Date()
-  const diff = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
-  return diff
+  return Math.ceil((expiry - now) / (1000 * 60 * 60 * 24))
 }
 
 export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
-  const { setConfigs, refreshConfigs } = useApp()
+  const { setConfigs, refreshConfigs, user, refreshUser } = useApp()
+  const navigate = useNavigate()
   const [showQR, setShowQR] = useState(false)
-  const [showEdit, setShowEdit] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const [editForm, setEditForm] = useState({
-    name: config.name || '',
-    total_gb: config.total_gb || 0,
-    duration_days: 0
-  })
+  const [copied, setCopied] = useState(false)
+  const [showRecharge, setShowRecharge] = useState(false)
+  const [rechargeValue, setRechargeValue] = useState(0)
+  const [rechargeError, setRechargeError] = useState(null)
+
+  const trafficBalanceGB = user?.traffic_balance_gb ?? 0
 
   const usedGb = (config.usage_up + config.usage_down) / (1024 ** 3)
   const usagePercent = config.total_gb > 0 ? Math.min(100, (usedGb / config.total_gb) * 100) : 0
   const isEnabled = config.enable
-
   const expiryDays = daysLeft(config.expiry_date)
 
   const refreshAfterAction = async () => {
@@ -44,9 +43,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
     setBusy(true)
     const prevEnable = config.enable
     const targetUuid = config.uuid
-    if (!targetUuid) {
-      console.warn('handleToggle: targetUuid is missing/falsy', config)
-    }
+    if (!targetUuid) console.warn('handleToggle: targetUuid is missing', config)
     setConfigs(prev => prev.map(c =>
       c.uuid === targetUuid ? { ...c, enable: !prevEnable } : c
     ))
@@ -57,33 +54,13 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
       setConfigs(prev => prev.map(c =>
         c.uuid === targetUuid ? { ...c, enable: prevEnable } : c
       ))
-      console.error(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleEdit = async (e) => {
-    e.preventDefault()
-    setError(null)
-    if (editForm.total_gb < usedGb) {
-      setError(`Traffic cannot be less than current usage (${usedGb.toFixed(2)} GB)`)
-      return
-    }
-    setBusy(true)
-    try {
-      await editConfig(config.email, editForm)
-      setShowEdit(false)
-      await refreshAfterAction()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to update config')
     } finally {
       setBusy(false)
     }
   }
 
   const handleRegenerateKey = async () => {
-    if (!window.confirm('Are you sure you want to regenerate the UUID key? The old one will stop working immediately.')) return
+    if (!window.confirm('Regenerate UUID key? The old one will stop working immediately.')) return
     setBusy(true)
     try {
       await regenerateConfigKey(config.email)
@@ -96,7 +73,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this config? Unused traffic will be refunded to your balance.')) return
+    if (!window.confirm('Delete this config? Unused traffic will be refunded.')) return
     setBusy(true)
     const targetUuid = config.uuid
     const deletedConfig = config
@@ -106,191 +83,239 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
       await refreshAfterAction()
     } catch (err) {
       setConfigs(prev => [...prev, deletedConfig])
-      console.error(err)
     } finally {
       setBusy(false)
     }
   }
 
-  // Bar color based on usage
-  const barColor = usagePercent > 85 ? 'bg-red-500' : usagePercent > 60 ? 'bg-amber-500' : config.status === 'active' ? 'bg-emerald-500' : 'bg-slate-500'
+  const handleCopyLink = async () => {
+    if (config.subscription_link) {
+      try {
+        await navigator.clipboard.writeText(config.subscription_link)
+      } catch {
+        const ta = document.createElement('textarea')
+        ta.value = config.subscription_link
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const rechargeMin = useMemo(() => Math.ceil(usedGb), [usedGb])
+  const rechargeMax = useMemo(() => Math.max(rechargeMin, Math.floor(config.total_gb + trafficBalanceGB)), [rechargeMin, config.total_gb, trafficBalanceGB])
+
+  const handleRecharge = () => {
+    if (trafficBalanceGB > 0) {
+      setRechargeValue(Math.max(rechargeMin, Math.min(config.total_gb, rechargeMax)))
+      setRechargeError(null)
+      setShowRecharge(true)
+    } else {
+      navigate('/profile')
+    }
+  }
+
+  const confirmRecharge = async () => {
+    if (rechargeValue < rechargeMin || rechargeValue > rechargeMax) return
+    setBusy(true)
+    setRechargeError(null)
+    try {
+      await editConfig(config.email, { total_gb: rechargeValue })
+      setShowRecharge(false)
+      await refreshAfterAction()
+      await refreshUser()
+    } catch (err) {
+      setRechargeError(err?.response?.data?.detail || 'Failed to recharge config')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const progressColor = usagePercent > 85 ? 'bg-red-500'
+    : usagePercent > 60 ? 'bg-amber-500'
+    : isEnabled ? 'bg-emerald-500' : 'bg-gray-500'
+
+  const statusColor = config.status === 'active' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+    : config.status === 'expired' ? 'text-red-400 bg-red-500/10 border-red-500/20'
+    : 'text-gray-400 bg-gray-500/10 border-gray-500/20'
 
   return (
     <>
-      <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 relative overflow-hidden">
-        {/* Status Badge */}
-        <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-            config.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-            config.status === 'expired' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-            'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-          }`}>
+      <div className="bg-dark-card rounded-card p-4 animate-fade-in">
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${isEnabled ? 'bg-emerald-400' : 'bg-gray-500'}`} />
+            <span className="text-white font-semibold text-[14px] truncate">{config.name || 'Unnamed'}</span>
+          </div>
+          <span className={`px-2 py-0.5 rounded-pill text-[10px] font-bold uppercase tracking-wider border ${statusColor} shrink-0`}>
             {config.status}
           </span>
         </div>
 
-        {/* Header */}
-        <div className="mb-3">
-          <h3 className="text-white font-bold text-lg truncate pr-20">{config.name || 'Unnamed Config'}</h3>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[13px] font-semibold text-white">
+            {usedGb.toFixed(1)} <span className="text-gray-500 font-normal">/ {config.total_gb.toFixed(1)} GB</span>
+          </span>
+          <span className="text-[11px] font-bold text-gray-400">{Math.round(usagePercent)}%</span>
         </div>
 
-        {/* Traffic Usage Section */}
-        <div className="space-y-2 mb-4">
-          {/* Total usage bar */}
-          <div>
-            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-              <span className="font-medium">Total Usage</span>
-              <span>{usedGb.toFixed(2)} / {config.total_gb.toFixed(1)} GB ({Math.round(usagePercent)}%)</span>
-            </div>
-            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-                style={{ width: `${usagePercent}%` }}
-              />
-            </div>
-          </div>
+        <div className="progress-bar mb-2.5">
+          <div className={`progress-bar-fill ${progressColor}`} style={{ width: `${usagePercent}%` }} />
         </div>
 
-        {/* Expiry info */}
-        <div className="flex items-center gap-1.5 text-slate-400 text-[10px] mb-4">
-          <FiClock size={10} />
-          {config.expiry_date ? (
-            expiryDays !== null && expiryDays > 0 ? (
-              <span className={expiryDays <= 3 ? 'text-amber-400 font-semibold' : ''}>
-                {expiryDays} day{expiryDays !== 1 ? 's' : ''} remaining
-              </span>
-            ) : expiryDays !== null && expiryDays <= 0 ? (
-              <span className="text-red-400 font-semibold">Expired</span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1 text-[11px] text-gray-500">
+            <FiClock size={10} />
+            {config.expiry_date ? (
+              expiryDays !== null && expiryDays > 0 ? (
+                <span className={expiryDays <= 3 ? 'text-amber-400 font-semibold' : ''}>
+                  {expiryDays} day{expiryDays !== 1 ? 's' : ''} left
+                </span>
+              ) : expiryDays !== null && expiryDays <= 0 ? (
+                <span className="text-red-400 font-semibold">Expired</span>
+              ) : (
+                <span>{new Date(config.expiry_date).toLocaleDateString()}</span>
+              )
             ) : (
-              <span>Expires: {new Date(config.expiry_date).toLocaleDateString()}</span>
-            )
-          ) : (
-            <span>No expiry</span>
+              <span>No expiry</span>
+            )}
+          </div>
+          {config.inbound_names && config.inbound_names.length > 0 && (
+            <div className="flex gap-1">
+              {config.inbound_names.slice(0, 2).map((name, i) => (
+                <span key={i} className="text-[10px] text-gray-500 bg-white/5 px-1.5 py-0.5 rounded-pill">
+                  {name.length > 8 ? name.slice(0, 8) + '..' : name}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Inbound names */}
-        {config.inbound_names && config.inbound_names.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {config.inbound_names.map((name, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-700/60 text-slate-300 border border-slate-600/50">
-                {name}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setShowQR(true)}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium py-2.5 rounded-xl transition-colors"
+            className="flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 text-white p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
+            title="Show QR"
           >
-            <MdQrCode size={14} />
-            <span>QR / Sub</span>
+            <MdQrCode size={16} />
           </button>
           <button
-            onClick={handleToggle}
+            onClick={handleCopyLink}
+            className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
+            title="Copy subscription link"
+          >
+            <FiCopy size={14} />
+          </button>
+          <button
+            onClick={handleRegenerateKey}
             disabled={busy}
-            className={`flex items-center justify-center p-2.5 rounded-xl transition-colors ${isEnabled ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-slate-700 text-slate-500 hover:bg-slate-600'}`}
-            title={isEnabled ? 'Disable' : 'Enable'}
+            className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1 disabled:opacity-30"
+            title="Regenerate key"
           >
-            {busy ? <FiLoader className="animate-spin" size={18} /> : isEnabled ? <FiToggleRight size={20} /> : <FiToggleLeft size={20} />}
+            <FiKey size={14} />
           </button>
           <button
-            onClick={() => {
-              const currentDays = config.expiry_date ? Math.max(0, daysLeft(config.expiry_date)) : 0
-              setEditForm({ name: config.name || '', total_gb: config.total_gb || 0, duration_days: currentDays })
-              setShowEdit(true)
-            }}
-            className="flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-slate-200 p-2.5 rounded-xl transition-colors"
-            title="Edit"
+            onClick={handleRecharge}
+            className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
+            title="Recharge"
           >
-            <FiEdit2 size={16} />
+            <FiZap size={14} />
           </button>
           <button
             onClick={handleDelete}
             disabled={busy}
-            className="flex items-center justify-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 p-2.5 rounded-xl transition-colors"
+            className="flex items-center justify-center bg-white/10 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1 disabled:opacity-30"
             title="Delete"
           >
-            <FiTrash2 size={16} />
+            <FiTrash2 size={14} />
+          </button>
+          <button
+            onClick={handleToggle}
+            disabled={busy}
+            className={`flex items-center justify-center p-2.5 rounded-icon-btn transition-all active:scale-[0.98] shrink-0 ${
+              isEnabled
+                ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                : 'bg-white/10 text-gray-500 hover:bg-white/15'
+            }`}
+            title={isEnabled ? 'Disable' : 'Enable'}
+          >
+            {busy ? <FiLoader className="animate-spin" size={14} /> : isEnabled ? <FiToggleRight size={16} /> : <FiToggleLeft size={16} />}
           </button>
         </div>
       </div>
 
-      {/* Edit Modal */}
-      {showEdit && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && setShowEdit(false)}>
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-white">Edit Config</h3>
-              <button onClick={() => setShowEdit(false)} className="text-slate-400 hover:text-white text-2xl">&times;</button>
+      {copied && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] bg-emerald-600 text-white text-[12px] font-semibold px-4 py-2 rounded-pill shadow-lg animate-fade-in">
+          Copied to clipboard
+        </div>
+      )}
+
+      {showRecharge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowRecharge(false) }}>
+          <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-5 pb-3">
+              <h3 className="text-[16px] font-bold text-white">Recharge Config</h3>
+              <button onClick={() => setShowRecharge(false)} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
+                <FiMinus size={16} />
+              </button>
             </div>
-            {error && <div className="text-xs text-rose-400 bg-rose-500/10 rounded-lg px-3 py-2 mb-4 border border-rose-500/20">{error}</div>}
-            <form onSubmit={handleEdit} className="space-y-5">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Config Name</label>
+            <div className="px-5 pb-5 space-y-4">
+              <p className="text-[12px] text-gray-500">
+                <span className="text-gray-400 font-medium">{config.name}</span>
+                <br />
+                Balance: <span className="text-emerald-400 font-bold">{trafficBalanceGB.toFixed(1)} GB</span>
+                &nbsp;·&nbsp; Current: <span className="text-white font-semibold">{config.total_gb.toFixed(1)} GB</span>
+              </p>
+
+              {rechargeError && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2 text-rose-400 text-[12px]">{rechargeError}</div>
+              )}
+
+              <div className="flex items-center gap-3">
                 <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={e => setEditForm({...editForm, name: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  type="range"
+                  min={rechargeMin}
+                  max={rechargeMax}
+                  step={1}
+                  value={rechargeValue}
+                  onChange={e => setRechargeValue(Number(e.target.value))}
+                  className="flex-1 accent-emerald-500 h-2"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Total Traffic (GB)</label>
-                <input
-                  type="number"
-                  value={editForm.total_gb}
-                  onChange={e => setEditForm({...editForm, total_gb: parseFloat(e.target.value) || 0})}
-                  min={usedGb > 0 ? parseFloat(usedGb.toFixed(3)) : 0.1}
-                  step="any"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-                {usedGb > 0 && (
-                  <p className="text-[10px] text-slate-500 mt-1">Minimum: {usedGb.toFixed(2)} GB (current usage)</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Duration (days)
-                  <span className="text-slate-500 font-normal ml-1">— 0 = unlimited, or set new days from now</span>
-                </label>
                 <input
                   type="number"
-                  value={editForm.duration_days}
-                  onChange={e => setEditForm({...editForm, duration_days: parseInt(e.target.value) || 0})}
-                  min={0}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                  placeholder="Leave 0 to keep current expiry"
+                  min={rechargeMin}
+                  max={rechargeMax}
+                  step={1}
+                  value={rechargeValue}
+                  onChange={e => {
+                    const v = Number(e.target.value)
+                    if (!isNaN(v)) setRechargeValue(Math.max(rechargeMin, Math.min(v, rechargeMax)))
+                  }}
+                  className="w-20 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-[13px] font-semibold text-center focus:outline-none focus:border-emerald-500 transition-colors"
                 />
-                {config.expiry_date && (
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Current expiry: {new Date(config.expiry_date).toLocaleDateString()}
-                    {expiryDays !== null && ` (${expiryDays > 0 ? expiryDays + ' days left' : 'expired'})`}
-                  </p>
-                )}
               </div>
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleRegenerateKey}
-                  disabled={busy}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-medium py-2.5 rounded-xl border border-slate-700 transition-colors mb-4"
-                >
-                  <FiRotateCcw size={14} />
-                  Regenerate UUID Key
-                </button>
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
-                >
-                  {busy ? 'Saving...' : 'Save Changes'}
-                </button>
+
+              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <span>{rechargeMin} GB (min)</span>
+                <span>{rechargeMax} GB (max)</span>
               </div>
-            </form>
+
+              <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2.5">
+                <span className="text-[12px] text-gray-400">New total</span>
+                <span className="text-white font-bold text-[15px]">{rechargeValue} GB</span>
+              </div>
+
+              <button
+                onClick={confirmRecharge}
+                disabled={busy}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
+              >
+                {busy ? 'Applying...' : `Apply +${(rechargeValue - config.total_gb).toFixed(0)} GB`}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -8,12 +8,6 @@ const CloseIcon = () => (
   </svg>
 )
 
-const CopyIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-  </svg>
-)
-
 const TelegramIcon = () => (
   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.52-1.4.51-.46-.01-1.35-.26-2.01-.48-.81-.27-1.45-.42-1.39-.89.03-.24.37-.49 1.02-.74 4-1.74 6.67-2.88 8-3.43 3.81-1.58 4.6-1.85 5.12-1.86.11 0 .37.03.54.17.14.12.18.28.2.44-.01.07 0 .14-.01.21z" />
@@ -21,23 +15,11 @@ const TelegramIcon = () => (
 )
 
 export default function QRModal({ uuid, configName, subscriptionLink, onClose }) {
-  const [copied, setCopied] = useState(false)
   const [zipPassword, setZipPassword] = useState('')
   const [showZipInput, setShowZipInput] = useState(false)
   const [sending, setSending] = useState(false)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
-
-  const handleCopy = async () => {
-    if (!subscriptionLink) return
-    try {
-      await navigator.clipboard.writeText(subscriptionLink)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // ignore
-    }
-  }
 
   const handleSendToBot = async () => {
     if (!zipPassword.trim()) return
@@ -88,16 +70,6 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
             <p className="text-slate-400 text-xs break-all line-clamp-3 font-mono">{subscriptionLink}</p>
           </div>
         )}
-
-        {/* Copy button */}
-        <button
-          onClick={handleCopy}
-          disabled={!subscriptionLink}
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
-        >
-          <CopyIcon />
-          {copied ? 'Copied!' : 'Copy Subscription Link'}
-        </button>
 
         {/* Send to Telegram section */}
         {!showZipInput ? (

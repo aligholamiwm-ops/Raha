@@ -30,7 +30,7 @@ const ShieldIcon = () => (
 
 export default function BottomNav() {
   const { user } = useApp();
-  
+
   const tabs = [
     { to: '/', label: 'Dashboard', Icon: GridIcon },
     { to: '/referral', label: 'Referral', Icon: UsersIcon },
@@ -44,25 +44,23 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full bg-slate-800 border-t border-slate-700 z-50"
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full bg-dark-card border-t border-white/5 z-50"
       style={{ maxWidth: 480, paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="flex items-center justify-around h-16">
+      <div className="flex items-center justify-around h-14">
         {tabs.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-colors ${
-                isActive
-                  ? 'text-emerald-400'
-                  : 'text-slate-400 hover:text-slate-200'
+              `flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
+                isActive ? 'text-emerald-400' : 'text-gray-500 hover:text-gray-300'
               }`
             }
           >
             <Icon />
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-[9px] font-semibold tracking-wide uppercase">{label}</span>
           </NavLink>
         ))}
       </div>
