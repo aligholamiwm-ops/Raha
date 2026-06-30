@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminInboundUsage, getAdminUserUsageHistory } from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds } from '../api/client';
 import UsageHistogram from '../components/UsageHistogram';
 import { 
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
@@ -157,9 +157,10 @@ const InboundTooltip = ({ active, payload, label }) => {
   );
 };
 
-function InboundHistogram() {
+function ServerUsageChart({ servers = [] }) {
   const [timeframe, setTimeframe] = useState('H');
   const [window, setWindow] = useState('1D');
+  const [selectedServer, setSelectedServer] = useState('');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -168,14 +169,14 @@ function InboundHistogram() {
     setLoading(true);
     setError(null);
     try {
-      const points = await getAdminInboundUsage(timeframe, window);
+      const points = await getAdminServerUsage(timeframe, window, selectedServer);
       setData(points);
     } catch {
-      setError('Failed to load inbound usage data');
+      setError('Failed to load server usage data');
     } finally {
       setLoading(false);
     }
-  }, [timeframe, window]);
+  }, [timeframe, window, selectedServer]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -195,12 +196,19 @@ function InboundHistogram() {
       <div className="flex items-center justify-between">
         <h3 className="text-slate-300 font-semibold text-sm flex items-center gap-2">
           <FiBarChart2 className="text-blue-400" size={14} />
-          Inbound Usage
+          Server Usage
         </h3>
-        <span className="text-[10px] text-slate-500">{inboundFormatGB(totalGB)} total</span>
+        <div className="flex items-center gap-2">
+          {selectedServer && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              {selectedServer}
+            </span>
+          )}
+          <span className="text-[10px] text-slate-500">{inboundFormatGB(totalGB)} total</span>
+        </div>
       </div>
 
-      {/* Controls */}
+      {/* Server selector + Controls */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="flex rounded-lg overflow-hidden border border-slate-700">
           {INBOUND_TIMEFRAMES.map(tf => (
@@ -227,6 +235,18 @@ function InboundHistogram() {
               {w.label}
             </button>
           ))}
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <select
+            value={selectedServer}
+            onChange={e => setSelectedServer(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="">All Servers</option>
+            {servers.map(s => (
+              <option key={s.name} value={s.name}>{s.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -308,6 +328,10 @@ export default function Admin() {
   const [showIpForm, setShowIpForm] = useState(false);
   const [ipForm, setIpForm] = useState({ isp_name: "MCI", ip_address: "" });
 
+  const [availableInbounds, setAvailableInbounds] = useState([]);
+  const [defaultInboundIds, setDefaultInboundIds] = useState([]);
+  const [savingDefaultInbounds, setSavingDefaultInbounds] = useState(false);
+
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [planForm, setPlanForm] = useState({ plan_name: "", traffic_gb: 10, price_usd: 5 });
   const [editingPlan, setEditingPlan] = useState(null);
@@ -366,7 +390,7 @@ export default function Admin() {
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
-    if (tab === "servers") { fetchServers(); fetchCleanIps(); }
+    if (tab === "servers") { fetchServers(); fetchCleanIps(); fetchInbounds(); }
     if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
   };
 
@@ -480,6 +504,31 @@ export default function Admin() {
     setTopFilter(newFilter);
     setTopUsers([]);
     fetchTopUsers(newFilter);
+  };
+
+  const fetchInbounds = async () => {
+    try {
+      const [list, defaultIds] = await Promise.all([
+        getAvailableInbounds(),
+        getDefaultInboundIds(),
+      ]);
+      setAvailableInbounds(list || []);
+      setDefaultInboundIds(defaultIds?.inbound_ids || []);
+    } catch (err) {
+      console.error("Failed to fetch inbounds", err);
+    }
+  };
+
+  const handleSaveDefaultInbounds = async () => {
+    setSavingDefaultInbounds(true);
+    try {
+      await saveDefaultInboundIds(defaultInboundIds);
+      toast("Default inbounds saved!");
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSavingDefaultInbounds(false);
+    }
   };
 
   const handleSaveReferralSettings = async () => {
@@ -924,7 +973,7 @@ export default function Admin() {
 
       {activeTab === "servers" && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <InboundHistogram />
+          <ServerUsageChart servers={servers} />
           <Card>
             <SectionHeader title="XUI Servers" icon={FiServer} />
             <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
@@ -976,6 +1025,48 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Default Inbounds" icon={FiBarChart2} />
+            <p className="text-xs text-slate-500 mb-3">
+              Select inbounds to attach by default when creating new configs.
+            </p>
+
+            {availableInbounds.length === 0 ? (
+              <p className="text-xs text-slate-600 text-center py-4">Loading inbounds…</p>
+            ) : (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                {availableInbounds.map(ib => (
+                  <label key={`${ib.server_name}-${ib.id}`} className="flex items-center gap-3 p-2 bg-slate-900/30 rounded-lg border border-slate-700/50 cursor-pointer hover:border-emerald-500/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={defaultInboundIds.includes(ib.id)}
+                      onChange={() => {
+                        setDefaultInboundIds(prev =>
+                          prev.includes(ib.id)
+                            ? prev.filter(id => id !== ib.id)
+                            : [...prev, ib.id]
+                        );
+                      }}
+                      className="w-3.5 h-3.5 accent-emerald-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-medium text-white truncate block">{ib.remark}</span>
+                      <span className="text-[10px] text-slate-500">ID: {ib.id} · {ib.server_name}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <Button
+              onClick={handleSaveDefaultInbounds}
+              disabled={savingDefaultInbounds}
+              className="w-full mt-3"
+            >
+              {savingDefaultInbounds ? 'Saving…' : 'Save Default Inbounds'}
+            </Button>
           </Card>
 
           <Card>

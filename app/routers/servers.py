@@ -1,10 +1,11 @@
+import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from app.dependencies import require_admin
 from app.models.user import UserModel
 from app.config import get_settings, Settings
@@ -76,26 +77,29 @@ async def test_server_connection(
         raise HTTPException(status_code=502, detail=f"Failed to connect to server: {exc}")
 
 
-class InboundUsagePoint(BaseModel):
+class ServerUsagePoint(BaseModel):
     ts: str = Field(description="ISO-8601 UTC timestamp for this bucket")
     gb: float = Field(description="Total traffic (upload + download) in GB")
 
 
 @router.get(
-    "/inbound-usage",
-    response_model=List[InboundUsagePoint],
-    summary="Get aggregated inbound usage history across all servers (admin)",
+    "/server-usage",
+    response_model=List[ServerUsagePoint],
+    summary="Get aggregated server usage history across all servers (admin)",
 )
-async def get_inbound_usage(
+async def get_server_usage(
     timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
     window: str = Query(default="1D", pattern="^(1D|1W|1M|all)$", description="Time window: 1D, 1W, 1M, or all"),
+    server_name: Optional[str] = Query(default=None, description="Optional server name filter"),
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
-) -> List[InboundUsagePoint]:
+) -> List[ServerUsagePoint]:
     now = datetime.now(timezone.utc)
     today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
 
     query: dict = {}
+    if server_name:
+        query["server_name"] = server_name
     if window == "1D":
         query["date"] = {"$gte": today}
     elif window == "1W":
@@ -104,7 +108,7 @@ async def get_inbound_usage(
         query["date"] = {"$gte": today - timedelta(days=29)}
     # "all" → no date filter
 
-    cursor = db.inbound_usages.find(
+    cursor = db.server_usages.find(
         query,
         {"date": 1, "hourly_usage": 1, "_id": 0},
     ).sort("date", 1)
@@ -120,7 +124,7 @@ async def get_inbound_usage(
             for hour, bucket in enumerate(doc.get("hourly_usage", [])):
                 ts = (day + timedelta(hours=hour)).isoformat()
                 bucket_map[ts] += (bucket.get("u", 0) + bucket.get("d", 0))
-        return [InboundUsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(bucket_map.items())]
+        return [ServerUsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(bucket_map.items())]
     else:
         daily_map: dict = defaultdict(float)
         for doc in docs:
@@ -128,4 +132,63 @@ async def get_inbound_usage(
             day_str = day.isoformat()
             for bucket in doc.get("hourly_usage", []):
                 daily_map[day_str] += (bucket.get("u", 0) + bucket.get("d", 0))
-        return [InboundUsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(daily_map.items())]
+        return [ServerUsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(daily_map.items())]
+
+
+class DefaultInboundsPayload(BaseModel):
+    inbound_ids: list[int] = Field(..., description="List of inbound IDs to use as defaults")
+
+
+@router.get(
+    "/default-inbounds/list",
+    summary="List all inbounds from all servers (admin)",
+)
+async def list_default_inbounds(
+    _admin: UserModel = Depends(require_admin),
+    settings: Settings = Depends(get_settings),
+) -> list[dict]:
+    async def _fetch(server: dict) -> list[dict]:
+        server_name = server.get("name", "")
+        try:
+            xui = build_xui_client(server)
+            inbounds = await xui.get_inbound_list()
+            return [{"id": ib["id"], "remark": ib.get("remark", f"inbound-{ib['id']}"), "server_name": server_name} for ib in inbounds if "id" in ib]
+        except Exception as exc:
+            logger.warning("Failed to fetch inbounds from %s: %s", server_name, exc)
+            return []
+
+    tasks = [_fetch(s) for s in settings.get_enabled_servers()]
+    results = await asyncio.gather(*tasks)
+    combined = []
+    for r in results:
+        combined.extend(r)
+    return combined
+
+
+@router.get(
+    "/default-inbounds",
+    summary="Get saved default inbound IDs (admin)",
+)
+async def get_default_inbounds(
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    doc = await db.settings.find_one({"_id": "default_inbound_ids"})
+    return {"inbound_ids": doc.get("inbound_ids", []) if doc else []}
+
+
+@router.put(
+    "/default-inbounds",
+    summary="Save default inbound IDs (admin)",
+)
+async def save_default_inbounds(
+    payload: DefaultInboundsPayload,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    await db.settings.update_one(
+        {"_id": "default_inbound_ids"},
+        {"$set": {"inbound_ids": payload.inbound_ids}},
+        upsert=True,
+    )
+    return {"inbound_ids": payload.inbound_ids}

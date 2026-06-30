@@ -33,7 +33,7 @@ def _get_db():
 def track_hourly_usage(self) -> dict:
     """
     Fetch live traffic data from each XUI server, compute per-client hourly
-    deltas, and persist them into the config_usages / inbound_usages bucket
+    deltas, and persist them into the config_usages / server_usages bucket
     collections using MongoDB's $inc operator.
 
     Non-active (disabled/expired) configs that have just transitioned from
@@ -236,13 +236,12 @@ def track_hourly_usage(self) -> dict:
                     inbound_deltas[inbound_id]["up"] += delta_up_bytes
                     inbound_deltas[inbound_id]["down"] += delta_down_bytes
 
-                # Update inbound_usages for each inbound that had active traffic
+                # Update server_usages for each inbound that had active traffic
                 empty_hourly_inbound = [{"u": 0, "d": 0} for _ in range(24)]
                 for inbound_id, deltas in inbound_deltas.items():
-                    await db.inbound_usages.update_one(
+                    await db.server_usages.update_one(
                         {
                             "server_name": server_name,
-                            "inbound_id": inbound_id,
                             "date": today_midnight,
                         },
                         {"$setOnInsert": {"hourly_usage": empty_hourly_inbound}},
@@ -251,10 +250,9 @@ def track_hourly_usage(self) -> dict:
                     delta_up_int = round(deltas["up"] / _BYTES_TO_GB)
                     delta_down_int = round(deltas["down"] / _BYTES_TO_GB)
                     if delta_up_int > 0 or delta_down_int > 0:
-                        await db.inbound_usages.update_one(
+                        await db.server_usages.update_one(
                             {
                                 "server_name": server_name,
-                                "inbound_id": inbound_id,
                                 "date": today_midnight,
                             },
                             {

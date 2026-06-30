@@ -322,7 +322,12 @@ class ConfigService:
             "subId": sub_id,
         }
         xui = build_xui_client(server)
-        resolved_inbound_ids: list[int] = inbound_ids or [int(server.get("inbound_id", 1))]
+        if not inbound_ids:
+            defaults_doc = await self._db.settings.find_one({"_id": "default_inbound_ids"})
+            default_ids = defaults_doc.get("inbound_ids", []) if defaults_doc else []
+            resolved_inbound_ids: list[int] = default_ids or [int(server.get("inbound_id", 1))]
+        else:
+            resolved_inbound_ids = inbound_ids
         result = await xui.add_client_to_inbounds(resolved_inbound_ids, client_data)
         if not result.get("success"):
             raise RuntimeError(f"Failed to create config on server: {result.get('msg')}")

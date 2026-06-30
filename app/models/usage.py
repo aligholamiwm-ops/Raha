@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -26,10 +25,9 @@ class ConfigUsageDocument(BaseModel):
     )
 
 
-class InboundUsageDocument(BaseModel):
+class ServerUsageDocument(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     server_name: str
-    inbound_id: Union[str, int]
     date: datetime = Field(description="Midnight UTC for the day this bucket covers")
     hourly_usage: list[InboundHourlyBucket] = Field(
         default_factory=lambda: [InboundHourlyBucket() for _ in range(24)],

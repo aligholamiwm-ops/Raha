@@ -90,8 +90,17 @@ export const updateNickname = (nickname) =>
 export const getUsageHistory = (timeframe = 'H', window = '1D', config = 'all') =>
   api.get('/api/v1/users/me/usage-history', { params: { timeframe, window, config } }).then((r) => r.data)
 
-export const getAdminInboundUsage = (timeframe = 'H', window = '1D') =>
-  api.get('/api/v1/admin/servers/inbound-usage', { params: { timeframe, window } }).then((r) => r.data)
+export const getAdminServerUsage = (timeframe = 'H', window = '1D', serverName = '') =>
+  api.get('/api/v1/admin/servers/server-usage', { params: { timeframe, window, ...(serverName ? { server_name: serverName } : {}) } }).then((r) => r.data)
+
+export const getAvailableInbounds = () =>
+  api.get('/api/v1/admin/servers/default-inbounds/list').then((r) => r.data)
+
+export const getDefaultInboundIds = () =>
+  api.get('/api/v1/admin/servers/default-inbounds').then((r) => r.data)
+
+export const saveDefaultInboundIds = (inboundIds) =>
+  api.put('/api/v1/admin/servers/default-inbounds', { inbound_ids: inboundIds }).then((r) => r.data)
 
 export const getAdminUserUsageHistory = (telegramId, timeframe = 'H', window = '1D', config = 'all') =>
   api.get(`/api/v1/admin/users/${telegramId}/usage-history`, { params: { timeframe, window, config } }).then((r) => r.data)
