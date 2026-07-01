@@ -8,8 +8,8 @@ class ConfigHourlyBucket(BaseModel):
 
 
 class InboundHourlyBucket(BaseModel):
-    u: int = Field(default=0, description="Upload in GB, rounded to nearest integer")
-    d: int = Field(default=0, description="Download in GB, rounded to nearest integer")
+    u: float = Field(default=0.0, description="Upload in GB, rounded to 2 decimal places")
+    d: float = Field(default=0.0, description="Download in GB, rounded to 2 decimal places")
 
 
 class ConfigUsageDocument(BaseModel):

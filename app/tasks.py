@@ -183,7 +183,12 @@ def track_hourly_usage(self) -> dict:
                                 },
                             )
 
-                        # Non-active configs do not contribute to inbound-level totals.
+                        inbound_id = c.get("inbound_id", server.get("inbound_id", 1))
+                        if inbound_id not in inbound_deltas:
+                            inbound_deltas[inbound_id] = {"up": 0.0, "down": 0.0}
+                        inbound_deltas[inbound_id]["up"] += delta_up_bytes
+                        inbound_deltas[inbound_id]["down"] += delta_down_bytes
+
                         continue
 
                     empty_hourly = [{"u": 0.0, "d": 0.0} for _ in range(24)]
@@ -237,7 +242,7 @@ def track_hourly_usage(self) -> dict:
                     inbound_deltas[inbound_id]["down"] += delta_down_bytes
 
                 # Update server_usages for each inbound that had active traffic
-                empty_hourly_inbound = [{"u": 0, "d": 0} for _ in range(24)]
+                empty_hourly_inbound = [{"u": 0.0, "d": 0.0} for _ in range(24)]
                 for inbound_id, deltas in inbound_deltas.items():
                     await db.server_usages.update_one(
                         {
@@ -247,9 +252,9 @@ def track_hourly_usage(self) -> dict:
                         {"$setOnInsert": {"hourly_usage": empty_hourly_inbound}},
                         upsert=True,
                     )
-                    delta_up_int = round(deltas["up"] / _BYTES_TO_GB)
-                    delta_down_int = round(deltas["down"] / _BYTES_TO_GB)
-                    if delta_up_int > 0 or delta_down_int > 0:
+                    delta_up_gb = round(deltas["up"] / _BYTES_TO_GB, 2)
+                    delta_down_gb = round(deltas["down"] / _BYTES_TO_GB, 2)
+                    if delta_up_gb > 0 or delta_down_gb > 0:
                         await db.server_usages.update_one(
                             {
                                 "server_name": server_name,
@@ -257,8 +262,8 @@ def track_hourly_usage(self) -> dict:
                             },
                             {
                                 "$inc": {
-                                    f"hourly_usage.{hour}.u": delta_up_int,
-                                    f"hourly_usage.{hour}.d": delta_down_int,
+                                    f"hourly_usage.{hour}.u": delta_up_gb,
+                                    f"hourly_usage.{hour}.d": delta_down_gb,
                                 }
                             },
                         )

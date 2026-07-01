@@ -204,7 +204,6 @@ function ServerUsageChart({ servers = [] }) {
               {selectedServer}
             </span>
           )}
-          <span className="text-[10px] text-slate-500">{inboundFormatGB(totalGB)} total</span>
         </div>
       </div>
 
@@ -289,6 +288,25 @@ function ServerUsageChart({ servers = [] }) {
           </ResponsiveContainer>
         )}
       </div>
+
+      {data.length > 0 && (
+        <div className="flex items-center gap-4 pt-2.5 border-t border-slate-700/50">
+          <div>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Peak</p>
+            <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(maxGB)}</p>
+          </div>
+          <div className="w-px h-7 bg-slate-700/50" />
+          <div>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Average</p>
+            <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(data.length > 0 ? totalGB / data.length : 0)}</p>
+          </div>
+          <div className="w-px h-7 bg-slate-700/50" />
+          <div>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Total</p>
+            <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(totalGB)}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

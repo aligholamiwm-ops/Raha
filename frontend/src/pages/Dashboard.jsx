@@ -29,13 +29,14 @@ function estimateDaysRemaining(configs) {
     const d = daysLeft(c.expiry_date)
     if (d !== null && d > 0) {
       const used = bytesToGB((c.usage_up || 0) + (c.usage_down || 0))
-      const dailyAvg = used > 0 && d > 0 ? (used / (d > 30 ? 30 : Math.max(d, 1))) : 0
-      if (dailyAvg > 0) {
-        const remaining = c.total_gb - used
-        const est = remaining / dailyAvg
-        totalDays += Math.min(est, d)
-      } else {
+      const remaining = c.total_gb - used
+      if (used <= 0 || remaining <= 0) {
         totalDays += d
+      } else {
+        const estimatedAgeDays = (used * d) / remaining
+        const dailyAvg = used / Math.max(estimatedAgeDays, 1)
+        const est = remaining / dailyAvg
+        totalDays += Math.min(Math.max(est, 0), d)
       }
       count++
     }

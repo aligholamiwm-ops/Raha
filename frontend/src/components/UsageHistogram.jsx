@@ -7,8 +7,8 @@ import { getUsageHistory } from '../api/client'
 
 const PERIODS = [
   { id: '1D', label: 'Day', timeframe: 'H', window: '1D' },
-  { id: '7D', label: 'Week', timeframe: 'D', window: '30D' },
-  { id: '30D', label: 'Month', timeframe: 'D', window: 'all' },
+  { id: '7D', label: 'Week', timeframe: 'D', window: '7D' },
+  { id: '30D', label: 'Month', timeframe: 'D', window: '30D' },
 ]
 
 function parseUtc(ts) {
@@ -131,7 +131,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
 
       {configs.length > 1 && (
         <div className="flex items-center gap-1.5 mb-2.5 overflow-x-auto scrollbar-none">
-          {['all', ...configs.map(c => c.email)].slice(0, 8).map(key => {
+          {['all', ...configs.map(c => c.email)].map(key => {
             const c = key === 'all' ? null : configs.find(cfg => cfg.email === key)
             const label = key === 'all' ? 'All' : (c?.name || key.slice(0, 12))
             return (

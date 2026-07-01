@@ -465,7 +465,7 @@ async def change_user_role(
 async def get_admin_user_usage_history(
     telegram_id: int,
     timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
-    window: str = Query(default="1D", pattern="^(1D|30D|all)$", description="Time window: 1D, 30D, or all"),
+    window: str = Query(default="1D", pattern="^(1D|7D|30D|all)$", description="Time window: 1D, 7D, 30D, or all"),
     config: str = Query(default="all", description="Config UUID or 'all' for all configs"),
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -477,6 +477,8 @@ async def get_admin_user_usage_history(
     query: dict = {}
     if window == "1D":
         query["date"] = {"$gte": today}
+    elif window == "7D":
+        query["date"] = {"$gte": today - timedelta(days=6)}
     elif window == "30D":
         query["date"] = {"$gte": today - timedelta(days=29)}
 

@@ -366,6 +366,18 @@ class ConfigService:
             server_name,
             telegram_id,
         )
+        await self._db.usage_snapshots.update_one(
+            {"uuid": config_uuid},
+            {
+                "$set": {
+                    "usage_up": 0.0,
+                    "usage_down": 0.0,
+                    "client_status": "active",
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+            upsert=True,
+        )
         try:
             await self._update_today_config_status(
                 config_uuid,

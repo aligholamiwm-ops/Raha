@@ -258,7 +258,7 @@ class UsagePoint(BaseModel):
 )
 async def get_usage_history(
     timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
-    window: str = Query(default="1D", pattern="^(1D|30D|all)$", description="Time window: 1D, 30D, or all"),
+    window: str = Query(default="1D", pattern="^(1D|7D|30D|all)$", description="Time window: 1D, 7D, 30D, or all"),
     config: str = Query(default="all", description="Config UUID or 'all' for all configs"),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -272,6 +272,8 @@ async def get_usage_history(
     # Date range filter
     if window == "1D":
         query["date"] = {"$gte": today}
+    elif window == "7D":
+        query["date"] = {"$gte": today - timedelta(days=6)}
     elif window == "30D":
         query["date"] = {"$gte": today - timedelta(days=29)}
     # "all" → no date filter
