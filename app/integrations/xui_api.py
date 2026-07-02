@@ -387,9 +387,447 @@ class AsyncXUIClient:
 
         return await self._enrich_clients(raw_clients, last_online_map, inbound_map=inbound_map)
 
+    async def get_hosts(self, inbound_id: int) -> list:
+        resp = await self._request("GET", f"/panel/api/hosts/byInbound/{inbound_id}")
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
+
+    async def get_inbound_slim(self) -> list:
+        resp = await self._request("GET", "/panel/api/inbounds/list/slim")
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
+
+    async def get_inbound(self, inbound_id: int) -> dict:
+        resp = await self._request("GET", f"/panel/api/inbounds/get/{inbound_id}")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def add_inbound(self, data: dict) -> dict:
+        resp = await self._request("POST", "/panel/api/inbounds/add", json=data)
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def update_inbound(self, inbound_id: int, data: dict) -> dict:
+        resp = await self._request(
+            "POST", f"/panel/api/inbounds/update/{inbound_id}", json=data
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def delete_inbound(self, inbound_id: int) -> dict:
+        resp = await self._request(
+            "POST", f"/panel/api/inbounds/del/{inbound_id}"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_delete_inbounds(self, ids: list[int]) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/inbounds/bulkDel", json={"inboundIds": ids}
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def set_inbound_enable(self, inbound_id: int, enable: bool) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/inbounds/setEnable/{inbound_id}",
+            json={"enable": enable},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def reset_inbound_traffic(self, inbound_id: int) -> dict:
+        resp = await self._request(
+            "POST", f"/panel/api/inbounds/{inbound_id}/resetTraffic"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def delete_all_inbound_clients(self, inbound_id: int) -> dict:
+        resp = await self._request(
+            "POST", f"/panel/api/inbounds/{inbound_id}/delAllClients"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def reset_all_inbounds_traffic(self) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/inbounds/resetAllTraffics"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_inbound_fallbacks(self, inbound_id: int) -> list:
+        resp = await self._request(
+            "GET", f"/panel/api/inbounds/{inbound_id}/fallbacks"
+        )
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
+
+    async def set_inbound_fallbacks(self, inbound_id: int, fallbacks: list) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/inbounds/{inbound_id}/fallbacks",
+            json={"fallbacks": fallbacks},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_server_status(self) -> dict:
+        resp = await self._request("GET", "/panel/api/server/status")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def restart_xray(self) -> dict:
+        resp = await self._request("POST", "/panel/api/server/restartXrayService")
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_xray_version(self) -> list:
+        resp = await self._request("GET", "/panel/api/server/getXrayVersion")
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
+
+    async def get_config_json(self) -> dict:
+        resp = await self._request("GET", "/panel/api/server/getConfigJson")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def get_all_settings(self) -> dict:
+        resp = await self._request("GET", "/panel/api/setting/all")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def get_new_uuid(self) -> str:
+        resp = await self._request("GET", "/panel/api/server/getNewUUID")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or ""
+        return ""
+
+    async def get_new_x25519_cert(self) -> dict:
+        resp = await self._request("GET", "/panel/api/server/getNewX25519Cert")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def add_host(self, host_data: dict) -> dict:
+        resp = await self._request("POST", "/panel/api/hosts/add", json=host_data)
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def update_host(self, host_data: dict) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/hosts/update", json=host_data
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def delete_host(self, host_id: int) -> dict:
+        resp = await self._request(
+            "POST", f"/panel/api/hosts/del/{host_id}"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def reset_client_traffic(self, email: str) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/resetTraffic/{quote(email, safe='')}",
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_client_traffic(self, email: str) -> dict:
+        resp = await self._request(
+            "GET",
+            f"/panel/api/clients/traffic/{quote(email, safe='')}",
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def attach_client(self, email: str, inbound_ids: list[int]) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/{quote(email, safe='')}/attach",
+            json={"inboundIds": inbound_ids},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def detach_client(self, email: str, inbound_ids: list[int]) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/{quote(email, safe='')}/detach",
+            json={"inboundIds": inbound_ids},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_delete_clients(
+        self, emails: list[str], keep_traffic: bool = False
+    ) -> dict:
+        resp = await self._request(
+            "POST",
+            "/panel/api/clients/bulkDel",
+            json={"emails": emails, "keepTraffic": keep_traffic},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_create_clients(self, payload: list[dict]) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/clients/bulkCreate", json=payload
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_enable_clients(self, emails: list[str]) -> dict:
+        resp = await self._request(
+            "POST",
+            "/panel/api/clients/bulkEnable",
+            json={"emails": emails},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_reset_traffic(self, emails: list[str]) -> dict:
+        resp = await self._request(
+            "POST",
+            "/panel/api/clients/bulkResetTraffic",
+            json={"emails": emails},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def bulk_adjust_clients(
+        self,
+        emails: list[str],
+        add_days: Optional[int] = None,
+        add_bytes: Optional[int] = None,
+        flow: Optional[str] = None,
+    ) -> dict:
+        body: dict = {"emails": emails}
+        if add_days is not None:
+            body["addDays"] = add_days
+        if add_bytes is not None:
+            body["addBytes"] = add_bytes
+        if flow is not None:
+            body["flow"] = flow
+        resp = await self._request(
+            "POST", "/panel/api/clients/bulkAdjust", json=body
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def update_client_traffic(
+        self, email: str, upload: int, download: int
+    ) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/updateTraffic/{quote(email, safe='')}",
+            json={"upload": upload, "download": download},
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_client_ips(self, email: str) -> list:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/ips/{quote(email, safe='')}",
+        )
+        if resp.status_code == 200:
+            obj = resp.json().get("obj")
+            return obj if isinstance(obj, list) else []
+        return []
+
+    async def clear_client_ips(self, email: str) -> dict:
+        resp = await self._request(
+            "POST",
+            f"/panel/api/clients/clearIps/{quote(email, safe='')}",
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def get_clients_paged(
+        self,
+        page: int = 1,
+        page_size: int = 25,
+        search: str = "",
+        filter_field: str = "",
+        protocol: str = "",
+        sort_field: str = "",
+        order: str = "ascend",
+    ) -> dict:
+        params = {
+            "page": page,
+            "pageSize": page_size,
+            "search": search,
+            "filter": filter_field,
+            "protocol": protocol,
+            "sort": sort_field,
+            "order": order,
+        }
+        resp = await self._request(
+            "GET", "/panel/api/clients/list/paged", params=params
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                return data.get("obj") or {}
+        return {}
+
+    async def delete_depleted_clients(self) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/clients/delDepleted"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
+    async def delete_orphan_clients(self) -> dict:
+        resp = await self._request(
+            "POST", "/panel/api/clients/delOrphans"
+        )
+        return (
+            resp.json()
+            if resp.status_code == 200
+            else {"success": False, "msg": f"HTTP {resp.status_code}"}
+        )
+
     async def get_clients_by_email_prefix(self, prefix: str) -> list[dict]:
-        all_clients = await self.get_client_info()
-        return [c for c in all_clients if c.get("email", "").startswith(prefix)]
+        results: list[dict] = []
+        page = 1
+        page_size = 100
+        while True:
+            paged = await self.get_clients_paged(
+                page=page,
+                page_size=page_size,
+                search=prefix,
+            )
+            items = paged.get("items") or []
+            total = paged.get("total", 0)
+            if not items:
+                break
+            for item in items:
+                if item.get("email", "").startswith(prefix):
+                    results.append(item)
+            if len(results) >= total or len(items) < page_size:
+                break
+            page += 1
+
+        try:
+            last_online_map = await self._last_online_map()
+        except Exception:
+            last_online_map = {}
+
+        inbound_map = None
+        try:
+            inbound_map = await self.get_inbound_map()
+        except Exception:
+            pass
+
+        return await self._enrich_clients(
+            results, last_online_map, inbound_map=inbound_map
+        )
 
 
 def _build_subscription_url(
