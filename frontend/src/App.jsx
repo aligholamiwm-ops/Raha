@@ -94,7 +94,7 @@ function AppShell() {
     }
   }, [user])
 
-  const handleNicknameSaved = (nickname) => {
+  const handleNicknameSaved = (_nickname) => {
     setShowNicknameModal(false)
     refreshUser()
   }

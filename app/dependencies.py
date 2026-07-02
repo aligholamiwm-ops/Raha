@@ -126,10 +126,11 @@ async def get_current_user(
 
     user_data = validate_telegram_init_data(parsed_init_data, settings.BOT_TOKEN)
 
-    telegram_id: int = user_data.get("id")
-    if not telegram_id:
+    telegram_id_raw = user_data.get("id")
+    if not telegram_id_raw:
         logger.error("Failed to extract telegram_id from validated init_data")
         raise HTTPException(status_code=403, detail="Cannot determine telegram_id")
+    telegram_id: int = int(telegram_id_raw)
 
     doc = await db.users.find_one({"telegram_id": telegram_id})
     

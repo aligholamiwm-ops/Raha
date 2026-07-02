@@ -10,10 +10,11 @@ async def send_telegram_message(bot_token: str, chat_id: int, text: str) -> bool
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                url, 
+                url,
                 json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
             )
-            return resp.status_code == 200 and resp.json().get("ok", False)
+            ok = resp.status_code == 200 and resp.json().get("ok", False)
+            return ok
     except Exception as exc:
-        logger.warning("Failed to send Telegram message to %s: %s", chat_id, exc)
+        logger.warning("Failed to send message to %s: %s", chat_id, exc)
         return False

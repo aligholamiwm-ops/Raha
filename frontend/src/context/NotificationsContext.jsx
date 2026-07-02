@@ -24,7 +24,7 @@ export function NotificationsProvider({ children }) {
       setNotifications(data.notifications || [])
       setUnreadCount(data.unread_count || 0)
       setTotal(data.total || 0)
-    } catch (e) {
+    } catch (_e) {
       setError('Failed to load notifications')
       setNotifications([])
     } finally {
@@ -76,7 +76,7 @@ export function NotificationsProvider({ children }) {
     try {
       await clearReadNotifications()
       setNotifications(prev => prev.filter(n => n.state === 'unread'))
-      setTotal(prev => {
+      setTotal(() => {
         const remaining = notifications.filter(n => n.state === 'unread').length
         return remaining
       })

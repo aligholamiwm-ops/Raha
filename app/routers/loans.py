@@ -148,7 +148,11 @@ async def allocate_loan(
         db, payload.telegram_id,
         category=NotificationCategory.loan_allocated,
         title="Loan allocated",
-        message=f"Loan of ${payload.amount_usdt:.2f} USDT has been credited to your wallet.{f' Note: {payload.note}' if payload.note else ''}",
+        message=(
+            f"Loan of ${payload.amount_usdt:.2f} USDT has been credited "
+            f"to your wallet."
+            f"{' Note: ' + payload.note if payload.note else ''}"
+        ),
         severity="info",
         metadata={"amount_usdt": payload.amount_usdt, "loan_id": new_loan.loan_id, "note": payload.note},
     )

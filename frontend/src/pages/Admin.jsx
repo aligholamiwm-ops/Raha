@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, listAnnouncements, postAnnouncement } from '../api/client';
 import UsageHistogram from '../components/UsageHistogram';
-import { 
-  FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2, 
-  FiEdit2, FiRefreshCw, FiChevronDown, FiChevronUp, FiCheck, FiX, FiInfo, FiZap,
-  FiSend, FiRadio, FiMessageSquare, FiLock, FiEye, FiEyeOff, FiAlertCircle
+import {
+  FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2,
+  FiEdit2, FiRefreshCw, FiCheck, FiX, FiZap,
+  FiSend, FiRadio, FiLock, FiEye, FiEyeOff, FiAlertCircle
 } from 'react-icons/fi';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -404,12 +404,12 @@ export default function Admin() {
     if (!foundUser) return [];
     const res = await getAdminUserUsageHistory(foundUser.telegram_id, timeframe, window, config);
     return res;
-  }, [foundUser?.telegram_id]);
+  }, [foundUser]);
 
   useEffect(() => {
     fetchStats();
     fetchTopUsers(topFilter);
-  }, []);
+  }, [topFilter]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -539,12 +539,6 @@ export default function Admin() {
     }
   };
 
-  const handleTopFilterChange = (newFilter) => {
-    setTopFilter(newFilter);
-    setTopUsers([]);
-    fetchTopUsers(newFilter);
-  };
-
   const fetchInbounds = async () => {
     try {
       const [list, defaultIds] = await Promise.all([
@@ -611,7 +605,7 @@ export default function Admin() {
       await client.delete(`/api/v1/clean-ips/${isp}/${ip}`);
       await fetchCleanIps();
       toast("IP deleted");
-    } catch (err) { toast("Error deleting IP", 'error'); }
+    } catch (_err) { toast("Error deleting IP", 'error'); }
   };
 
   const handleUserSearch = async () => {
@@ -667,7 +661,7 @@ export default function Admin() {
         try {
           const errors = JSON.parse(errorsHeader);
           errors.forEach(e => toast(e, 'error'));
-        } catch {}
+        } catch (_e) { /* ignore parse errors */ }
       }
     } catch (err) {
       console.error("Failed to load user configs", err);
@@ -791,7 +785,7 @@ export default function Admin() {
       await client.delete(`/api/v1/plans/${name}`);
       await fetchPlans();
       toast("Plan deleted");
-    } catch (err) { toast("Error deleting plan", 'error'); }
+    } catch (_err) { toast("Error deleting plan", 'error'); }
   };
 
   const handleDiscountSubmit = async (e) => {
@@ -829,7 +823,7 @@ export default function Admin() {
       await client.delete(`/api/v1/discounts/${code}`);
       await fetchDiscounts();
       toast("Discount deleted");
-    } catch (err) { toast("Error deleting discount", 'error'); }
+    } catch (_err) { toast("Error deleting discount", 'error'); }
   };
 
   const handleUnlockAdmin = async (e) => {

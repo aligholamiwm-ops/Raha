@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
@@ -71,6 +71,8 @@ async def set_nickname(
         {"$set": {"nickname": payload.nickname}},
     )
     doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
     doc.pop("_id", None)
     result = UserModel(**doc)
     return result
@@ -114,6 +116,8 @@ async def update_my_profile(
         {"$set": set_fields},
     )
     doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
     doc.pop("_id", None)
     return UserModel(**doc)
 
@@ -186,7 +190,7 @@ async def get_referral_leaderboard(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: UserModel = Depends(get_current_user),
 ) -> List[LeaderboardEntry]:
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": {"referral.referrer_id": {"$exists": True, "$ne": None}}},
         {"$group": {"_id": "$referral.referrer_id", "referred_count": {"$sum": 1}}},
         {"$sort": {"referred_count": -1}},
@@ -357,6 +361,8 @@ async def charge_referral_bonuses(
     )
 
     doc = await db.users.find_one({"telegram_id": current_user.telegram_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
     doc.pop("_id", None)
     return UserModel(**doc)
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.dependencies import get_current_user, require_admin
 from app.config import Settings, get_settings
 from app.database import get_database
+from app.integrations.xui_api import build_xui_client
 from app.models.user import UserModel
 from app.models.vpn_config import VpnConfigResponse, VpnConfigCreate, VpnConfigUpdate
 from app.services.config_service import ConfigService

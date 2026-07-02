@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
 from app.models.user import UserModel
-from app.models.notification import Notification, NotificationCategory, NotificationState
+from app.models.notification import Notification, NotificationState
 from app.models.announcement import Announcement
 from app.services.notifications import broadcast as broadcast_service
 from app.config import get_settings, Settings
@@ -28,7 +28,7 @@ async def list_my_notifications(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> dict:
-    """Get notifications for the authenticated user. 
+    """Get notifications for the authenticated user.
     Returns paginated list ordered by created_at descending plus unread count."""
     user_doc = await db.users.find_one(
         {"telegram_id": current_user.telegram_id},
@@ -45,7 +45,8 @@ async def list_my_notifications(
         items = [n for n in items if n.get("state") == state.value]
 
     total = len(items)
-    unread_count = sum(1 for n in items if n.get("state") == NotificationState.unread.value)
+    unread_state = NotificationState.unread.value
+    unread_count = sum(1 for n in items if n.get("state") == unread_state)
     page = items[skip:skip + limit]
 
     # Convert to Notification objects for serialization
@@ -158,7 +159,9 @@ async def delete_notification(
     summary="Delete multiple notifications",
 )
 async def clear_notifications(
-    only: Optional[str] = Query(default=None, description="'read' to delete only read notifications"),
+    only: Optional[str] = Query(
+        default=None, description="'read' to delete only read notifications"
+    ),
     current_user: UserModel = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> None:

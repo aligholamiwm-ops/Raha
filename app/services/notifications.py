@@ -2,7 +2,11 @@ import logging
 from typing import Optional, List
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.models.notification import Notification, NotificationCategory, NotificationState
+from app.models.notification import (
+    Notification,
+    NotificationCategory,
+    NotificationState,
+)
 from app.models.announcement import Announcement
 from app.utils.telegram import send_telegram_message
 
@@ -41,7 +45,9 @@ async def notify_user(
     # Cap: trim oldest READ items if over limit
     await _prune_notifications(db, telegram_id)
 
-    logger.debug("Notification %s pushed to user %d", notification.category.value, telegram_id)
+    logger.debug(
+        "Notification %s pushed to user %d", notification.category.value, telegram_id
+    )
     return notification
 
 
@@ -76,7 +82,9 @@ async def notify_users(
         except Exception as exc:
             logger.warning("Failed to notify user %d: %s", tid, exc)
 
-    logger.info("Notified %d of %d users about %s", pushed, len(telegram_ids), category.value)
+    logger.info(
+        "Notified %d of %d users about %s", pushed, len(telegram_ids), category.value
+    )
     return pushed
 
 
@@ -103,20 +111,25 @@ async def broadcast(
                 target_ids.append(doc["telegram_id"])
     elif target == "unpaid_loans":
         seen = set()
-        async for doc in db.loans.find({"status": "unpaid"}, {"telegram_id": 1}):
+        async for doc in db.loans.find(
+            {"status": "unpaid"}, {"telegram_id": 1}
+        ):
             tid = doc.get("telegram_id")
             if tid and tid not in seen:
                 seen.add(tid)
                 target_ids.append(tid)
     elif target == "active_configs":
         seen = set()
-        async for doc in db.loans.find({"status": "unpaid"}, {"telegram_id": 1}):
+        async for doc in db.loans.find(
+            {"status": "unpaid"}, {"telegram_id": 1}
+        ):
             tid = doc.get("telegram_id")
             if tid and tid not in seen:
                 seen.add(tid)
                 target_ids.append(tid)
-        # Note: we reuse the above but ideally should check XUI for active configs.
-        # For now same as loan check; actual XUI check can be added later.
+        # Note: we reuse the above but ideally should check XUI for active
+        # configs. For now same as loan check; actual XUI check can be added
+        # later.
     else:
         raise ValueError(f"Unknown broadcast target: {target}")
 
@@ -160,7 +173,9 @@ async def broadcast(
                     if ok:
                         pass  # telemetry if desired
                 except Exception as exc:
-                    logger.warning("Telegram broadcast failed for %d: %s", tid, exc)
+                    logger.warning(
+                        "Telegram broadcast failed for %d: %s", tid, exc
+                    )
         except Exception as exc:
             logger.warning("Broadcast push failed for user %d: %s", tid, exc)
             failed += 1
@@ -171,7 +186,10 @@ async def broadcast(
         {"$set": {"delivered_count": sent, "failed_count": failed}},
     )
 
-    logger.info("Broadcast '%s' sent: %d/%d (failed: %d)", title, sent, len(target_ids), failed)
+    logger.info(
+        "Broadcast '%s' sent: %d/%d (failed: %d)",
+        title, sent, len(target_ids), failed,
+    )
     return {
         "announcement_id": announcement.announcement_id,
         "sent": sent,
@@ -180,7 +198,9 @@ async def broadcast(
     }
 
 
-async def _prune_notifications(db: AsyncIOMotorDatabase, telegram_id: int) -> None:
+async def _prune_notifications(
+    db: AsyncIOMotorDatabase, telegram_id: int
+) -> None:
     """Trim oldest READ notifications when total exceeds MAX_NOTIFICATIONS_PER_USER.
     UNREAD notifications are NEVER deleted — they are always preserved."""
     user_doc = await db.users.find_one(
@@ -194,8 +214,10 @@ async def _prune_notifications(db: AsyncIOMotorDatabase, telegram_id: int) -> No
     if len(items) <= MAX_NOTIFICATIONS_PER_USER:
         return
 
-    unread_items = [n for n in items if n.get("state") == NotificationState.unread.value]
-    read_items = [n for n in items if n.get("state") == NotificationState.read.value]
+    unread_state = NotificationState.unread.value
+    read_state = NotificationState.read.value
+    unread_items = [n for n in items if n.get("state") == unread_state]
+    read_items = [n for n in items if n.get("state") == read_state]
     keep_count = max(0, MAX_NOTIFICATIONS_PER_USER - len(unread_items))
     kept_read_ids = {n["notification_id"] for n in read_items[-keep_count:]}
     unread_ids = {n["notification_id"] for n in unread_items}
@@ -203,5 +225,11 @@ async def _prune_notifications(db: AsyncIOMotorDatabase, telegram_id: int) -> No
 
     await db.users.update_one(
         {"telegram_id": telegram_id},
-        {"$set": {"notifications": [n for n in items if n["notification_id"] in keep_ids]}},
+        {
+            "$set": {
+                "notifications": [
+                    n for n in items if n["notification_id"] in keep_ids
+                ]
+            }
+        },
     )

@@ -1,2 +1,6 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = "E221,E251"

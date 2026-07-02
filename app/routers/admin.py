@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
@@ -15,21 +15,38 @@ from app.integrations.xui_api import build_xui_client
 from app.config import get_settings, Settings
 from app.utils.security import hash_password, verify_password
 from app.utils.telegram import send_telegram_message
-import httpx
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+
 class SetAdminPasswordPayload(BaseModel):
-    password: str = Field(..., min_length=4, description="New admin 2FA password")
+    password: str = Field(
+        ..., min_length=4, description="New admin 2FA password"
+    )
+
+
 class VerifyAdminPasswordPayload(BaseModel):
     password: str = Field(..., description="Admin 2FA password to verify")
+
+
 class SendMessagePayload(BaseModel):
     telegram_id: int = Field(..., description="Target user's Telegram ID")
     message: str = Field(..., min_length=1, description="Message text to send")
+
+
 class BroadcastPayload(BaseModel):
     message: str = Field(..., min_length=1, description="Broadcast message text")
-    target: str = Field(default="all", description="Target group: 'all', 'unpaid_loans', 'active_configs'")
+    target: str = Field(
+        default="all",
+        description="Target group: 'all', 'unpaid_loans', 'active_configs'",
+    )
+
+
 @router.get("/stats", summary="Dashboard statistics")
 async def get_stats(
     _admin: UserModel = Depends(require_admin),
@@ -37,7 +54,7 @@ async def get_stats(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     total_users = await db.users.count_documents({})
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": {"status": "completed"}},
         {"$group": {"_id": None, "total": {"$sum": "$amount_usd"}}},
     ]
@@ -48,7 +65,7 @@ async def get_stats(
     open_tickets = await db.tickets.count_documents({"status": "open"})
 
     # Count unsettled (unpaid) loans total
-    loans_pipeline = [
+    loans_pipeline: list[dict[str, Any]] = [
         {"$match": {"status": "unpaid"}},
         {"$group": {"_id": None, "total": {"$sum": "$amount_usdt"}}},
     ]
@@ -57,7 +74,7 @@ async def get_stats(
     total_unsettled_loans = loans_doc[0]["total"] if loans_doc else 0.0
 
     # Cumulative unused traffic: sum of all users' traffic_balance_gb
-    unused_pipeline = [
+    unused_pipeline: list[dict[str, Any]] = [
         {"$group": {"_id": None, "total": {"$sum": "$traffic_balance_gb"}}},
     ]
     unused_cursor = db.users.aggregate(unused_pipeline)
@@ -65,7 +82,7 @@ async def get_stats(
     total_unused_traffic_gb = unused_doc[0]["total"] if unused_doc else 0.0
 
     # Cumulative traffic purchased (from completed non-loan payments)
-    purchased_pipeline = [
+    purchased_pipeline: list[dict[str, Any]] = [
         {"$match": {"status": "completed", "type": {"$ne": "loan"}, "traffic_gb": {"$gt": 0}}},
         {"$group": {"_id": None, "total": {"$sum": "$traffic_gb"}}},
     ]
@@ -114,6 +131,8 @@ async def get_stats(
         "total_traffic_used_gb": round(total_traffic_used_gb, 2),
         "total_unused_traffic_gb": round(total_unused_traffic_gb, 2),
     }
+
+
 @router.get("/users/top", summary="Get top 5 users by a given metric (admin)")
 async def get_top_users(
     filter: str = Query(
@@ -153,7 +172,7 @@ async def get_top_users(
 
     if filter == "most_used_traffic":
         # Total purchased from payments minus current balance per user
-        purchased_pipeline = [
+        purchased_pipeline: list[dict[str, Any]] = [
             {"$match": {"status": "completed", "type": {"$ne": "loan"}, "traffic_gb": {"$gt": 0}}},
             {"$group": {"_id": "$telegram_id", "purchased": {"$sum": "$traffic_gb"}}},
         ]
@@ -165,7 +184,7 @@ async def get_top_users(
             return []
 
         # Fetch current balances for those users
-        user_docs: dict[int, dict] = {}
+        user_docs: dict[int, Any] = {}
         async for doc in db.users.find(
             {"telegram_id": {"$in": list(purchased_map.keys())}},
             {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "traffic_balance_gb": 1},
@@ -192,25 +211,25 @@ async def get_top_users(
         return ranked[:LIMIT]
 
     if filter == "most_purchases":
-        pipeline = [
+        purchases_pipeline: list[dict[str, Any]] = [
             {"$match": {"status": "completed", "type": {"$ne": "loan"}}},
             {"$group": {"_id": "$telegram_id", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
             {"$limit": LIMIT},
         ]
         results = []
-        async for doc in db.payments.aggregate(pipeline):
-            tid = doc["_id"]
+        async for doc in db.payments.aggregate(purchases_pipeline):
+            purchase_tid = doc["_id"]
             u = await db.users.find_one(
-                {"telegram_id": tid},
+                {"telegram_id": purchase_tid},
                 {"nickname": 1, "telegram_info": 1},
             )
             results.append({
-                "telegram_id": tid,
+                "telegram_id": purchase_tid,
                 "display_name": (
                     (u or {}).get("nickname")
                     or ((u or {}).get("telegram_info") or {}).get("first_name")
-                    or f"ID:{tid}"
+                    or f"ID:{purchase_tid}"
                 ),
                 "username": ((u or {}).get("telegram_info") or {}).get("username"),
                 "value": doc["count"],
@@ -219,25 +238,25 @@ async def get_top_users(
         return results
 
     if filter == "most_unsettled_loans":
-        pipeline = [
+        unsettled_pipeline: list[dict[str, Any]] = [
             {"$match": {"status": "unpaid"}},
             {"$group": {"_id": "$telegram_id", "total": {"$sum": "$amount_usdt"}}},
             {"$sort": {"total": -1}},
             {"$limit": LIMIT},
         ]
         results = []
-        async for doc in db.loans.aggregate(pipeline):
-            tid = doc["_id"]
+        async for doc in db.loans.aggregate(unsettled_pipeline):
+            loan_tid = doc["_id"]
             u = await db.users.find_one(
-                {"telegram_id": tid},
+                {"telegram_id": loan_tid},
                 {"nickname": 1, "telegram_info": 1},
             )
             results.append({
-                "telegram_id": tid,
+                "telegram_id": loan_tid,
                 "display_name": (
                     (u or {}).get("nickname")
                     or ((u or {}).get("telegram_info") or {}).get("first_name")
-                    or f"ID:{tid}"
+                    or f"ID:{loan_tid}"
                 ),
                 "username": ((u or {}).get("telegram_info") or {}).get("username"),
                 "value": round(doc["total"], 2),
@@ -250,7 +269,7 @@ async def get_top_users(
         config_counts: dict[int, int] = {}
 
         async def _fetch(server: dict) -> dict[int, int]:
-            local_counts = {}
+            local_counts: dict[int, int] = {}
             try:
                 xui = build_xui_client(server)
                 clients = await xui.get_client_info()
@@ -328,7 +347,7 @@ async def search_users(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[UserModel]:
     """Search across all user fields: telegram_id, nickname, telegram username, phone, name."""
-    conditions = []
+    conditions: list[dict[str, Any]] = []
     # Try numeric match for telegram_id
     try:
         tid = int(q)
@@ -350,7 +369,12 @@ async def search_users(
         doc.pop("_id", None)
         results.append(UserModel(**doc))
     return results
-@router.post("/users/send-message", summary="Send a message to a specific user (admin)")
+
+
+@router.post(
+    "/users/send-message",
+    summary="Send a message to a specific user (admin)",
+)
 async def send_message_to_user(
     payload: SendMessagePayload,
     _admin: UserModel = Depends(require_admin),
@@ -364,11 +388,24 @@ async def send_message_to_user(
         raise HTTPException(status_code=404, detail="User not found")
     if not settings.BOT_TOKEN:
         raise HTTPException(status_code=503, detail="Bot token not configured")
-    success = await send_telegram_message(settings.BOT_TOKEN, payload.telegram_id, payload.message)
+    success = await send_telegram_message(
+        settings.BOT_TOKEN, payload.telegram_id, payload.message
+    )
     if not success:
-        raise HTTPException(status_code=502, detail="Failed to send message via Telegram Bot API")
-    return {"status": "success", "message": f"Message sent to user {payload.telegram_id}"}
-@router.post("/users/broadcast", summary="Broadcast message to multiple users (admin)")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send message via Telegram Bot API",
+        )
+    return {
+        "status": "success",
+        "message": f"Message sent to user {payload.telegram_id}",
+    }
+
+
+@router.post(
+    "/users/broadcast",
+    summary="Broadcast message to multiple users (admin)",
+)
 async def broadcast_message(
     payload: BroadcastPayload,
     _admin: UserModel = Depends(require_admin),
@@ -438,6 +475,8 @@ async def broadcast_message(
         "total": len(target_ids),
         "message": f"Broadcast complete: {sent} sent, {failed} failed out of {len(target_ids)} users"
     }
+
+
 @router.put("/users/{telegram_id}/role", summary="Change user role (admin)")
 async def change_user_role(
     telegram_id: int,
@@ -452,7 +491,12 @@ async def change_user_role(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"status": "success", "message": f"User role updated to {payload.role.value}"}
-@router.get("/users/{telegram_id}/usage-history", summary="Get a specific user's config usage history (admin)")
+
+
+@router.get(
+    "/users/{telegram_id}/usage-history",
+    summary="Get a specific user's config usage history (admin)",
+)
 async def get_admin_user_usage_history(
     telegram_id: int,
     timeframe: str = Query(default="H", pattern="^(H|D)$", description="H=hourly, D=daily"),
@@ -516,7 +560,12 @@ async def get_user_tickets(
         doc.pop("_id", None)
         results.append(TicketModel(**doc))
     return results
-@router.post("/sync-configs", summary="Test connectivity to all XUI servers and return status")
+
+
+@router.post(
+    "/sync-configs",
+    summary="Test connectivity to all XUI servers and return status",
+)
 async def sync_configs(
     _admin: UserModel = Depends(require_admin),
     settings: Settings = Depends(get_settings),
@@ -545,14 +594,20 @@ async def sync_configs(
         else:
             servers_failed += 1
             errors.append(err)
-    
+
     return {
         "servers_ok": servers_ok,
         "servers_failed": servers_failed,
         "total_clients": total_clients,
         "errors": errors,
     }
-@router.get("/referral-settings", response_model=ReferralSettings, summary="Get referral layer percentages (admin)")
+
+
+@router.get(
+    "/referral-settings",
+    response_model=ReferralSettings,
+    summary="Get referral layer percentages (admin)",
+)
 async def get_referral_settings(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -575,7 +630,13 @@ async def get_referral_settings(
         layer_4=settings.REFERRAL_LAYER_4_PCT,
         layer_5=settings.REFERRAL_LAYER_5_PCT,
     )
-@router.put("/referral-settings", response_model=ReferralSettings, summary="Update referral layer percentages (admin)")
+
+
+@router.put(
+    "/referral-settings",
+    response_model=ReferralSettings,
+    summary="Update referral layer percentages (admin)",
+)
 async def update_referral_settings(
     payload: ReferralSettings,
     _admin: UserModel = Depends(require_admin),

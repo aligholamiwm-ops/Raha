@@ -58,6 +58,7 @@ async def _distribute_referral_bonuses(
 
     # Read referral layer percentages from DB settings (fallback to env config)
     db_settings_doc = await db.settings.find_one({"_id": "referral_settings"})
+
     def get_layer_pct(layer: int) -> float:
         if db_settings_doc:
             data = db_settings_doc.get("data", {})
@@ -105,7 +106,11 @@ async def _distribute_referral_bonuses(
             db, current_referrer_id,
             category=NotificationCategory.referral_bonus,
             title="Referral bonus earned",
-            message=f"Layer {layer} bonus: +{bonus:.4f} {'USDT' if benefit_type == ReferralBenefitType.usdt else 'GB'} from referral",
+            message=(
+                f"Layer {layer} bonus: +{bonus:.4f} "
+                f"{'USDT' if benefit_type == ReferralBenefitType.usdt else 'GB'}"
+                " from referral"
+            ),
             severity="info",
             metadata={
                 "referred_id": buyer_telegram_id,
@@ -297,7 +302,7 @@ async def create_deposit_invoice(
     )
     try:
         invoice_data = await plisio.create_invoice(
-            order_name=f"Raha VPN – Wallet Deposit",
+            order_name="Raha VPN – Wallet Deposit",
             order_number=payment.payment_id,
             amount_usd=payload.amount_usd,
             callback_url=callback_url,
@@ -344,7 +349,11 @@ async def payment_webhook(
     )
 
     if not plisio.verify_webhook(raw_body):
-        logger.error(f"CRITICAL: Plisio webhook signature verification failed, but BYPASSING for testing. Body: {raw_body.decode('utf-8', errors='ignore')}")
+        logger.error(
+            "CRITICAL: Plisio webhook signature verification failed, "
+            "but BYPASSING for testing. Body: %s",
+            raw_body.decode("utf-8", errors="ignore"),
+        )
         # BYPASSING FOR TESTING
         # raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
@@ -369,8 +378,8 @@ async def payment_webhook(
                         form_data = await request.form()
                         data = {k: v for k, v in form_data.items()}
                     else:
-                        form_data = parse_qs(decoded_body)
-                        data = {k: v[0] for k, v in form_data.items()}
+                        parsed = parse_qs(decoded_body)
+                        data = {k: v[0] for k, v in parsed.items()}
         else:
             data = {}
     except Exception as e:
@@ -379,7 +388,7 @@ async def payment_webhook(
         try:
             form_data = await request.form()
             data = {k: v for k, v in form_data.items()}
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid payload")
 
     txn_id: str = data.get("txn_id", "")

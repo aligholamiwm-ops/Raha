@@ -1,4 +1,3 @@
-from typing import Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
 import uuid
@@ -10,8 +9,10 @@ class Announcement(BaseModel):
     announcement_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     message: str
-    target: str = Field(default="all", 
-        description="Target group: 'all' | 'unpaid_loans' | 'active_configs'")
+    target: str = Field(
+        default="all",
+        description="Target group: 'all' | 'unpaid_loans' | 'active_configs'",
+    )
     audience_count: int = 0
     delivered_count: int = 0
     failed_count: int = 0

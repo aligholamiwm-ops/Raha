@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_database
-from app.dependencies import get_current_user, require_admin
+from app.dependencies import get_current_user
 from app.models.notification import NotificationCategory
 from app.models.user import UserModel, UserRole
 from app.models.ticket import (
@@ -18,7 +18,6 @@ from app.models.ticket import (
     SortOrder,
     TicketMessage,
     SenderRole,
-    USDTNetwork,
     TicketWithUserInfo,
 )
 from app.services.notifications import notify_user
@@ -46,7 +45,7 @@ async def create_ticket(
                 status_code=400,
                 detail="USDT address and network are required for withdrawal tickets"
             )
-    
+
     now = datetime.now(timezone.utc)
     ticket = TicketModel(
         telegram_id=current_user.telegram_id,
@@ -113,16 +112,16 @@ async def list_all_tickets(
     # Allow both admin and support to view all tickets
     if current_user.role not in [UserRole.admin, UserRole.support]:
         raise HTTPException(status_code=403, detail="Admin or support access required")
-    
+
     query = {}
     if status:
         query["status"] = status.value
     if category:
         query["category"] = category.value
-    
+
     # Determine sort order
     sort_direction = -1 if sort_order == SortOrder.desc else 1
-    
+
     results = []
     telegram_ids = set()
     raw_tickets = []
@@ -202,7 +201,7 @@ async def reply_to_ticket(
         sender = SenderRole.support
     else:
         sender = SenderRole.user
-    
+
     new_message = TicketMessage(sender_role=sender, text=payload.text, timestamp=now)
 
     # Update status based on who replied
@@ -249,11 +248,15 @@ async def update_ticket_status(
     # Allow both admin and support to update ticket status
     if current_user.role not in [UserRole.admin, UserRole.support]:
         raise HTTPException(status_code=403, detail="Admin or support access required")
-    
+
     update_data = payload.to_dict()
+    status_value = None
     if "status" in update_data:
-        status_val = update_data["status"]
-        update_data["status"] = status_val.value if hasattr(status_val, "value") else status_val
+        if payload.status is not None:
+            status_value = payload.status.value
+            update_data["status"] = status_value
+        else:
+            status_value = update_data["status"]
     update_data["updated_at"] = datetime.now(timezone.utc)
     result = await db.tickets.find_one_and_update(
         {"ticket_id": ticket_id},
@@ -264,13 +267,20 @@ async def update_ticket_status(
         raise HTTPException(status_code=404, detail="Ticket not found")
     result.pop("_id", None)
     if result.get("telegram_id") != current_user.telegram_id:
+        status_display = status_value or "unknown"
         await notify_user(
             db, result["telegram_id"],
             category=NotificationCategory.ticket_status,
-            title=f"Ticket {payload.status.value if hasattr(payload.status, 'value') else payload.status}",
-            message=f"Ticket '{result.get('title', '')}' status updated to {payload.status.value if hasattr(payload.status, 'value') else payload.status}",
-            severity="info" if payload.status in [TicketStatus.closed] else "success",
-            metadata={"ticket_id": result.get("ticket_id"), "status": payload.status.value if hasattr(payload.status, 'value') else payload.status},
+            title=f"Ticket {status_display}",
+            message=(
+                f"Ticket '{result.get('title', '')}' status updated to "
+                f"{status_display}"
+            ),
+            severity="info" if payload.status == TicketStatus.closed else "success",
+            metadata={
+                "ticket_id": result.get("ticket_id"),
+                "status": status_display,
+            },
         )
     ticket = TicketModel(**result)
     return ticket
