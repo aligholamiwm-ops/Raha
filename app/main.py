@@ -19,6 +19,7 @@ from app.routers import (
     tickets,
     servers,
     loans,
+    notifications,
 )
 
 logging.basicConfig(
@@ -87,6 +88,7 @@ app.include_router(clean_ips.router, prefix="/api/v1/clean-ips", tags=["Clean IP
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["Tickets"])
 app.include_router(servers.router, prefix="/api/v1/admin/servers", tags=["Servers"])
 app.include_router(loans.router, prefix="/api/v1/loans", tags=["Loans"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
 
 @app.get("/health")
 async def health_check():

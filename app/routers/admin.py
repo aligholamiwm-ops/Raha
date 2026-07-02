@@ -14,6 +14,7 @@ from app.models.setting import ReferralSettings
 from app.integrations.xui_api import build_xui_client
 from app.config import get_settings, Settings
 from app.utils.security import hash_password, verify_password
+from app.utils.telegram import send_telegram_message
 import httpx
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,16 +30,6 @@ class SendMessagePayload(BaseModel):
 class BroadcastPayload(BaseModel):
     message: str = Field(..., min_length=1, description="Broadcast message text")
     target: str = Field(default="all", description="Target group: 'all', 'unpaid_loans', 'active_configs'")
-async def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> bool:
-    """Send a Telegram message via Bot API."""
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-            return resp.status_code == 200 and resp.json().get("ok", False)
-    except Exception as exc:
-        logger.warning("Failed to send Telegram message to %s: %s", chat_id, exc)
-        return False
 @router.get("/stats", summary="Dashboard statistics")
 async def get_stats(
     _admin: UserModel = Depends(require_admin),
@@ -373,7 +364,7 @@ async def send_message_to_user(
         raise HTTPException(status_code=404, detail="User not found")
     if not settings.BOT_TOKEN:
         raise HTTPException(status_code=503, detail="Bot token not configured")
-    success = await _send_telegram_message(settings.BOT_TOKEN, payload.telegram_id, payload.message)
+    success = await send_telegram_message(settings.BOT_TOKEN, payload.telegram_id, payload.message)
     if not success:
         raise HTTPException(status_code=502, detail="Failed to send message via Telegram Bot API")
     return {"status": "success", "message": f"Message sent to user {payload.telegram_id}"}
@@ -435,7 +426,7 @@ async def broadcast_message(
     sent = 0
     failed = 0
     for tid in target_ids:
-        ok = await _send_telegram_message(settings.BOT_TOKEN, tid, payload.message)
+        ok = await send_telegram_message(settings.BOT_TOKEN, tid, payload.message)
         if ok:
             sent += 1
         else:
