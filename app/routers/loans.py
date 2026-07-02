@@ -13,6 +13,8 @@ from app.models.loan import LoanModel, LoanCreate, LoanStatus
 from app.models.user import UserModel
 from app.models.payment import PaymentModel
 from app.integrations.plisio import PlisioClient
+from app.models.notification import NotificationCategory
+from app.services.notifications import notify_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -141,6 +143,14 @@ async def allocate_loan(
     await db.users.update_one(
         {"telegram_id": payload.telegram_id},
         {"$inc": {"wallet_balance_usd": payload.amount_usdt}},
+    )
+    await notify_user(
+        db, payload.telegram_id,
+        category=NotificationCategory.loan_allocated,
+        title="Loan allocated",
+        message=f"Loan of ${payload.amount_usdt:.2f} USDT has been credited to your wallet.{f' Note: {payload.note}' if payload.note else ''}",
+        severity="info",
+        metadata={"amount_usdt": payload.amount_usdt, "loan_id": new_loan.loan_id, "note": payload.note},
     )
     logger.info(
         "Admin allocated loan of %.2f USDT to user %d (loan_id=%s)",

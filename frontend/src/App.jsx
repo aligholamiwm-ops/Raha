@@ -8,7 +8,9 @@ import Referral from './pages/Referral'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
 import api from './api/client'
-import { FiBell, FiGlobe } from 'react-icons/fi'
+import { NotificationsProvider } from './context/NotificationsContext'
+import NotificationBell from './components/NotificationBell'
+import { FiGlobe } from 'react-icons/fi'
 
 function NicknameModal({ onSave }) {
   const [nickname, setNickname] = useState('')
@@ -73,9 +75,7 @@ function Header() {
     <header className="flex items-center justify-between px-3 py-2.5">
       <h1 className="text-white font-bold text-[18px] tracking-tight">Raha VPN</h1>
       <div className="flex items-center gap-1">
-        <button className="p-2 text-gray-400 hover:text-white rounded-icon-btn hover:bg-white/5 transition-all active:scale-[0.98]">
-          <FiBell size={16} />
-        </button>
+        <NotificationBell />
         <button className="p-2 text-gray-400 hover:text-white rounded-icon-btn hover:bg-white/5 transition-all active:scale-[0.98]">
           <FiGlobe size={16} />
         </button>
@@ -143,7 +143,9 @@ export default function App() {
 
   return (
     <AppProvider>
-      <AppShell />
+      <NotificationsProvider>
+        <AppShell />
+      </NotificationsProvider>
     </AppProvider>
   )
 }

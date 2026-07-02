@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_database
 from app.dependencies import get_current_user, require_admin
+from app.models.notification import NotificationCategory
 from app.models.user import UserModel, UserRole
 from app.models.ticket import (
     TicketModel,
@@ -20,6 +21,7 @@ from app.models.ticket import (
     USDTNetwork,
     TicketWithUserInfo,
 )
+from app.services.notifications import notify_user
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,17 @@ async def create_ticket(
         updated_at=now,
     )
     await db.tickets.insert_one(ticket.to_dict())
+    await notify_user(
+        db, current_user.telegram_id,
+        category=NotificationCategory.support_replied,
+        title="Ticket created",
+        message=f"Support ticket '{payload.title}' has been created. We will get back to you shortly.",
+        severity="info",
+        metadata={
+            "ticket_id": ticket.ticket_id,
+            "category": payload.category.value if hasattr(payload.category, 'value') else payload.category,
+        },
+    )
     return ticket
 
 
@@ -207,6 +220,17 @@ async def reply_to_ticket(
         return_document=True,
     )
     result.pop("_id", None)
+    if current_user.role in [UserRole.admin, UserRole.support]:
+        ticket_owner_id = result.get("telegram_id")
+        if ticket_owner_id != current_user.telegram_id:
+            await notify_user(
+                db, ticket_owner_id,
+                category=NotificationCategory.support_replied,
+                title="Support replied to your ticket",
+                message=f"Admin replied to '{result.get('title', '')}': {payload.text[:100]}",
+                severity="info",
+                metadata={"ticket_id": result.get("ticket_id"), "reply_preview": payload.text[:200]},
+            )
     ticket = TicketModel(**result)
     return ticket
 
@@ -239,5 +263,14 @@ async def update_ticket_status(
     if not result:
         raise HTTPException(status_code=404, detail="Ticket not found")
     result.pop("_id", None)
+    if result.get("telegram_id") != current_user.telegram_id:
+        await notify_user(
+            db, result["telegram_id"],
+            category=NotificationCategory.ticket_status,
+            title=f"Ticket {payload.status.value if hasattr(payload.status, 'value') else payload.status}",
+            message=f"Ticket '{result.get('title', '')}' status updated to {payload.status.value if hasattr(payload.status, 'value') else payload.status}",
+            severity="info" if payload.status in [TicketStatus.closed] else "success",
+            metadata={"ticket_id": result.get("ticket_id"), "status": payload.status.value if hasattr(payload.status, 'value') else payload.status},
+        )
     ticket = TicketModel(**result)
     return ticket

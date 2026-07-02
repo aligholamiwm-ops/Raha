@@ -13,6 +13,8 @@ from app.models.user import UserModel, ReferralBenefitType
 from app.models.setting import get_setting_items
 from app.models.payment import PaymentModel
 from app.integrations.plisio import PlisioClient
+from app.models.notification import NotificationCategory
+from app.services.notifications import notify_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -98,6 +100,21 @@ async def _distribute_referral_bonuses(
             {"telegram_id": current_referrer_id},
             {"$push": {"referral.records": record}},
         )
+
+        await notify_user(
+            db, current_referrer_id,
+            category=NotificationCategory.referral_bonus,
+            title="Referral bonus earned",
+            message=f"Layer {layer} bonus: +{bonus:.4f} {'USDT' if benefit_type == ReferralBenefitType.usdt else 'GB'} from referral",
+            severity="info",
+            metadata={
+                "referred_id": buyer_telegram_id,
+                "layer": layer,
+                "amount": bonus,
+                "benefit_type": benefit_type.value if hasattr(benefit_type, 'value') else benefit_type,
+            },
+        )
+
         logger.info(
             "Layer %d referral bonus (pending): %.4f to user %d from purchase by %d (type=%s)",
             layer, bonus, current_referrer_id, buyer_telegram_id, benefit_type,
@@ -163,6 +180,20 @@ async def create_invoice(
             )
 
         await _distribute_referral_bonuses(db, settings, current_user.telegram_id, final_price, traffic_gb)
+
+        await notify_user(
+            db, current_user.telegram_id,
+            category=NotificationCategory.plan_purchased,
+            title="Plan purchased",
+            message=f"{payload.plan_name} purchased for ${final_price:.2f} – +{traffic_gb} GB traffic",
+            severity="success",
+            metadata={
+                "plan_name": payload.plan_name,
+                "amount_usd": final_price,
+                "traffic_gb": traffic_gb,
+                "payment_method": "wallet",
+            },
+        )
 
         logger.info(
             "User %d bought plan %s for %.2f USDT from wallet, +%.2f GB traffic",
@@ -382,6 +413,16 @@ async def payment_webhook(
                     },
                 )
                 logger.info("Loan %s settled via payment %s for user %s", loan_id, order_number, telegram_id)
+
+                await notify_user(
+                    db, telegram_id,
+                    category=NotificationCategory.loan_settled,
+                    title="Loan settled",
+                    message=f"Loan of ${amount_usd:.2f} USDT has been fully settled. Thank you!",
+                    severity="success",
+                    metadata={"amount_usd": amount_usd, "loan_id": loan_id},
+                )
+
         else:
             traffic_gb: float = payment_doc.get("traffic_gb", 0.0)
 
@@ -398,6 +439,20 @@ async def payment_webhook(
                     {"telegram_id": telegram_id},
                     {"$inc": {"traffic_balance_gb": traffic_gb}},
                 )
+
+                await notify_user(
+                    db, telegram_id,
+                    category=NotificationCategory.plan_purchased,
+                    title="Plan purchased via crypto",
+                    message=f"Plan purchased – +{traffic_gb} GB traffic added",
+                    severity="success",
+                    metadata={
+                        "amount_usd": amount_usd,
+                        "traffic_gb": traffic_gb,
+                        "payment_method": "crypto",
+                    },
+                )
+
                 logger.info(
                     "Payment %s completed: +%.2f GB traffic to user %s",
                     order_number, traffic_gb, telegram_id,
@@ -408,6 +463,16 @@ async def payment_webhook(
                     {"telegram_id": telegram_id},
                     {"$inc": {"wallet_balance_usd": amount_usd}},
                 )
+
+                await notify_user(
+                    db, telegram_id,
+                    category=NotificationCategory.deposit,
+                    title="Wallet deposit received",
+                    message=f"${amount_usd:.2f} USDT deposited to your wallet",
+                    severity="success",
+                    metadata={"amount_usd": amount_usd},
+                )
+
                 logger.info("Payment %s completed: +%.2f USDT wallet to user %s", order_number, amount_usd, telegram_id)
 
             await _distribute_referral_bonuses(db, settings, telegram_id, amount_usd, traffic_gb)
