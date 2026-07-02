@@ -9,6 +9,8 @@ from app.models.setting import (
 from app.models.ticket import TicketModel, TicketCreate, TicketUpdate, TicketReply, TicketStatus, SenderRole, TicketMessage
 from app.models.loan import LoanModel, LoanCreate, LoanStatus
 from app.models.payment import PaymentModel, PaymentStatus, PaymentType
+from app.models.notification import Notification, NotificationCategory, NotificationState
+from app.models.announcement import Announcement
 
 __all__ = [
     "UserModel", "UserCreate", "UserUpdate", "UserRole", "TelegramInfo",
@@ -20,4 +22,6 @@ __all__ = [
     "TicketModel", "TicketCreate", "TicketUpdate", "TicketReply", "TicketStatus", "SenderRole", "TicketMessage",
     "LoanModel", "LoanCreate", "LoanStatus",
     "PaymentModel", "PaymentStatus", "PaymentType",
+    "Notification", "NotificationCategory", "NotificationState",
+    "Announcement",
 ]

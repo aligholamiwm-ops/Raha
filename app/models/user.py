@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Optional, List
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
+from app.models.notification import Notification
 
 
 class UserRole(str, Enum):
@@ -65,6 +66,8 @@ class UserModel(BaseModel):
     telegram_info: Optional[TelegramInfo] = Field(default=None, description="Telegram profile information")
     has_admin_password: bool = Field(default=False, description="Whether this admin has a 2FA dashboard password set")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    notifications: List[Notification] = Field(default_factory=list,
+        description="In-app notifications list (latest first, capped)")
 
     def to_dict(self) -> dict:
         return self.model_dump()

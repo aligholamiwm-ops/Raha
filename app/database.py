@@ -47,3 +47,5 @@ async def _create_indexes(db: AsyncIOMotorDatabase) -> None:
     )
     await db.server_usages.create_index("date")
     await db.usage_snapshots.create_index("uuid", unique=True)
+    await db.announcements.create_index("announcement_id", unique=True)
+    await db.announcements.create_index("created_at")
