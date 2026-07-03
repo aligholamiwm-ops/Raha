@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext'
 import {
   createInvoice, createDepositInvoice, getMyLoans, payLoan, validateDiscount,
   getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus,
-  checkNickname, updateNickname,
+  checkNickname, updateNickname, getLinks,
 } from '../api/client'
 
 const PlanScene = React.lazy(() => import('../components/PlanScene'))
@@ -44,7 +44,11 @@ import {
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
   FiPackage, FiTag, FiX, FiUser, FiEdit2, FiSend,
   FiMessageSquare, FiPlus, FiChevronLeft, FiDollarSign, FiDatabase,
+  FiChevronDown, FiExternalLink,
 } from 'react-icons/fi'
+
+import androidIcon from '../../icons/android.png'
+import appleIcon from '../../icons/apple.png'
 
 /* ─── helpers ────────────────────────────────────────────────────── */
 function parseDuration(planName) {
@@ -762,6 +766,77 @@ function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
   )
 }
 
+/* ─── Links Section (Support Tab top) ─────────────────────────────── */
+function openLink(url) {
+  const tg = window.Telegram?.WebApp
+  tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
+}
+
+function LinksSection() {
+  const [sections, setSections] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [expandedIndex, setExpandedIndex] = useState(0)
+
+  useEffect(() => {
+    getLinks()
+      .then(setSections)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden animate-pulse p-4">
+      <div className="h-5 w-32 bg-slate-700 rounded" />
+    </div>
+  )
+
+  if (sections.length === 0) return null
+
+  return sections.map((section, idx) => {
+    const expanded = expandedIndex === idx
+    return (
+      <div key={section.title} className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setExpandedIndex(expanded ? -1 : idx)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left text-white font-semibold text-sm hover:bg-slate-700/50 transition-colors"
+        >
+          {section.title}
+          <FiChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+        {expanded && (
+          <div className="grid grid-cols-2 gap-3 p-4 pt-0 overflow-x-auto">
+            {Object.entries(section.columns || {}).map(([key, items]) => (
+              items.length > 0 && (
+                <div key={key} className="min-w-0">
+                  <div className="flex justify-center mb-3">
+                    <img
+                      src={key === 'android' ? androidIcon : appleIcon}
+                      alt={key}
+                      className="w-8 h-8 object-contain"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    {items.map((item, i) => (
+                      <button
+                        key={i}
+                        onClick={() => openLink(item.url)}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-xl text-xs text-slate-200 hover:bg-slate-700 hover:border-slate-600 transition-all text-left"
+                      >
+                        <FiExternalLink size={12} className="text-emerald-400 flex-shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  })
+}
+
 /* ─── Support Tab ─────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
   const styles = { open: 'bg-emerald-500/20 text-emerald-400', closed: 'bg-slate-600/50 text-slate-400', waiting_for_user: 'bg-yellow-500/20 text-yellow-400' }
@@ -839,6 +914,7 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
 
   return (
     <div className="space-y-3">
+      <LinksSection />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-white">{isStaff ? 'Support Dashboard' : 'Support'}</h2>

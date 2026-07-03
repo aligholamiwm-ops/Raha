@@ -120,9 +120,60 @@ class CleanIPCreate(BaseModel):
 
 class ReferralSettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-
     layer_1: float = Field(default=5.0, ge=0.0, le=100.0, description="Layer 1 referral percentage")
     layer_2: float = Field(default=3.0, ge=0.0, le=100.0, description="Layer 2 referral percentage")
     layer_3: float = Field(default=2.0, ge=0.0, le=100.0, description="Layer 3 referral percentage")
     layer_4: float = Field(default=1.0, ge=0.0, le=100.0, description="Layer 4 referral percentage")
     layer_5: float = Field(default=0.5, ge=0.0, le=100.0, description="Layer 5 referral percentage")
+
+
+# ---------------------------------------------------------------------------
+# Link schemas (stored under settings._id == "links")
+# ---------------------------------------------------------------------------
+
+class LinkItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    label: str
+    url: str
+
+    def to_dict(self) -> dict:
+        return self.model_dump()
+
+
+class LinkSection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    title: str
+    columns: dict[str, list[LinkItem]]
+
+    def to_dict(self) -> dict:
+        return {
+            "title": self.title,
+            "columns": {k: [item.to_dict() for item in v] for k, v in self.columns.items()},
+        }
+
+
+class LinkSectionCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    title: str
+    columns: dict[str, list[LinkItem]]
+
+
+class LinkSectionUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    title: str
+    columns: dict[str, list[LinkItem]]
+
+
+async def get_setting_links(db: AsyncIOMotorDatabase) -> list[dict]:
+    """Fetch the 'sections' list from the links settings document."""
+    doc = await db.settings.find_one({"_id": "links"})
+    return doc.get("sections", []) if doc else []
+
+
+async def save_setting_links(db: AsyncIOMotorDatabase, sections: list[dict]) -> None:
+    """Replace the 'sections' list in the links settings document."""
+    await db.settings.update_one(
+        {"_id": "links"},
+        {"$set": {"sections": sections}},
+        upsert=True,
+    )

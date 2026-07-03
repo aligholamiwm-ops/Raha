@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, postAnnouncement } from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, postAnnouncement, adminGetLinks, adminAddLinkSection, adminUpdateLinkSection, adminDeleteLinkSection } from '../api/client';
 import UsageHistogram from '../components/UsageHistogram';
 import {
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2,
   FiEdit2, FiRefreshCw, FiCheck, FiX, FiZap,
-  FiSend, FiRadio, FiLock, FiEye, FiEyeOff, FiAlertCircle
+  FiSend, FiRadio, FiLock, FiEye, FiEyeOff, FiAlertCircle,
+  FiLink, FiExternalLink, FiChevronDown,
 } from 'react-icons/fi';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -361,6 +362,14 @@ export default function Admin() {
   const [referralSettings, setReferralSettings] = useState({ layer_1: 5, layer_2: 3, layer_3: 2, layer_4: 1, layer_5: 0.5 });
   const [savingReferral, setSavingReferral] = useState(false);
 
+  // Links
+  const [linkSections, setLinkSections] = useState([])
+  const [expandedLinkSection, setExpandedLinkSection] = useState(null)
+  const [showLinkForm, setShowLinkForm] = useState(false)
+  const [editingLinkSection, setEditingLinkSection] = useState(null)
+  const [linkForm, setLinkForm] = useState({ title: "", columns: { android: [], apple: [] } })
+  const [savingLink, setSavingLink] = useState(false)
+
   const [userSearch, setUserSearch] = useState("");
   const [foundUser, setFoundUser] = useState(null);
   const [foundUsers, setFoundUsers] = useState([]);
@@ -412,6 +421,7 @@ export default function Admin() {
     if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
     if (tab === "servers") { fetchServers(); fetchCleanIps(); fetchInbounds(); }
     if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
+    if (tab === "links") { fetchLinkSections(); }
   };
 
   // Sync balance input when switching between wallet/traffic types
@@ -509,6 +519,13 @@ export default function Admin() {
       setReferralSettings(res.data);
     } catch (err) { console.error("Failed to fetch referral settings", err); }
   };
+
+  const fetchLinkSections = async () => {
+    try {
+      const data = await adminGetLinks()
+      setLinkSections(data)
+    } catch { toast("Failed to load links", 'error') }
+  }
 
   const fetchTopUsers = async (filter) => {
     setTopUsersLoading(true);
@@ -810,6 +827,34 @@ export default function Admin() {
     } catch (_err) { toast("Error deleting discount", 'error'); }
   };
 
+  const handleLinkSubmit = async (e) => {
+    e.preventDefault()
+    setSavingLink(true)
+    try {
+      if (editingLinkSection) {
+        await adminUpdateLinkSection(editingLinkSection, linkForm)
+      } else {
+        await adminAddLinkSection(linkForm)
+      }
+      setLinkForm({ title: "", columns: { android: [], apple: [] } })
+      setEditingLinkSection(null)
+      setShowLinkForm(false)
+      await fetchLinkSections()
+      toast("Link section saved!")
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error')
+    } finally { setSavingLink(false) }
+  }
+
+  const handleDeleteLinkSection = async (title) => {
+    if (!window.confirm(`Delete section "${title}"?`)) return
+    try {
+      await adminDeleteLinkSection(title)
+      await fetchLinkSections()
+      toast("Section deleted")
+    } catch { toast("Error deleting section", 'error') }
+  }
+
   const handleUnlockAdmin = async (e) => {
     e.preventDefault();
     if (!adminPwdInput.trim()) return;
@@ -892,7 +937,8 @@ export default function Admin() {
           { id: "servers", label: "Servers", icon: FiServer },
           { id: "users", label: "Users", icon: FiUsers },
           { id: "broadcast", label: "Broadcast", icon: FiRadio },
-          { id: "pricing", label: "Pricing", icon: FiTag }
+          { id: "pricing", label: "Pricing", icon: FiTag },
+          { id: "links", label: "Links", icon: FiLink }
         ].map(tab => (
           <button
             key={tab.id}
@@ -1526,6 +1572,144 @@ export default function Admin() {
             </div>
           </Card>
 
+        </div>
+      )}
+      {activeTab === "links" && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Card>
+            <SectionHeader title="Links" icon={FiLink} onAdd={() => { setShowLinkForm(!showLinkForm); setEditingLinkSection(null); setLinkForm({ title: "", columns: { android: [], apple: [] } }); }} />
+            {showLinkForm && (
+              <form onSubmit={handleLinkSubmit} className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700 animate-in zoom-in-95 duration-200">
+                <Input label="Section Title" value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} required placeholder="e.g. Download app" />
+                <div className="space-y-3">
+                  {Object.entries(linkForm.columns).map(([colKey, items]) => (
+                    <div key={colKey} className="p-3 bg-slate-900/30 rounded-lg border border-slate-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-300 uppercase">{colKey}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = [...items, { label: "", url: "" }]
+                            setLinkForm({...linkForm, columns: {...linkForm.columns, [colKey]: newItems}})
+                          }}
+                          className="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium"
+                        >
+                          + Add item
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {items.map((item, i) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <div className="flex-1 space-y-1">
+                              <input
+                                type="text"
+                                placeholder="Label"
+                                value={item.label}
+                                onChange={e => {
+                                  const copy = [...items]
+                                  copy[i] = {...copy[i], label: e.target.value}
+                                  setLinkForm({...linkForm, columns: {...linkForm.columns, [colKey]: copy}})
+                                }}
+                                className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                              />
+                              <input
+                                type="text"
+                                placeholder="URL"
+                                value={item.url}
+                                onChange={e => {
+                                  const copy = [...items]
+                                  copy[i] = {...copy[i], url: e.target.value}
+                                  setLinkForm({...linkForm, columns: {...linkForm.columns, [colKey]: copy}})
+                                }}
+                                className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = items.filter((_, idx) => idx !== i)
+                                setLinkForm({...linkForm, columns: {...linkForm.columns, [colKey]: copy}})
+                              }}
+                              className="p-1.5 text-rose-400 hover:bg-rose-500/20 rounded-lg mt-1"
+                            >
+                              <FiTrash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button type="submit" className="flex-1" disabled={savingLink || !linkForm.title.trim()}>
+                    {savingLink ? "Saving…" : editingLinkSection ? "Update Section" : "Create Section"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => { setShowLinkForm(false); setEditingLinkSection(null); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+            {linkSections.length === 0 && !showLinkForm && (
+              <p className="text-slate-500 text-sm text-center py-4">No link sections configured</p>
+            )}
+            <div className="space-y-2">
+              {linkSections.map(section => (
+                <div key={section.title} className="p-3 bg-slate-900/30 rounded-xl border border-slate-700/50">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setExpandedLinkSection(expandedLinkSection === section.title ? null : section.title)}
+                      className="flex items-center gap-2 text-sm font-bold text-white"
+                    >
+                      {section.title}
+                      <FiChevronDown size={14} className={`text-slate-400 transition-transform ${expandedLinkSection === section.title ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          const cols = section.columns || {}
+                          setEditingLinkSection(section.title)
+                          setLinkForm({ title: section.title, columns: { ...cols } })
+                          setShowLinkForm(true)
+                        }}
+                        className="p-1.5 hover:bg-emerald-500/20 text-emerald-400 rounded-lg"
+                      >
+                        <FiEdit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteLinkSection(section.title)}
+                        className="p-1.5 hover:bg-rose-500/20 text-rose-400 rounded-lg"
+                      >
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {expandedLinkSection === section.title && (
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      {Object.entries(section.columns || {}).map(([key, items]) => (
+                        items.length > 0 && (
+                          <div key={key}>
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{key}</div>
+                            <div className="space-y-1">
+                              {items.map((item, i) => (
+                                <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-800/60 rounded-lg border border-slate-700/50">
+                                  <FiExternalLink size={10} className="text-emerald-400 flex-shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs text-white truncate">{item.label}</div>
+                                    <div className="text-[10px] text-slate-500 truncate">{item.url}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       )}
       {activeTab === "pricing" && (

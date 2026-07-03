@@ -140,4 +140,20 @@ export const clearReadNotifications = () =>
 export const postAnnouncement = (payload) =>
   api.post('/api/v1/admin/announcements', payload).then(r => r.data)
 
+// ── Links ───────────────────────────────────────────────────────────
+export const getLinks = () =>
+  api.get('/api/v1/links/sections').then(r => r.data)
+
+export const adminGetLinks = () =>
+  api.get('/api/v1/admin/links/sections').then(r => r.data)
+
+export const adminAddLinkSection = (data) =>
+  api.post('/api/v1/admin/links/sections', data).then(r => r.data)
+
+export const adminUpdateLinkSection = (title, data) =>
+  api.put(`/api/v1/admin/links/sections/${encodeURIComponent(title)}`, data).then(r => r.data)
+
+export const adminDeleteLinkSection = (title) =>
+  api.delete(`/api/v1/admin/links/sections/${encodeURIComponent(title)}`).then(r => r.data)
+
 export default api
