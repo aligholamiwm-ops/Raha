@@ -6,7 +6,6 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 from app.models.notification import Notification, NotificationCategory, NotificationState
-from app.models.announcement import Announcement
 from app.main import app
 
 logging.disable(logging.CRITICAL)
@@ -27,28 +26,12 @@ def sample_notification():
 
 
 @pytest.fixture
-def sample_announcement():
-    return Announcement(
-        title="Maintenance",
-        message="Downtime tonight",
-        target="all",
-        audience_count=10,
-        created_by=TEST_ADMIN_ID,
-    )
-
-
-@pytest.fixture
 def mock_db():
     db = AsyncMock()
     db.users = AsyncMock()
     db.users.find_one = AsyncMock()
     db.users.update_one = AsyncMock()
     db.users.find_one_and_update = AsyncMock()
-    db.announcements = AsyncMock()
-    db.announcements.insert_one = AsyncMock()
-    db.announcements.find = AsyncMock()
-    db.announcements.count_documents = AsyncMock()
-    db.announcements.update_one = AsyncMock()
     return db
 
 
@@ -131,39 +114,6 @@ class TestNotificationModel:
         assert restored.notification_id == sample_notification.notification_id
         assert restored.category == sample_notification.category
         assert restored.state == sample_notification.state
-
-
-# ── 2. Announcement Model ─────────────────────────────────────────────────────
-
-class TestAnnouncementModel:
-    def test_creation(self, sample_announcement):
-        assert sample_announcement.title == "Maintenance"
-        assert sample_announcement.target == "all"
-        assert sample_announcement.audience_count == 10
-        assert sample_announcement.created_by == TEST_ADMIN_ID
-
-    def test_to_dict(self, sample_announcement):
-        d = sample_announcement.to_dict()
-        assert d["title"] == "Maintenance"
-        assert d["announcement_id"] == sample_announcement.announcement_id
-        assert d["target"] == "all"
-        assert d["audience_count"] == 10
-        assert d["delivered_count"] == 0
-        assert d["failed_count"] == 0
-        assert d["created_by"] == TEST_ADMIN_ID
-        assert "created_at" in d
-        assert "announcement_id" in d
-
-    def test_announcement_id_auto_generated(self, sample_announcement):
-        assert sample_announcement.announcement_id is not None
-        assert isinstance(sample_announcement.announcement_id, str)
-
-    def test_defaults(self):
-        a = Announcement(title="T", message="M", created_by=1)
-        assert a.target == "all"
-        assert a.audience_count == 0
-        assert a.delivered_count == 0
-        assert a.failed_count == 0
 
 
 # ── 3. notify_user ────────────────────────────────────────────────────────────
@@ -411,15 +361,13 @@ class _AsyncCursor:
 
 class TestBroadcast:
     @pytest.mark.asyncio
-    async def test_creates_announcement_and_fans_out(self, mock_db):
+    async def test_fans_out_notifications(self, mock_db):
         cursor = _AsyncCursor([
             {"telegram_id": 100},
             {"telegram_id": 200},
             {"telegram_id": 300},
         ])
         mock_db.users.find = MagicMock(return_value=cursor)
-        mock_db.announcements.insert_one.return_value = MagicMock()
-        mock_db.announcements.update_one.return_value = MagicMock()
         mock_db.users.find_one = AsyncMock(return_value={"telegram_id": 100, "notifications": []})
         mock_db.users.update_one = AsyncMock()
 
@@ -429,18 +377,13 @@ class TestBroadcast:
             title="System Update",
             message="Scheduled maintenance",
             target="all",
-            created_by=TEST_ADMIN_ID,
             also_send_telegram=False,
         )
 
-        assert "announcement_id" in result
+        assert "announcement_id" not in result
         assert result["sent"] == 3
         assert result["failed"] == 0
         assert result["total"] == 3
-
-        mock_db.announcements.insert_one.assert_called_once()
-        inserted = mock_db.announcements.insert_one.call_args[0][0]
-        assert inserted["title"] == "System Update"
 
         assert mock_db.users.update_one.call_count == 3
 
@@ -554,8 +497,6 @@ class TestAPICreateAnnouncement:
         mock_db.users.find = MagicMock(return_value=cursor)
         mock_db.users.find_one = AsyncMock(return_value={"telegram_id": 100, "notifications": []})
         mock_db.users.update_one = AsyncMock()
-        mock_db.announcements.insert_one = AsyncMock()
-        mock_db.announcements.update_one = AsyncMock()
 
         resp = await client.post(
             "/api/v1/admin/announcements",
@@ -563,7 +504,7 @@ class TestAPICreateAnnouncement:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "announcement_id" in data
+        assert "announcement_id" not in data
         assert data["sent"] == 2
         assert data["total"] == 2
 
@@ -576,15 +517,4 @@ class TestAPICreateAnnouncement:
         assert resp.status_code == 400
 
 
-class TestAPIListAnnouncements:
-    @pytest.mark.asyncio
-    async def test_lists_announcements(self, client, mock_db):
-        cursor = _AsyncCursor([])
-        mock_db.announcements.find = MagicMock(return_value=cursor)
-        mock_db.announcements.count_documents = AsyncMock(return_value=0)
 
-        resp = await client.get("/api/v1/admin/announcements")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total"] == 0
-        assert data["announcements"] == []

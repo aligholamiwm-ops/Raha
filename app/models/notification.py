@@ -39,10 +39,6 @@ class Notification(BaseModel):
         default_factory=dict,
         description="Category-specific extras: amount_usd, plan_name, ticket_id, loan_id, etc.",
     )
-    announcement_id: Optional[str] = Field(
-        default=None,
-        description="Set when category=announcement, links to Announcement collection",
-    )
 
     def mark_read(self) -> None:
         self.state = NotificationState.read

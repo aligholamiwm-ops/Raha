@@ -137,8 +137,6 @@ export const clearReadNotifications = () =>
   api.delete('/api/v1/notifications/me?only=read').then(r => r.data)
 
 // ── Admin Announcements ─────────────────────────────────────────────
-export const listAnnouncements = (params) =>
-  api.get('/api/v1/admin/announcements', { params }).then(r => r.data)
 export const postAnnouncement = (payload) =>
   api.post('/api/v1/admin/announcements', payload).then(r => r.data)
 

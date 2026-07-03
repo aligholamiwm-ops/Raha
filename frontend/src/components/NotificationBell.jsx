@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { FiBell, FiCheck, FiX, FiTrash2, FiRadio, FiArrowDown, FiArrowUp, FiCreditCard, FiShoppingCart, FiUsers, FiMessageSquare, FiClock } from 'react-icons/fi'
+import { FiBell, FiX, FiRadio, FiArrowDown, FiArrowUp, FiCreditCard, FiShoppingCart, FiUsers, FiMessageSquare, FiClock } from 'react-icons/fi'
 import { useNotifications } from '../context/NotificationsContext'
 
 const CATEGORY_ICONS = {
@@ -34,7 +34,7 @@ function relativeTime(dateStr) {
 export default function NotificationBell() {
   const { notifications, unreadCount, loading, fetchList, markRead, markAllRead, removeNotification } = useNotifications()
   const [open, setOpen] = useState(false)
-  const [detailNotif, setDetailNotif] = useState(null)
+  const [detailId, setDetailId] = useState(null)
   const bellRef = useRef(null)
   const panelRef = useRef(null)
 
@@ -51,17 +51,16 @@ export default function NotificationBell() {
   }, [open])
 
   const handleToggle = () => {
-    const next = !open
-    setOpen(next)
-    if (next) fetchList()
+    setOpen(!open)
   }
 
   const handleRowClick = (notif) => {
-    setDetailNotif(notif)
-    if (notif.state === 'unread') {
-      markRead(notif.notification_id)
-    }
+    setDetailId(notif.notification_id)
   }
+
+  const detailNotification = detailId
+    ? notifications.find(n => n.notification_id === detailId)
+    : null
 
   return (
     <>
@@ -173,29 +172,26 @@ export default function NotificationBell() {
         </div>
       )}
 
-      {detailNotif && (
+      {detailNotification && (
         <NotificationDetail
-          notification={detailNotif}
-          onClose={() => setDetailNotif(null)}
-          onDelete={(id) => {
-            removeNotification(id)
-            setDetailNotif(null)
-          }}
+          notification={detailNotification}
+          onClose={() => setDetailId(null)}
         />
       )}
     </>
   )
 }
 
-function NotificationDetail({ notification, onClose, onDelete }) {
+function NotificationDetail({ notification, onClose }) {
   const { markRead } = useNotifications()
   const iconDef = CATEGORY_ICONS[notification.category] || DEFAULT_ICON
   const Icon = iconDef.icon
 
-  const handleMarkRead = async () => {
-    await markRead(notification.notification_id)
-    notification.state = 'read'
-  }
+  useEffect(() => {
+    if (notification.state === 'unread') {
+      markRead(notification.notification_id)
+    }
+  }, [])
 
   const metaLines = []
   if (notification.metadata) {
@@ -217,8 +213,8 @@ function NotificationDetail({ notification, onClose, onDelete }) {
       >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${notification.state === 'unread' ? 'bg-emerald-500/10' : 'bg-slate-800'}`}>
-              <Icon size={18} className={notification.state === 'unread' ? iconDef.color : 'text-slate-500'} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-800">
+              <Icon size={18} className="text-slate-500" />
             </div>
             <div>
               <h3 className="text-white font-bold text-[15px]">{notification.title}</h3>
@@ -256,24 +252,6 @@ function NotificationDetail({ notification, onClose, onDelete }) {
             ))}
           </div>
         )}
-
-        <div className="flex items-center gap-2">
-          {notification.state === 'unread' && (
-            <button
-              onClick={handleMarkRead}
-              className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <FiCheck size={14} />
-              Mark as read
-            </button>
-          )}
-          <button
-            onClick={() => onDelete(notification.notification_id)}
-            className="py-2.5 bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 font-semibold rounded-xl text-xs transition-colors px-4"
-          >
-            <FiTrash2 size={14} />
-          </button>
-        </div>
       </div>
     </div>
   )

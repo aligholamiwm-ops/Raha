@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, listAnnouncements, postAnnouncement } from '../api/client';
+import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, postAnnouncement } from '../api/client';
 import UsageHistogram from '../components/UsageHistogram';
 import {
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2,
@@ -391,10 +391,6 @@ export default function Admin() {
   const [broadcastTarget, setBroadcastTarget] = useState('all');
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
-  const [showHistory, setShowHistory] = useState(false)
-  const [announcementHistory, setAnnouncementHistory] = useState([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [selectedAnnounce, setSelectedAnnounce] = useState(null)
   // Top users - shown on stats tab
   const [topFilter, setTopFilter] = useState('most_unused_traffic');
   const [topUsers, setTopUsers] = useState([]);
@@ -465,18 +461,6 @@ export default function Admin() {
       setBroadcastResult({ ok: false, msg: err.response?.data?.detail || 'Broadcast failed' });
     } finally {
       setBroadcasting(false);
-    }
-  };
-
-  const fetchAnnouncementHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const data = await listAnnouncements({ limit: 20 });
-      setAnnouncementHistory(data.announcements || []);
-    } catch (e) {
-      console.error('Failed to load announcement history', e);
-    } finally {
-      setHistoryLoading(false);
     }
   };
 
@@ -1542,69 +1526,6 @@ export default function Admin() {
             </div>
           </Card>
 
-          <Card>
-            <div className="flex items-center justify-between mb-3">
-              <SectionHeader title="Announcement History" icon={FiRadio} />
-              <Button
-                variant="outline"
-                onClick={() => { setShowHistory(v => !v); if (!showHistory) fetchAnnouncementHistory(); }}
-              >
-                {showHistory ? 'Hide' : 'Show History'}
-              </Button>
-            </div>
-            {showHistory && (
-              <div className="space-y-2">
-                {historyLoading ? (
-                  <div className="p-4 text-center">
-                    <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs text-slate-500 mt-2">Loading history…</p>
-                  </div>
-                ) : announcementHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">No past announcements</p>
-                ) : (
-                  announcementHistory.map(a => (
-                    <button
-                      key={a.id}
-                      onClick={() => setSelectedAnnounce(a)}
-                      className="w-full p-3 bg-slate-900/30 rounded-xl border border-slate-700/50 text-left hover:border-emerald-500/30 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-bold text-white truncate">{a.title}</div>
-                        <span className="text-[10px] text-slate-500 ml-2 flex-shrink-0">{new Date(a.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1 line-clamp-2">{a.message}</div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </Card>
-
-          {selectedAnnounce && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
-              <div className="bg-dark-card border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[16px]">{selectedAnnounce.title}</h3>
-                  <button onClick={() => setSelectedAnnounce(null)} className="p-1 text-slate-400 hover:text-white">
-                    <FiX size={18} />
-                  </button>
-                </div>
-                <p className="text-gray-300 text-[13px] whitespace-pre-wrap">{selectedAnnounce.message}</p>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-white/10">
-                  <span>Target: {selectedAnnounce.target}</span>
-                  <span>{new Date(selectedAnnounce.created_at).toLocaleString()}</span>
-                </div>
-                {selectedAnnounce.sent_count != null && (
-                  <div className="text-xs text-slate-400">
-                    Sent to {selectedAnnounce.sent_count} users
-                    {selectedAnnounce.failed_count > 0 && (
-                      <span className="text-rose-400"> ({selectedAnnounce.failed_count} failed)</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
       {activeTab === "pricing" && (

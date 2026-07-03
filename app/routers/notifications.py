@@ -9,7 +9,6 @@ from app.database import get_database
 from app.dependencies import get_current_user, require_admin
 from app.models.user import UserModel
 from app.models.notification import Notification, NotificationState
-from app.models.announcement import Announcement
 from app.services.notifications import broadcast as broadcast_service
 from app.config import get_settings, Settings
 
@@ -106,12 +105,14 @@ async def mark_notification_read(
                 "notifications.$.read_at": datetime.now(timezone.utc),
             }
         },
-        projection={"notifications.$": 1},
         return_document=True,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Notification not found")
-    return Notification(**result["notifications"][0])
+    for item in result.get("notifications", []):
+        if item.get("notification_id") == notification_id:
+            return Notification(**item)
+    raise HTTPException(status_code=404, detail="Notification not found")
 
 
 @router.put(
@@ -208,28 +209,6 @@ async def create_announcement(
         title=title,
         message=message,
         target=target,
-        created_by=_admin.telegram_id,
         also_send_telegram=also_send_telegram,
     )
     return result
-
-
-@router.get(
-    "/admin/announcements",
-    summary="List past announcements (admin)",
-)
-async def list_announcements(
-    limit: int = Query(default=50, ge=1, le=200),
-    skip: int = Query(default=0, ge=0),
-    _admin: UserModel = Depends(require_admin),
-    db: AsyncIOMotorDatabase = Depends(get_database),
-) -> dict:
-    results = []
-    async for doc in db.announcements.find(
-        {},
-        {"_id": 0},
-    ).sort("created_at", -1).skip(skip).limit(limit):
-        results.append(Announcement(**doc))
-
-    total = await db.announcements.count_documents({})
-    return {"total": total, "announcements": [a.to_dict() for a in results]}

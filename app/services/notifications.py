@@ -7,7 +7,6 @@ from app.models.notification import (
     NotificationCategory,
     NotificationState,
 )
-from app.models.announcement import Announcement
 from app.utils.telegram import send_telegram_message
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,6 @@ async def notify_user(
     message: str,
     severity: Optional[str] = None,
     metadata: Optional[dict] = None,
-    announcement_id: Optional[str] = None,
 ) -> Notification:
     """Push a single notification to a user's embedded list."""
     notification = Notification(
@@ -34,7 +32,6 @@ async def notify_user(
         message=message,
         severity=severity,
         metadata=metadata or {},
-        announcement_id=announcement_id,
     )
 
     await db.users.update_one(
@@ -95,14 +92,12 @@ async def broadcast(
     title: str,
     message: str,
     target: str,
-    created_by: int,
     also_send_telegram: bool = True,
 ) -> dict:
-    """Create an Announcement record and fan-out as in-app notifications.
+    """Fan-out an announcement as in-app notifications to target users.
 
-    Returns { announcement_id, sent, failed, total }.
+    Returns { sent, failed, total }.
     """
-    # Determine target audience
     target_ids: List[int] = []
 
     if target == "all":
@@ -111,48 +106,27 @@ async def broadcast(
                 target_ids.append(doc["telegram_id"])
     elif target == "unpaid_loans":
         seen = set()
-        async for doc in db.loans.find(
-            {"status": "unpaid"}, {"telegram_id": 1}
-        ):
+        async for doc in db.loans.find({"status": "unpaid"}, {"telegram_id": 1}):
             tid = doc.get("telegram_id")
             if tid and tid not in seen:
                 seen.add(tid)
                 target_ids.append(tid)
     elif target == "active_configs":
         seen = set()
-        async for doc in db.loans.find(
-            {"status": "unpaid"}, {"telegram_id": 1}
-        ):
+        async for doc in db.loans.find({"status": "unpaid"}, {"telegram_id": 1}):
             tid = doc.get("telegram_id")
             if tid and tid not in seen:
                 seen.add(tid)
                 target_ids.append(tid)
-        # Note: we reuse the above but ideally should check XUI for active
-        # configs. For now same as loan check; actual XUI check can be added
-        # later.
     else:
         raise ValueError(f"Unknown broadcast target: {target}")
 
-    # Create announcement record
-    announcement = Announcement(
-        title=title,
-        message=message,
-        target=target,
-        audience_count=len(target_ids),
-        created_by=created_by,
-    )
-
-    announcement_data = announcement.to_dict()
-    await db.announcements.insert_one(announcement_data)
-
-    # Fan out in-app notifications
     sent = 0
     failed = 0
     notification_doc = Notification(
         category=NotificationCategory.announcement,
         title=title,
         message=message,
-        announcement_id=announcement.announcement_id,
         severity="info",
         metadata={"target": target},
     ).model_dump()
@@ -166,36 +140,17 @@ async def broadcast(
             await _prune_notifications(db, tid)
             sent += 1
 
-            # Also send via Telegram Bot API if configured
             if also_send_telegram and bot_token:
                 try:
-                    ok = await send_telegram_message(bot_token, tid, message)
-                    if ok:
-                        pass  # telemetry if desired
+                    await send_telegram_message(bot_token, tid, message)
                 except Exception as exc:
-                    logger.warning(
-                        "Telegram broadcast failed for %d: %s", tid, exc
-                    )
+                    logger.warning("Telegram broadcast failed for %d: %s", tid, exc)
         except Exception as exc:
             logger.warning("Broadcast push failed for user %d: %s", tid, exc)
             failed += 1
 
-    # Update announcement record with delivery stats
-    await db.announcements.update_one(
-        {"announcement_id": announcement.announcement_id},
-        {"$set": {"delivered_count": sent, "failed_count": failed}},
-    )
-
-    logger.info(
-        "Broadcast '%s' sent: %d/%d (failed: %d)",
-        title, sent, len(target_ids), failed,
-    )
-    return {
-        "announcement_id": announcement.announcement_id,
-        "sent": sent,
-        "failed": failed,
-        "total": len(target_ids),
-    }
+    logger.info("Broadcast '%s' sent: %d/%d (failed: %d)", title, sent, len(target_ids), failed)
+    return {"sent": sent, "failed": failed, "total": len(target_ids)}
 
 
 async def _prune_notifications(
