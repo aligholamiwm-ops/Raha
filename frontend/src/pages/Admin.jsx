@@ -6,7 +6,7 @@ import {
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2,
   FiEdit2, FiRefreshCw, FiCheck, FiX, FiZap,
   FiSend, FiRadio, FiLock, FiEye, FiEyeOff, FiAlertCircle,
-  FiLink, FiExternalLink, FiChevronDown,
+  FiLink, FiExternalLink, FiChevronDown, FiMessageSquare,
 } from 'react-icons/fi';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
