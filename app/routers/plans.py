@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -134,7 +135,16 @@ async def buy_plan_with_wallet(
         )
 
     # Deduct wallet and credit traffic balance
-    update_ops: dict = {"$inc": {"traffic_balance_gb": traffic_gb}}
+    purchase_record = {
+        "date": datetime.now(timezone.utc),
+        "plan_name": plan_name,
+        "price_usd": final_price,
+        "traffic_gb": traffic_gb,
+    }
+    update_ops: dict = {
+        "$inc": {"traffic_balance_gb": traffic_gb},
+        "$push": {"purchase_history": purchase_record},
+    }
     if price_usd > 0:
         update_ops["$inc"]["wallet_balance_usd"] = -final_price  # type: ignore[index]
 

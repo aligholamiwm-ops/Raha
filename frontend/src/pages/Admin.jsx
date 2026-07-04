@@ -557,7 +557,7 @@ export default function Admin() {
     setSavingDefaultInbounds(true);
     try {
       await saveDefaultInboundIds(defaultInboundIds);
-      toast("Default inbounds saved!");
+      toast("Available inbounds saved!");
     } catch (err) {
       toast("Error: " + (err.response?.data?.detail || err.message), 'error');
     } finally {
@@ -1091,9 +1091,9 @@ export default function Admin() {
           </Card>
 
           <Card>
-            <SectionHeader title="Default Inbounds" icon={FiBarChart2} />
+            <SectionHeader title="Available Inbounds" icon={FiBarChart2} />
             <p className="text-xs text-slate-500 mb-3">
-              Select inbounds to attach by default when creating new configs.
+              Select inbounds that users can attach when creating new configs.
             </p>
 
             {availableInbounds.length === 0 ? (
@@ -1128,7 +1128,7 @@ export default function Admin() {
               disabled={savingDefaultInbounds}
               className="w-full mt-3"
             >
-              {savingDefaultInbounds ? 'Saving…' : 'Save Default Inbounds'}
+              {savingDefaultInbounds ? 'Saving…' : 'Save Available Inbounds'}
             </Button>
           </Card>
 

@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
 import UsageHistogram from '../components/UsageHistogram'
-import { createConfig, getInboundOptions } from '../api/client'
+import { createConfig } from '../api/client'
 import {
-  FiPlus, FiX, FiRefreshCw, FiAlertCircle, FiLoader,
+  FiPlus, FiX, FiRefreshCw, FiAlertCircle,
   FiActivity, FiServer, FiClock, FiPieChart
 } from 'react-icons/fi'
 
@@ -81,9 +81,7 @@ export default function Dashboard() {
   const { user, configs, loading, configsError, setConfigsError, refreshConfigs, refreshUser } = useApp()
   const navigate = useNavigate()
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [inboundOptions, setInboundOptions] = useState([])
-  const [loadingInbounds, setLoadingInbounds] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: '', total_gb: 1, duration_days: 30, inbound_ids: [] })
+  const [createForm, setCreateForm] = useState({ name: '', total_gb: 1, duration_days: 30 })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
 
@@ -96,17 +94,8 @@ export default function Dashboard() {
 
   const handleCharge = () => navigate('/profile')
 
-  const openCreateModal = async () => {
+  const openCreateModal = () => {
     setShowCreateModal(true)
-    setLoadingInbounds(true)
-    try {
-      const options = await getInboundOptions()
-      setInboundOptions(options)
-    } catch (err) {
-      console.error('Failed to load inbound options', err)
-    } finally {
-      setLoadingInbounds(false)
-    }
   }
 
   const handleCreateConfig = async (e) => {
@@ -122,7 +111,7 @@ export default function Dashboard() {
     try {
       await createConfig({ ...createForm, name: createForm.name.trim() })
       setShowCreateModal(false)
-      setCreateForm({ name: '', total_gb: 1, duration_days: 30, inbound_ids: [] })
+      setCreateForm({ name: '', total_gb: 1, duration_days: 30 })
       await Promise.all([refreshConfigs(), refreshUser()])
     } catch (err) {
       const detail = err.response?.data?.detail || err.message || 'Failed to create config'
@@ -331,40 +320,10 @@ export default function Dashboard() {
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-400 mb-1">Inbound Selection</label>
-                  {loadingInbounds ? (
-                    <div className="flex items-center gap-2 text-gray-500 text-[12px] py-2">
-                      <FiLoader className="animate-spin" size={14} /> Loading...
-                    </div>
-                  ) : (
-                    <div className="space-y-1 max-h-36 overflow-y-auto bg-white/5 border border-white/10 rounded-lg p-2">
-                      {inboundOptions.length === 0 ? (
-                        <p className="text-[12px] text-gray-500 text-center py-2">No inbounds available</p>
-                      ) : (
-                        inboundOptions.map((opt) => (
-                          <label key={`${opt.server_name}-${opt.id}`} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-white/5 rounded-lg transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={createForm.inbound_ids.includes(opt.id)}
-                              onChange={(e) => {
-                                const newIds = e.target.checked
-                                  ? [...createForm.inbound_ids, opt.id]
-                                  : createForm.inbound_ids.filter(id => id !== opt.id)
-                                setCreateForm({ ...createForm, inbound_ids: newIds })
-                              }}
-                              className="accent-emerald-500"
-                            />
-                            <span className="text-[12px] text-gray-300">{opt.server_name} - {opt.remark || opt.port}</span>
-                          </label>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+
                 <button
                   type="submit"
-                  disabled={creating || loadingInbounds}
+                  disabled={creating}
                   className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
                 >
                   {creating ? 'Creating…' : 'Create Config'}

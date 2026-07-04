@@ -575,10 +575,35 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
               />
             </div>
           )}
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2.5 flex items-start gap-2 self-stretch">
-            <FiInfo className="text-slate-500 flex-shrink-0 mt-0.5" size={12} />
-            <p className="text-slate-500 text-[10px]">Sufficient wallet balance → instant purchase. Otherwise redirects to crypto payment.</p>
-          </div>
+          {/* Purchase History */}
+          {(user?.purchase_history?.length > 0) && (
+            <div className="w-full space-y-2">
+              <div className="flex items-center gap-2">
+                <FiPackage className="text-slate-400" size={14} />
+                <h3 className="text-slate-300 font-bold text-xs">Purchase History</h3>
+              </div>
+              <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-700/40">
+                      <th className="text-left text-slate-500 font-medium px-3 py-2">Date</th>
+                      <th className="text-left text-slate-500 font-medium px-3 py-2">Price</th>
+                      <th className="text-left text-slate-500 font-medium px-3 py-2">Traffic</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(user?.purchase_history || [])].reverse().map((p, i) => (
+                      <tr key={i} className="border-b border-slate-700/20 last:border-0">
+                        <td className="text-slate-300 px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                        <td className="text-slate-300 px-3 py-2">${(p.price_usd || 0).toFixed(2)}</td>
+                        <td className="text-slate-300 px-3 py-2">{(p.traffic_gb || 0).toFixed(1)} GB</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

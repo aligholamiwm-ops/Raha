@@ -174,7 +174,15 @@ async def create_invoice(
             "$inc": {
                 "wallet_balance_usd": -final_price,
                 "traffic_balance_gb": traffic_gb,
-            }
+            },
+            "$push": {
+                "purchase_history": {
+                    "date": datetime.now(timezone.utc),
+                    "plan_name": payload.plan_name,
+                    "price_usd": final_price,
+                    "traffic_gb": traffic_gb,
+                }
+            },
         }
         await db.users.update_one({"telegram_id": current_user.telegram_id}, update_ops)
 
@@ -446,7 +454,17 @@ async def payment_webhook(
             if traffic_gb > 0:
                 await db.users.update_one(
                     {"telegram_id": telegram_id},
-                    {"$inc": {"traffic_balance_gb": traffic_gb}},
+                    {
+                        "$inc": {"traffic_balance_gb": traffic_gb},
+                        "$push": {
+                            "purchase_history": {
+                                "date": datetime.now(timezone.utc),
+                                "plan_name": payment_doc.get("plan_name", ""),
+                                "price_usd": amount_usd,
+                                "traffic_gb": traffic_gb,
+                            }
+                        },
+                    },
                 )
 
                 await notify_user(

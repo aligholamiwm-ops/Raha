@@ -323,7 +323,7 @@ class ConfigService:
         }
         xui = build_xui_client(server)
         if not inbound_ids:
-            defaults_doc = await self._db.settings.find_one({"_id": "default_inbound_ids"})
+            defaults_doc = await self._db.settings.find_one({"_id": "available_inbound_ids"})
             default_ids = defaults_doc.get("inbound_ids", []) if defaults_doc else []
             resolved_inbound_ids: list[int] = default_ids or [int(server.get("inbound_id", 1))]
         else:

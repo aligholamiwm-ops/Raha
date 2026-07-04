@@ -41,6 +41,15 @@ class ReferralRecord(BaseModel):
     date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class PurchaseRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    plan_name: str
+    price_usd: float = Field(..., ge=0.0)
+    traffic_gb: float = Field(..., ge=0.0)
+
+
 class ReferralInfo(BaseModel):
     """Referral data embedded in each user document."""
     model_config = ConfigDict(populate_by_name=True)
@@ -68,6 +77,8 @@ class UserModel(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     notifications: List[Notification] = Field(default_factory=list,
         description="In-app notifications list (latest first, capped)")
+    purchase_history: List[PurchaseRecord] = Field(default_factory=list,
+        description="History of plan purchases")
 
     def to_dict(self) -> dict:
         return self.model_dump()

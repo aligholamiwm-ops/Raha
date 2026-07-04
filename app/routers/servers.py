@@ -135,15 +135,15 @@ async def get_server_usage(
         return [ServerUsagePoint(ts=ts, gb=round(v, 4)) for ts, v in sorted(daily_map.items())]
 
 
-class DefaultInboundsPayload(BaseModel):
-    inbound_ids: list[int] = Field(..., description="List of inbound IDs to use as defaults")
+class AvailableInboundsPayload(BaseModel):
+    inbound_ids: list[int] = Field(..., description="List of inbound IDs to use as available")
 
 
 @router.get(
-    "/default-inbounds/list",
+    "/available-inbounds/list",
     summary="List all inbounds from all servers (admin)",
 )
-async def list_default_inbounds(
+async def list_available_inbounds(
     _admin: UserModel = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> list[dict]:
@@ -166,28 +166,28 @@ async def list_default_inbounds(
 
 
 @router.get(
-    "/default-inbounds",
-    summary="Get saved default inbound IDs (admin)",
+    "/available-inbounds",
+    summary="Get saved available inbound IDs (admin)",
 )
-async def get_default_inbounds(
+async def get_available_inbounds(
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> dict:
-    doc = await db.settings.find_one({"_id": "default_inbound_ids"})
+    doc = await db.settings.find_one({"_id": "available_inbound_ids"})
     return {"inbound_ids": doc.get("inbound_ids", []) if doc else []}
 
 
 @router.put(
-    "/default-inbounds",
-    summary="Save default inbound IDs (admin)",
+    "/available-inbounds",
+    summary="Save available inbound IDs (admin)",
 )
-async def save_default_inbounds(
-    payload: DefaultInboundsPayload,
+async def save_available_inbounds(
+    payload: AvailableInboundsPayload,
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> dict:
     await db.settings.update_one(
-        {"_id": "default_inbound_ids"},
+        {"_id": "available_inbound_ids"},
         {"$set": {"inbound_ids": payload.inbound_ids}},
         upsert=True,
     )

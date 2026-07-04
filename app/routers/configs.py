@@ -236,15 +236,19 @@ async def send_config_to_bot(
 
 @router.get("/inbound-options")
 async def get_inbound_options(
-    _admin: UserModel = Depends(require_admin),
+    current_user: UserModel = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[dict]:
+    doc = await db.settings.find_one({"_id": "available_inbound_ids"})
+    available_ids = set(doc.get("inbound_ids", []) if doc else [])
+
     async def _fetch(server: dict) -> list[dict]:
         server_name = server.get("name", "")
         try:
             xui = build_xui_client(server)
             options = await xui.get_inbound_options()
-            return [{**o, "server_name": server_name} for o in options]
+            return [{**o, "server_name": server_name} for o in options if o.get("id") in available_ids]
         except Exception:
             return []
 
