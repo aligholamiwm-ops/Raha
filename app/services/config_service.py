@@ -201,6 +201,28 @@ class ConfigService:
                 return r
         return None, None
 
+    async def find_client_by_email(self, email: str) -> tuple[dict, dict] | tuple[None, None]:
+        servers = self._settings.get_enabled_servers()
+        if not servers:
+            return None, None
+
+        async def _search(server: dict) -> tuple[dict, dict] | None:
+            try:
+                xui = build_xui_client(server)
+                clients = await self._get_clients_cached(xui)
+                for c in clients:
+                    if c.get("email") == email:
+                        return c, server
+            except Exception:
+                pass
+            return None
+
+        results = await asyncio.gather(*[_search(s) for s in servers], return_exceptions=True)
+        for r in results:
+            if isinstance(r, tuple) and r[0] is not None:
+                return r
+        return None, None
+
     async def _send_telegram_document(
         self, bot_token: str, chat_id: int, file_content: bytes, filename: str, caption: str = ""
     ) -> bool:
@@ -630,7 +652,7 @@ class ConfigService:
 
     async def send_config_to_bot(
         self,
-        config_uuid: str,
+        email: str,
         password: str,
         telegram_id: int,
         role: str,
@@ -639,7 +661,7 @@ class ConfigService:
         import pyzipper
         import qrcode
 
-        client, server = await self.find_client_by_uuid(config_uuid)
+        client, server = await self.find_client_by_email(email)
         if not client or not server:
             raise ValueError("Config not found")
 
@@ -679,7 +701,7 @@ class ConfigService:
 
         zip_buf.seek(0)
         zip_content = zip_buf.getvalue()
-        filename = f"{name_only or config_uuid}.zip"
+        filename = f"{name_only or email}.zip"
 
         caption = (
             f"Config ZIP: {name_only}\n\n"

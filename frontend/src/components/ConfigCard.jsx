@@ -7,6 +7,7 @@ import {
 import { MdQrCode } from 'react-icons/md'
 import { toggleConfig, regenerateConfigKey, deleteConfig, editConfig } from '../api/client'
 import { useApp } from '../context/AppContext'
+import { TrafficField, DurationField } from './NumberFields'
 import QRModal from './QRModal'
 
 function daysLeft(dateStr) {
@@ -25,6 +26,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   const [showRecharge, setShowRecharge] = useState(false)
   const [rechargeValue, setRechargeValue] = useState(0)
   const [rechargeError, setRechargeError] = useState(null)
+  const [durationValue, setDurationValue] = useState(0)
 
   const trafficBalanceGB = user?.traffic_balance_gb ?? 0
 
@@ -32,6 +34,13 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   const usagePercent = config.total_gb > 0 ? Math.min(100, (usedGb / config.total_gb) * 100) : 0
   const isEnabled = config.enable
   const expiryDays = daysLeft(config.expiry_date)
+
+  const currentDurationDays = useMemo(() => {
+    if (!config.expiry_date) return 0
+    const d = daysLeft(config.expiry_date)
+    if (d === null) return 0
+    return Math.max(0, d)
+  }, [config.expiry_date])
 
   const refreshAfterAction = async () => {
     if (onRefresh) await onRefresh()
@@ -105,12 +114,16 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
     }
   }
 
-  const rechargeMin = useMemo(() => Math.ceil(usedGb), [usedGb])
-  const rechargeMax = useMemo(() => Math.max(rechargeMin, Math.floor(config.total_gb + trafficBalanceGB)), [rechargeMin, config.total_gb, trafficBalanceGB])
+  const rechargeMin = useMemo(() => {
+    const m = Math.max(0, usedGb)
+    return Math.min(m, config.total_gb + trafficBalanceGB)
+  }, [usedGb, config.total_gb, trafficBalanceGB])
+  const rechargeMax = useMemo(() => Math.max(rechargeMin, config.total_gb + trafficBalanceGB), [rechargeMin, config.total_gb, trafficBalanceGB])
 
   const handleRecharge = () => {
-    if (trafficBalanceGB > 0) {
+    if (trafficBalanceGB > 0 || config.total_gb > usedGb) {
       setRechargeValue(Math.max(rechargeMin, Math.min(config.total_gb, rechargeMax)))
+      setDurationValue(currentDurationDays)
       setRechargeError(null)
       setShowRecharge(true)
     } else {
@@ -120,15 +133,20 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
 
   const confirmRecharge = async () => {
     if (rechargeValue < rechargeMin || rechargeValue > rechargeMax) return
+    if (durationValue < 0) return
     setBusy(true)
     setRechargeError(null)
     try {
-      await editConfig(config.email, { total_gb: rechargeValue })
+      const payload = {
+        total_gb: rechargeValue,
+        duration_days: durationValue,
+      }
+      await editConfig(config.email, payload)
       setShowRecharge(false)
       await refreshAfterAction()
       await refreshUser()
     } catch (err) {
-      setRechargeError(err?.response?.data?.detail || 'Failed to recharge config')
+      setRechargeError(err?.response?.data?.detail || 'Failed to update config')
     } finally {
       setBusy(false)
     }
@@ -220,7 +238,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
           <button
             onClick={handleRecharge}
             className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
-            title="Recharge"
+            title="Edit traffic & duration"
           >
             <FiZap size={14} />
           </button>
@@ -254,58 +272,39 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
       )}
 
       {showRecharge && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowRecharge(false) }}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowRecharge(false) }}>
           <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between p-5 pb-3">
-              <h3 className="text-[16px] font-bold text-white">Recharge Config</h3>
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <h3 className="text-[15px] font-bold text-white">Edit Config</h3>
               <button onClick={() => setShowRecharge(false)} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
                 <FiMinus size={16} />
               </button>
             </div>
-            <div className="px-5 pb-5 space-y-4">
-              <p className="text-[12px] text-gray-500">
-                <span className="text-gray-400 font-medium">{config.name}</span>
-                <br />
-                Balance: <span className="text-emerald-400 font-bold">{trafficBalanceGB.toFixed(1)} GB</span>
-                &nbsp;·&nbsp; Current: <span className="text-white font-semibold">{config.total_gb.toFixed(1)} GB</span>
-              </p>
-
+            <div className="px-4 pb-4 space-y-3">
               {rechargeError && (
                 <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2 text-rose-400 text-[12px]">{rechargeError}</div>
               )}
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Traffic</label>
+                <TrafficField
+                  value={rechargeValue}
+                  onChange={setRechargeValue}
                   min={rechargeMin}
                   max={rechargeMax}
-                  step={1}
-                  value={rechargeValue}
-                  onChange={e => setRechargeValue(Number(e.target.value))}
-                  className="flex-1 accent-emerald-500 h-2"
-                />
-                <input
-                  type="number"
-                  min={rechargeMin}
-                  max={rechargeMax}
-                  step={1}
-                  value={rechargeValue}
-                  onChange={e => {
-                    const v = Number(e.target.value)
-                    if (!isNaN(v)) setRechargeValue(Math.max(rechargeMin, Math.min(v, rechargeMax)))
-                  }}
-                  className="w-20 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-[13px] font-semibold text-center focus:outline-none focus:border-emerald-500 transition-colors"
+                  unit="GB"
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-gray-500">
-                <span>{rechargeMin} GB (min)</span>
-                <span>{rechargeMax} GB (max)</span>
-              </div>
-
-              <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2.5">
-                <span className="text-[12px] text-gray-400">New total</span>
-                <span className="text-white font-bold text-[15px]">{rechargeValue} GB</span>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Duration</label>
+                <DurationField
+                  value={durationValue}
+                  onChange={setDurationValue}
+                  min={0}
+                  allowInfinite
+                  unit="days"
+                />
               </div>
 
               <button
@@ -313,7 +312,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
                 disabled={busy}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
               >
-                {busy ? 'Applying...' : `Apply +${(rechargeValue - config.total_gb).toFixed(0)} GB`}
+                {busy ? 'Applying...' : 'Apply'}
               </button>
             </div>
           </div>

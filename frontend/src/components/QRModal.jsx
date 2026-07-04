@@ -14,7 +14,7 @@ const TelegramIcon = () => (
   </svg>
 )
 
-export default function QRModal({ uuid, configName, subscriptionLink, onClose }) {
+export default function QRModal({ email, configName, subscriptionLink, onClose }) {
   const [zipPassword, setZipPassword] = useState('')
   const [showZipInput, setShowZipInput] = useState(false)
   const [sending, setSending] = useState(false)
@@ -27,7 +27,7 @@ export default function QRModal({ uuid, configName, subscriptionLink, onClose })
     setError(null)
     setMessage(null)
     try {
-      const res = await sendConfigToBot(uuid, zipPassword.trim())
+      const res = await sendConfigToBot(email, zipPassword.trim())
       setMessage(res.message || 'ZIP sent to your Telegram!')
       setShowZipInput(false)
       setZipPassword('')

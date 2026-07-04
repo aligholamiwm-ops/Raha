@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
 import UsageHistogram from '../components/UsageHistogram'
 import { createConfig } from '../api/client'
+import { TrafficField, DurationField } from '../components/NumberFields'
 import {
   FiPlus, FiX, FiRefreshCw, FiAlertCircle,
   FiActivity, FiServer, FiClock, FiPieChart
@@ -103,10 +104,12 @@ export default function Dashboard() {
     setCreateError(null)
     if (!createForm.name.trim()) { setCreateError('Config name is required'); return }
     if (createForm.name.includes('-')) { setCreateError('Config name must not contain hyphens'); return }
+    if (!(createForm.total_gb > 0)) { setCreateError('Traffic must be greater than 0'); return }
     if (createForm.total_gb > trafficBalanceGB) {
       setCreateError(`Insufficient traffic balance. You have ${trafficBalanceGB.toFixed(2)} GB available.`)
       return
     }
+    if (createForm.duration_days < 0) { setCreateError('Duration must be 0 or more'); return }
     setCreating(true)
     try {
       await createConfig({ ...createForm, name: createForm.name.trim() })
@@ -267,26 +270,23 @@ export default function Dashboard() {
 
       {/* Create Config Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
-          <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-5 pb-3 shrink-0">
-              <h3 className="text-[16px] font-bold text-white">Create New Config</h3>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
+          <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <h3 className="text-[15px] font-bold text-white">New Config</h3>
               <button onClick={() => setShowCreateModal(false)} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
                 <FiX size={16} />
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 px-5 pb-5">
-              <p className="text-[12px] text-gray-500 mb-4">
-                Balance: <span className="text-emerald-400 font-bold">{trafficBalanceGB.toFixed(2)} GB</span>
-              </p>
+            <div className="px-4 pb-4">
               {createError && (
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2.5 text-rose-400 text-[12px] mb-3">
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2 text-rose-400 text-[12px] mb-3">
                   {createError}
                 </div>
               )}
-              <form onSubmit={handleCreateConfig} className="space-y-3.5">
+              <form onSubmit={handleCreateConfig} className="space-y-3">
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-400 mb-1">Config Name</label>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Name</label>
                   <input
                     type="text"
                     value={createForm.name}
@@ -294,30 +294,27 @@ export default function Dashboard() {
                     placeholder="e.g. myphone"
                     maxLength={32}
                     required
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-400 mb-1">Traffic (GB)</label>
-                  <input
-                    type="number"
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Traffic</label>
+                  <TrafficField
                     value={createForm.total_gb}
-                    onChange={e => setCreateForm({...createForm, total_gb: parseFloat(e.target.value) || 0})}
-                    min={0.1}
+                    onChange={(v) => setCreateForm({ ...createForm, total_gb: v })}
+                    min={0}
                     max={trafficBalanceGB}
-                    step="any"
-                    required
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
+                    unit="GB"
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-400 mb-1">Duration (days, 0 = unlimited)</label>
-                  <input
-                    type="number"
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Duration</label>
+                  <DurationField
                     value={createForm.duration_days}
-                    onChange={e => setCreateForm({...createForm, duration_days: parseInt(e.target.value) || 0})}
+                    onChange={(v) => setCreateForm({ ...createForm, duration_days: v })}
                     min={0}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
+                    allowInfinite
+                    unit="days"
                   />
                 </div>
 
@@ -326,7 +323,7 @@ export default function Dashboard() {
                   disabled={creating}
                   className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
                 >
-                  {creating ? 'Creating…' : 'Create Config'}
+                  {creating ? 'Creating…' : 'Create'}
                 </button>
               </form>
             </div>

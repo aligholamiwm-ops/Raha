@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.dependencies import get_current_user, require_admin
@@ -14,7 +14,7 @@ from app.models.user import UserModel
 from app.models.vpn_config import VpnConfigResponse, VpnConfigCreate, VpnConfigUpdate
 from app.services.config_service import ConfigService
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 logger = logging.getLogger(__name__)
 
 
@@ -208,30 +208,48 @@ async def get_vless_uri(
         raise HTTPException(status_code=403, detail="Access denied")
 
 
-@router.post("/{config_uuid}/send-to-bot")
+@router.post("/{email}/send-to-bot")
 async def send_config_to_bot(
-    config_uuid: str,
-    password: str = Query(..., min_length=1),
+    email: str,
+    payload: dict = Body(...),
     current_user: UserModel = Depends(get_current_user),
     service: ConfigService = Depends(_get_config_service),
     settings: Settings = Depends(get_settings),
 ) -> dict:
+    logger.info(
+        "send_config_to_bot called: email=%s, user=%s, role=%s, bot_token=%s",
+        email, current_user.telegram_id, current_user.role,
+        "set" if settings.BOT_TOKEN else "not set",
+    )
+    password = payload.get("password", "")
+    if not password or len(password.strip()) < 1:
+        logger.warning("send_config_to_bot: empty password from user %s", current_user.telegram_id)
+        raise HTTPException(status_code=422, detail="password must be at least 1 character")
     if not settings.BOT_TOKEN:
+        logger.error("send_config_to_bot: BOT_TOKEN not configured")
         raise HTTPException(status_code=503, detail="Bot token not configured")
     try:
-        return await service.send_config_to_bot(
-            config_uuid=config_uuid,
-            password=password,
+        result = await service.send_config_to_bot(
+            email=email,
+            password=password.strip(),
             telegram_id=current_user.telegram_id,
             role=current_user.role,
             bot_token=settings.BOT_TOKEN,
         )
+        logger.info("send_config_to_bot succeeded for email=%s", email)
+        return result
     except ValueError:
+        logger.warning("send_config_to_bot: config not found email=%s", email)
         raise HTTPException(status_code=404, detail="Config not found")
     except PermissionError:
+        logger.warning("send_config_to_bot: access denied for user %s on email=%s", current_user.telegram_id, email)
         raise HTTPException(status_code=403, detail="Access denied")
     except RuntimeError as exc:
+        logger.error("send_config_to_bot: runtime error for email=%s: %s", email, exc)
         raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        logger.exception("send_config_to_bot: unexpected error for email=%s", email)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/inbound-options")
