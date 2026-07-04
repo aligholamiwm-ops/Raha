@@ -102,6 +102,15 @@ export const getDefaultInboundIds = () =>
 export const saveDefaultInboundIds = (inboundIds) =>
   api.put('/api/v1/admin/servers/available-inbounds', { inbound_ids: inboundIds }).then((r) => r.data)
 
+export const getFreeTrialSettings = () =>
+  api.get('/api/v1/admin/free-trial-settings').then((r) => r.data)
+
+export const saveFreeTrialSettings = (data) =>
+  api.put('/api/v1/admin/free-trial-settings', data).then((r) => r.data)
+
+export const grantFreeTrial = () =>
+  api.post('/api/v1/admin/grant-free-trial').then((r) => r.data)
+
 export const getAdminUserUsageHistory = (telegramId, timeframe = 'H', window = '1D', config = 'all') =>
   api.get(`/api/v1/admin/users/${telegramId}/usage-history`, { params: { timeframe, window, config } }).then((r) => r.data)
 

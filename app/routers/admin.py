@@ -10,7 +10,7 @@ from app.database import get_database
 from app.dependencies import require_admin, get_current_user
 from app.models.user import UserModel, UserRole
 from app.models.ticket import TicketModel
-from app.models.setting import ReferralSettings
+from app.models.setting import ReferralSettings, FreeTrialSettings
 from app.integrations.xui_api import build_xui_client
 from app.config import get_settings, Settings
 from app.utils.security import hash_password, verify_password
@@ -649,6 +649,90 @@ async def update_referral_settings(
         upsert=True,
     )
     return payload
+
+
+@router.get(
+    "/free-trial-settings",
+    response_model=FreeTrialSettings,
+    summary="Get free trial settings (admin)",
+)
+async def get_free_trial_settings(
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> FreeTrialSettings:
+    doc = await db.settings.find_one({"_id": "free_trial_settings"})
+    if doc:
+        data = doc.get("data", {})
+        return FreeTrialSettings(
+            traffic_gb=data.get("traffic_gb", settings.FREE_TRIAL_GB),
+        )
+    return FreeTrialSettings(
+        traffic_gb=settings.FREE_TRIAL_GB,
+    )
+
+
+@router.put(
+    "/free-trial-settings",
+    response_model=FreeTrialSettings,
+    summary="Update free trial settings (admin)",
+)
+async def update_free_trial_settings(
+    payload: FreeTrialSettings,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> FreeTrialSettings:
+    data = payload.model_dump()
+    await db.settings.update_one(
+        {"_id": "free_trial_settings"},
+        {"$set": {"data": data}},
+        upsert=True,
+    )
+    return payload
+
+
+class GrantFreeTrialResponse(BaseModel):
+    affected_users: int = Field(..., description="Number of users who received the free trial")
+
+
+@router.post(
+    "/grant-free-trial",
+    response_model=GrantFreeTrialResponse,
+    summary="Grant free trial traffic to all users who haven't used it yet (admin)",
+)
+async def grant_free_trial(
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    settings: Settings = Depends(get_settings),
+) -> GrantFreeTrialResponse:
+    ft_doc = await db.settings.find_one({"_id": "free_trial_settings"})
+    ft_traffic_gb = ft_doc["data"].get("traffic_gb", 0.0) if ft_doc else settings.FREE_TRIAL_GB
+
+    if ft_traffic_gb <= 0:
+        raise HTTPException(status_code=400, detail="Free trial traffic must be greater than 0")
+
+    cursor = db.users.find({"has_used_free_trial": False})
+    affected = 0
+    async for user_doc in cursor:
+        telegram_id = user_doc["telegram_id"]
+        await db.users.update_one(
+            {"telegram_id": telegram_id},
+            {
+                "$inc": {"traffic_balance_gb": ft_traffic_gb},
+                "$set": {"has_used_free_trial": True},
+                "$push": {
+                    "purchase_history": {
+                        "date": datetime.now(timezone.utc),
+                        "plan_name": "Free Trial",
+                        "price_usd": 0.0,
+                        "traffic_gb": ft_traffic_gb,
+                    }
+                },
+            },
+        )
+        affected += 1
+
+    return GrantFreeTrialResponse(affected_users=affected)
 
 
 @router.put("/users/{telegram_id}/set-admin-password", summary="Set or update admin 2FA password for a user (admin)")

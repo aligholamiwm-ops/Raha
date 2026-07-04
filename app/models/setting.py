@@ -115,6 +115,15 @@ class CleanIPCreate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Free trial settings (stored under settings._id == "free_trial_settings")
+# ---------------------------------------------------------------------------
+
+class FreeTrialSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    traffic_gb: float = Field(default=0.2, ge=0.0, description="Free trial traffic in GB for new users")
+
+
+# ---------------------------------------------------------------------------
 # Referral settings (stored under settings._id == "referral_settings")
 # ---------------------------------------------------------------------------
 

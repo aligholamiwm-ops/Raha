@@ -83,6 +83,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             await db.users.insert_one(new_user.to_dict())
             logger.info(f"Bot: Successfully created user {telegram_id}")
+
+            # Allocate free trial traffic to new users
+            try:
+                ft_doc = await db.settings.find_one({"_id": "free_trial_settings"})
+                ft_traffic_gb = ft_doc["data"].get("traffic_gb", 0.0) if ft_doc else 0.0
+                if ft_traffic_gb > 0:
+                    await db.users.update_one(
+                        {"telegram_id": telegram_id},
+                        {
+                            "$inc": {"traffic_balance_gb": ft_traffic_gb},
+                            "$set": {"has_used_free_trial": True},
+                            "$push": {
+                                "purchase_history": {
+                                    "date": datetime.now(timezone.utc),
+                                    "plan_name": "Free Trial",
+                                    "price_usd": 0.0,
+                                    "traffic_gb": ft_traffic_gb,
+                                }
+                            },
+                        },
+                    )
+                    logger.info(f"Bot: Allocated {ft_traffic_gb} GB free trial to user {telegram_id}")
+            except Exception as e:
+                logger.error(f"Bot: Failed to allocate free trial for user {telegram_id}: {e}")
         else:
             # Update telegram info for existing user
             tg_info_update = {k: v for k, v in tg_info.model_dump().items() if v is not None}

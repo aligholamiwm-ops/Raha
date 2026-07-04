@@ -362,6 +362,10 @@ export default function Admin() {
   const [referralSettings, setReferralSettings] = useState({ layer_1: 5, layer_2: 3, layer_3: 2, layer_4: 1, layer_5: 0.5 });
   const [savingReferral, setSavingReferral] = useState(false);
 
+  const [freeTrialSettings, setFreeTrialSettings] = useState({ traffic_gb: 0.2 });
+  const [savingFreeTrial, setSavingFreeTrial] = useState(false);
+  const [grantingFreeTrial, setGrantingFreeTrial] = useState(false);
+
   // Links
   const [linkSections, setLinkSections] = useState([])
   const [expandedLinkSection, setExpandedLinkSection] = useState(null)
@@ -420,7 +424,7 @@ export default function Admin() {
     setActiveTab(tab);
     if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
     if (tab === "servers") { fetchServers(); fetchCleanIps(); fetchInbounds(); }
-    if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); }
+    if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); fetchFreeTrialSettings(); }
     if (tab === "links") { fetchLinkSections(); }
   };
 
@@ -574,6 +578,37 @@ export default function Admin() {
       toast("Error: " + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setSavingReferral(false);
+    }
+  };
+
+  const fetchFreeTrialSettings = async () => {
+    try {
+      const res = await client.get("/api/v1/admin/free-trial-settings");
+      setFreeTrialSettings(res.data);
+    } catch (err) { console.error("Failed to fetch free trial settings", err); }
+  };
+
+  const handleSaveFreeTrialSettings = async () => {
+    setSavingFreeTrial(true);
+    try {
+      await client.put("/api/v1/admin/free-trial-settings", freeTrialSettings);
+      toast("Free trial settings saved!");
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSavingFreeTrial(false);
+    }
+  };
+
+  const handleGrantFreeTrial = async () => {
+    setGrantingFreeTrial(true);
+    try {
+      const res = await client.post("/api/v1/admin/grant-free-trial");
+      toast(`Free trial granted to ${res.data.affected_users} user(s)!`);
+      setGrantingFreeTrial(false);
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error');
+      setGrantingFreeTrial(false);
     }
   };
 
@@ -1804,6 +1839,31 @@ export default function Admin() {
             <div className="mt-4">
               <Button onClick={handleSaveReferralSettings} disabled={savingReferral} className="w-full">
                 {savingReferral ? "Saving…" : "Save Referral Settings"}
+              </Button>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Free Trial" icon={FiTag} />
+            <p className="text-xs text-slate-500 mb-4">Set the amount of free traffic (GB) new users receive on their first visit.</p>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 w-16 flex-shrink-0">Traffic</span>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={freeTrialSettings.traffic_gb ?? 0}
+                onChange={e => setFreeTrialSettings(prev => ({ ...prev, traffic_gb: parseFloat(e.target.value) || 0 }))}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-xs text-slate-500 w-8">GB</span>
+            </div>
+            <div className="mt-4 space-y-2">
+              <Button onClick={handleSaveFreeTrialSettings} disabled={savingFreeTrial} className="w-full">
+                {savingFreeTrial ? "Saving…" : "Save Free Trial Settings"}
+              </Button>
+              <Button onClick={handleGrantFreeTrial} disabled={grantingFreeTrial} variant="outline" className="w-full">
+                {grantingFreeTrial ? "Granting…" : "Grant Free Trial to All Users"}
               </Button>
             </div>
           </Card>

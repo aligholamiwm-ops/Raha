@@ -584,22 +584,24 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
               </div>
               <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-700/40">
-                      <th className="text-left text-slate-500 font-medium px-3 py-2">Date</th>
-                      <th className="text-left text-slate-500 font-medium px-3 py-2">Price</th>
-                      <th className="text-left text-slate-500 font-medium px-3 py-2">Traffic</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...(user?.purchase_history || [])].reverse().map((p, i) => (
-                      <tr key={i} className="border-b border-slate-700/20 last:border-0">
-                        <td className="text-slate-300 px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
-                        <td className="text-slate-300 px-3 py-2">${(p.price_usd || 0).toFixed(2)}</td>
-                        <td className="text-slate-300 px-3 py-2">{(p.traffic_gb || 0).toFixed(1)} GB</td>
+                    <thead>
+                      <tr className="border-b border-slate-700/40">
+                        <th className="text-left text-slate-500 font-medium px-3 py-2">Date</th>
+                        <th className="text-left text-slate-500 font-medium px-3 py-2">Plan</th>
+                        <th className="text-left text-slate-500 font-medium px-3 py-2">Price</th>
+                        <th className="text-left text-slate-500 font-medium px-3 py-2">Traffic</th>
                       </tr>
-                    ))}
-                  </tbody>
+                    </thead>
+                    <tbody>
+                      {[...(user?.purchase_history || [])].reverse().map((p, i) => (
+                        <tr key={i} className="border-b border-slate-700/20 last:border-0">
+                          <td className="text-slate-300 px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                          <td className="text-slate-300 px-3 py-2">{p.plan_name || "—"}</td>
+                          <td className="text-slate-300 px-3 py-2">${(p.price_usd || 0).toFixed(2)}</td>
+                          <td className="text-slate-300 px-3 py-2">{(p.traffic_gb || 0).toFixed(1)} GB</td>
+                        </tr>
+                      ))}
+                    </tbody>
                 </table>
               </div>
             </div>

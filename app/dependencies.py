@@ -170,6 +170,33 @@ async def get_current_user(
         except Exception as e:
             logger.error(f"Failed to insert new user {telegram_id} into database: {e}")
             raise HTTPException(status_code=500, detail="Failed to create user record")
+
+        # Allocate free trial traffic to new users
+        try:
+            ft_doc = await db.settings.find_one({"_id": "free_trial_settings"})
+            ft_traffic_gb = ft_doc["data"].get("traffic_gb", 0.0) if ft_doc else 0.0
+            if ft_traffic_gb > 0:
+                await db.users.update_one(
+                    {"telegram_id": telegram_id},
+                    {
+                        "$inc": {"traffic_balance_gb": ft_traffic_gb},
+                        "$set": {"has_used_free_trial": True},
+                        "$push": {
+                            "purchase_history": {
+                                "date": datetime.now(timezone.utc),
+                                "plan_name": "Free Trial",
+                                "price_usd": 0.0,
+                                "traffic_gb": ft_traffic_gb,
+                            }
+                        },
+                    },
+                )
+                new_user.traffic_balance_gb += ft_traffic_gb
+                new_user.has_used_free_trial = True
+                logger.info(f"Allocated {ft_traffic_gb} GB free trial to user {telegram_id}")
+        except Exception as e:
+            logger.error(f"Failed to allocate free trial for user {telegram_id}: {e}")
+
         return new_user
 
     # Update telegram_info for existing users on each login
