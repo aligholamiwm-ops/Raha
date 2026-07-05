@@ -133,7 +133,7 @@ async def get_stats(
     }
 
 
-@router.get("/users/top", summary="Get top 5 users by a given metric (admin)")
+@router.get("/users/top", summary="Get top users by a given metric (admin)")
 async def get_top_users(
     filter: str = Query(
         ...,
@@ -142,12 +142,12 @@ async def get_top_users(
             "most_purchases | most_unsettled_loans | most_configs"
         ),
     ),
+    limit: int = Query(5, ge=1, le=50, description="Number of top users to return (default 5)"),
     _admin: UserModel = Depends(require_admin),
     db: AsyncIOMotorDatabase = Depends(get_database),
     settings: Settings = Depends(get_settings),
 ) -> list[dict]:
-    """Return the top 5 users ranked by the requested metric."""
-    LIMIT = 5
+    """Return the top N users ranked by the requested metric."""
 
     if filter == "most_unused_traffic":
         # Users with most remaining traffic balance
@@ -155,7 +155,7 @@ async def get_top_users(
         async for doc in db.users.find(
             {"traffic_balance_gb": {"$gt": 0}},
             {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "traffic_balance_gb": 1},
-        ).sort("traffic_balance_gb", -1).limit(LIMIT):
+        ).sort("traffic_balance_gb", -1).limit(limit):
             doc.pop("_id", None)
             results.append({
                 "telegram_id": doc.get("telegram_id"),
@@ -208,14 +208,14 @@ async def get_top_users(
                 "metric": "GB used",
             })
         ranked.sort(key=lambda x: x["value"], reverse=True)
-        return ranked[:LIMIT]
+        return ranked[:limit]
 
     if filter == "most_purchases":
         purchases_pipeline: list[dict[str, Any]] = [
             {"$match": {"status": "completed", "type": {"$ne": "loan"}}},
             {"$group": {"_id": "$telegram_id", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
-            {"$limit": LIMIT},
+            {"$limit": limit},
         ]
         results = []
         async for doc in db.payments.aggregate(purchases_pipeline):
@@ -242,7 +242,7 @@ async def get_top_users(
             {"$match": {"status": "unpaid"}},
             {"$group": {"_id": "$telegram_id", "total": {"$sum": "$amount_usdt"}}},
             {"$sort": {"total": -1}},
-            {"$limit": LIMIT},
+            {"$limit": limit},
         ]
         results = []
         async for doc in db.loans.aggregate(unsettled_pipeline):
@@ -293,7 +293,7 @@ async def get_top_users(
         if not config_counts:
             return []
 
-        top = sorted(config_counts.items(), key=lambda x: x[1], reverse=True)[:LIMIT]
+        top = sorted(config_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
         results = []
         for tid, count in top:
             u = await db.users.find_one(
@@ -318,7 +318,7 @@ async def get_top_users(
         async for doc in db.users.find(
             {},
             {"telegram_id": 1, "nickname": 1, "telegram_info": 1, "created_at": 1},
-        ).sort("created_at", -1).limit(LIMIT):
+        ).sort("created_at", -1).limit(limit):
             doc.pop("_id", None)
             created_at = doc.get("created_at")
             results.append({

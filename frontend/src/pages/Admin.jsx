@@ -390,6 +390,7 @@ export default function Admin() {
   const [editLoanAmount, setEditLoanAmount] = useState('');
   const [editLoanStatus, setEditLoanStatus] = useState('');
   const [savingLoan, setSavingLoan] = useState(false);
+  const [deletingLoanId, setDeletingLoanId] = useState(null);
   // Admin password for user management
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [settingAdminPwd, setSettingAdminPwd] = useState(false);
@@ -406,6 +407,7 @@ export default function Admin() {
   const [broadcastResult, setBroadcastResult] = useState(null);
   // Top users - shown on stats tab
   const [topFilter, setTopFilter] = useState('most_unused_traffic');
+  const [topLimit, setTopLimit] = useState(5);
   const [topUsers, setTopUsers] = useState([]);
   const [topUsersLoading, setTopUsersLoading] = useState(false);
 
@@ -417,12 +419,12 @@ export default function Admin() {
 
   useEffect(() => {
     fetchStats();
-    fetchTopUsers(topFilter);
-  }, [topFilter]);
+    fetchTopUsers(topFilter, topLimit);
+  }, [topFilter, topLimit]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter); }
+    if (tab === "stats") { fetchStats(); fetchTopUsers(topFilter, topLimit); }
     if (tab === "servers") { fetchServers(); fetchCleanIps(); fetchInbounds(); }
     if (tab === "pricing") { fetchPlans(); fetchDiscounts(); fetchReferralSettings(); fetchFreeTrialSettings(); }
     if (tab === "links") { fetchLinkSections(); }
@@ -531,10 +533,10 @@ export default function Admin() {
     } catch { toast("Failed to load links", 'error') }
   }
 
-  const fetchTopUsers = async (filter) => {
+  const fetchTopUsers = async (filter, limit = topLimit) => {
     setTopUsersLoading(true);
     try {
-      const res = await client.get(`/api/v1/admin/users/top?filter=${filter}`);
+      const res = await client.get(`/api/v1/admin/users/top?filter=${filter}&limit=${limit}`);
       setTopUsers(res.data || []);
     } catch (err) {
       console.error("Failed to fetch top users", err);
@@ -644,6 +646,20 @@ export default function Admin() {
     } catch (_err) { toast("Error deleting IP", 'error'); }
   };
 
+  const handleTopUserClick = (user) => {
+    setActiveTab("users");
+    setUserSearch(String(user.telegram_id));
+    setTimeout(() => {
+      client.get(`/api/v1/admin/users/search?q=${encodeURIComponent(String(user.telegram_id))}`)
+        .then(res => {
+          const results = res.data || [];
+          if (results.length === 1) loadUserDetails(results[0]);
+          else if (results.length > 1) setFoundUsers(results);
+        })
+        .catch(() => {});
+    }, 50);
+  };
+
   const handleUserSearch = async () => {
     if (!userSearch) return;
     setLoading(true);
@@ -748,6 +764,20 @@ export default function Admin() {
       toast("Error: " + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setSavingLoan(false);
+    }
+  };
+
+  const handleDeleteLoan = async (loan) => {
+    if (!window.confirm(`Delete $${loan.amount_usdt?.toFixed(2)} loan for this user? This cannot be undone.`)) return;
+    setDeletingLoanId(loan.loan_id);
+    try {
+      await client.delete(`/api/v1/loans/admin/${loan.loan_id}`);
+      await loadUserDetails(foundUser);
+      toast("Loan deleted!");
+    } catch (err) {
+      toast("Error: " + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setDeletingLoanId(null);
     }
   };
 
@@ -1010,35 +1040,44 @@ export default function Admin() {
             <Card><div className="text-xs text-slate-400">Open Tickets</div><div className="text-xl font-bold text-rose-400">{stats.open_tickets}</div></Card>
             <Card><div className="text-xs text-slate-400">Unsettled Loans</div><div className="text-xl font-bold text-amber-400">${stats.total_unsettled_loans_usd ?? '—'}</div></Card>
             <Card><div className="text-xs text-slate-400">Unused Traffic</div><div className="text-xl font-bold text-cyan-400">{stats.total_unused_traffic_gb ?? '—'} GB</div></Card>
-            <div className="col-span-2">
-              <Button onClick={() => client.post("/api/v1/admin/sync-configs").then(res => toast(`OK: ${res.data.servers_ok} | Failed: ${res.data.servers_failed} | Clients: ${res.data.total_clients}`)).catch(() => toast("Sync failed", 'error'))} className="w-full" icon={FiRefreshCw}>Test Server Connectivity</Button>
-              <p className="text-[10px] text-slate-500 mt-2 text-center italic">
-                * Tests connectivity to all XUI servers and returns live config counts.
-              </p>
-            </div>
           </div>
 
-          {/* Top 5 Users */}
+          {/* Top Users */}
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Top 5 Users</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Top {topLimit} Users</span>
               {topUsersLoading && <span className="w-3.5 h-3.5 border border-slate-500 border-t-transparent rounded-full animate-spin" />}
             </div>
-            <select
-              value={topFilter}
-              onChange={e => { setTopFilter(e.target.value); setTopUsers([]); fetchTopUsers(e.target.value); }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
-            >
-              <option value="most_unused_traffic">Most Unused Traffic</option>
-              <option value="most_purchases">Most Purchases</option>
-              <option value="most_unsettled_loans">Most Unsettled Loans</option>
-              <option value="most_configs">Most Configs</option>
-              <option value="recently_joined">Recently Joined</option>
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={topFilter}
+                onChange={e => { setTopFilter(e.target.value); setTopUsers([]); fetchTopUsers(e.target.value, topLimit); }}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500"
+              >
+                <option value="most_unused_traffic">Most Unused Traffic</option>
+                <option value="most_purchases">Most Purchases</option>
+                <option value="most_unsettled_loans">Most Unsettled Loans</option>
+                <option value="most_configs">Most Configs</option>
+                <option value="recently_joined">Recently Joined</option>
+              </select>
+              <select
+                value={topLimit}
+                onChange={e => { const v = parseInt(e.target.value); setTopLimit(v); setTopUsers([]); fetchTopUsers(topFilter, v); }}
+                className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-white text-xs text-center focus:outline-none focus:border-emerald-500"
+              >
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+              </select>
+            </div>
             {topUsers.length > 0 && (
               <div className="space-y-1.5 mt-1">
                 {topUsers.map((u, idx) => (
-                  <div key={u.telegram_id} className="w-full p-2 bg-slate-800/60 rounded-lg border border-slate-700">
+                  <div
+                    key={u.telegram_id}
+                    onClick={() => handleTopUserClick(u)}
+                    className="w-full p-2 bg-slate-800/60 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/60 hover:border-emerald-500/50 transition-colors"
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-slate-500 w-4">#{idx + 1}</span>
@@ -1238,244 +1277,310 @@ export default function Admin() {
           )}
 
           {foundUser && (
-            <div className="space-y-3 animate-in zoom-in-95 duration-300">
+            <div className="space-y-2.5 animate-in zoom-in-95 duration-300">
               {foundUsers.length > 1 && (
-                <button onClick={() => setFoundUser(null)} className="text-xs text-emerald-400 hover:underline">← Back</button>
+                <button onClick={() => setFoundUser(null)} className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-emerald-400 transition-colors group">
+                  <FiChevronDown size={12} className="rotate-90 group-hover:-translate-x-0.5 transition-transform" />
+                  Back to results
+                </button>
               )}
 
-              {/* User header */}
-              <div className="p-3 bg-slate-900 rounded-xl border border-slate-700">
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center gap-2">
-                    {foundUser.telegram_info?.photo_url && (
-                      <img src={foundUser.telegram_info.photo_url} alt="avatar" className="w-8 h-8 rounded-full object-cover border border-slate-600" />
-                    )}
-                    <div>
-                      <div className="text-sm font-bold text-white">
+              {/* ── User header ─────────────────────────────────────────── */}
+              <div className="relative overflow-hidden rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800/60">
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
+                <div className="p-3 flex items-center gap-3">
+                  {foundUser.telegram_info?.photo_url ? (
+                    <img src={foundUser.telegram_info.photo_url} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-slate-600 flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0">
+                      <FiUsers size={16} className="text-slate-500" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-white truncate">
                         {foundUser.nickname || foundUser.telegram_info?.first_name || `User ${foundUser.telegram_id}`}
-                        {foundUser.telegram_info?.last_name && ` ${foundUser.telegram_info.last_name}`}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {foundUser.telegram_info?.username && (
-                          <span className="text-[10px] text-slate-400">@{foundUser.telegram_info.username}</span>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-mono">ID: {foundUser.telegram_id}</span>
-                      </div>
+                      </span>
+                      {foundUser.telegram_info?.last_name && (
+                        <span className="text-sm text-slate-300 truncate">{foundUser.telegram_info.last_name}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {foundUser.telegram_info?.username && (
+                        <span className="text-[10px] text-slate-400">@{foundUser.telegram_info.username}</span>
+                      )}
+                      <span className="text-[10px] text-slate-600 font-mono">#{foundUser.telegram_id}</span>
                     </div>
                   </div>
-                  <Badge variant={foundUser.role === "admin" ? "warning" : "info"}>{foundUser.role}</Badge>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Badge variant={foundUser.role === "admin" ? "warning" : "info"}>{foundUser.role}</Badge>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                      foundUser.has_used_free_trial
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    }`}>
+                      {foundUser.has_used_free_trial ? "Trial used" : "Trial free"}
+                    </span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 gap-1.5 text-xs">
-                  <div className="p-1.5 bg-slate-800/50 rounded-lg text-center">
-                    <div className="text-[9px] text-slate-500 mb-0.5">Wallet</div>
-                    <div className="text-emerald-400 font-bold text-[11px]">${(foundUser.wallet_balance_usd || 0).toFixed(2)}</div>
+
+                {/* metric strip */}
+                <div className="grid grid-cols-3 divide-x divide-slate-700/60 border-t border-slate-700/60 bg-slate-900/40">
+                  <div className="px-3 py-2">
+                    <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Wallet</div>
+                    <div className="text-emerald-400 font-bold text-sm font-mono mt-0.5">${(foundUser.wallet_balance_usd || 0).toFixed(2)}</div>
                   </div>
-                  <div className="p-1.5 bg-slate-800/50 rounded-lg text-center">
-                    <div className="text-[9px] text-slate-500 mb-0.5">Traffic</div>
-                    <div className="text-blue-400 font-bold text-[11px]">{(foundUser.traffic_balance_gb || 0).toFixed(1)} GB</div>
+                  <div className="px-3 py-2">
+                    <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Traffic</div>
+                    <div className="text-blue-400 font-bold text-sm font-mono mt-0.5">{(foundUser.traffic_balance_gb || 0).toFixed(1)} <span className="text-[10px] text-blue-400/60">GB</span></div>
                   </div>
-                  <div className="p-1.5 bg-slate-800/50 rounded-lg text-center">
-                    <div className="text-[9px] text-slate-500 mb-0.5">Loans</div>
-                    <div className="text-red-400 font-bold text-[11px]">
+                  <div className="px-3 py-2">
+                    <div className="text-[9px] uppercase tracking-wider text-slate-500 font-medium">Unpaid loans</div>
+                    <div className="text-rose-400 font-bold text-sm font-mono mt-0.5">
                       ${userLoans.filter(l => l.status === 'unpaid').reduce((s, l) => s + l.amount_usdt, 0).toFixed(2)}
                     </div>
                   </div>
-                  <div className="p-1.5 bg-slate-800/50 rounded-lg text-center">
-                    <div className="text-[9px] text-slate-500 mb-0.5">Trial</div>
-                    <div className={`font-bold text-[11px] ${foundUser.has_used_free_trial ? "text-rose-400" : "text-emerald-400"}`}>
-                      {foundUser.has_used_free_trial ? "Used" : "Free"}
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* Role + 2FA in one row */}
-              <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">Role</span>
-                  <select
-                    value={foundUser.role}
-                    onChange={(e) => handleRoleChange(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="user">User</option>
-                    <option value="support">Support</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                {foundUser.role === "admin" && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-slate-700">
-                    <FiLock size={10} className="text-amber-400 flex-shrink-0" />
-                    <input
-                      type="password"
-                      placeholder={`2FA password${foundUser.has_admin_password ? ' (set ✓)' : ''}`}
-                      value={newAdminPassword}
-                      onChange={e => setNewAdminPassword(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-amber-500"
-                    />
-                    <button
-                      onClick={handleSetAdminPassword}
-                      disabled={settingAdminPwd || !newAdminPassword.trim()}
-                      className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-400 text-xs font-bold rounded-lg border border-amber-500/30 transition-colors"
+              {/* ── Access & 2FA / Balance editor — two-column compact ──── */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Role + 2FA */}
+                <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                    <FiLock size={10} className="text-emerald-400" /> Access
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 w-9 flex-shrink-0">Role</span>
+                    <select
+                      value={foundUser.role}
+                      onChange={(e) => handleRoleChange(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
                     >
-                      {settingAdminPwd ? '…' : 'Set'}
-                    </button>
+                      <option value="user">User</option>
+                      <option value="support">Support</option>
+                      <option value="admin">Admin</option>
+                    </select>
                   </div>
-                )}
-              </div>
-
-              {/* Balance editor (wallet + traffic) */}
-              <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-2">
-                <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Edit Balance</div>
-                <div className="flex gap-2">
-                  <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs font-bold">
-                    <button onClick={() => setChargeType('wallet')} className={`px-3 py-2 transition-colors ${chargeType === 'wallet' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Wallet $</button>
-                    <button onClick={() => setChargeType('traffic')} className={`px-3 py-2 transition-colors ${chargeType === 'traffic' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>Traffic GB</button>
-                  </div>
-                  <input
-                    type="number"
-                    value={chargeAmount}
-                    onChange={e => setChargeAmount(e.target.value)}
-                    placeholder={chargeType === 'wallet' ? 'Exact $ value' : 'Exact GB value'}
-                    min="0"
-                    step="0.01"
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                  <Button onClick={handleCharge} variant="primary" disabled={chargeAmount === ''}>Set</Button>
-                </div>
-                <div className="text-[10px] text-slate-500">Enter the exact new value to set — lower than current decreases, higher increases.</div>
-              </div>
-
-              {/* Send Message */}
-              <div className="p-3 bg-slate-900/50 rounded-xl border border-blue-500/20 space-y-2">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wide">
-                  <FiMessageSquare size={11} /> Message
-                </div>
-                <textarea
-                  value={sendMsgText}
-                  onChange={e => setSendMsgText(e.target.value)}
-                  placeholder="Message text…"
-                  rows={2}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
-                />
-                {sendMsgResult && (
-                  <div className={`text-xs px-2 py-1.5 rounded-lg border ${
-                    sendMsgResult.ok
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                  }`}>
-                    {sendMsgResult.msg}
-                  </div>
-                )}
-                <Button onClick={handleSendMessage} disabled={sendingMsg || !sendMsgText.trim()} icon={FiSend} variant="secondary" className="w-full">
-                  {sendingMsg ? 'Sending…' : 'Send'}
-                </Button>
-              </div>
-
-              {/* Loan Allocation */}
-              <div className="p-3 bg-slate-900/50 rounded-xl border border-rose-500/20 space-y-2">
-                <div className="text-[10px] font-bold text-rose-400 uppercase tracking-wide">Allocate Loan</div>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={loanAmount}
-                    onChange={e => setLoanAmount(e.target.value)}
-                    placeholder="Amount (USDT)"
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500"
-                  />
-                  <input
-                    value={loanNote}
-                    onChange={e => setLoanNote(e.target.value)}
-                    placeholder="Note"
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-                <Button onClick={handleAllocateLoan} disabled={allocatingLoan || !loanAmount} variant="danger" className="w-full">
-                  {allocatingLoan ? 'Allocating…' : 'Allocate Loan'}
-                </Button>
-              </div>
-
-              {/* Loans list with edit */}
-              {userLoans.length > 0 && (
-                <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-1.5">
-                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Loans ({userLoans.length})</div>
-                  {userLoans.map(loan => (
-                    <div key={loan.loan_id}>
-                      <div className={`p-2 rounded-lg border flex items-center justify-between ${loan.status === 'settled' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                        <div>
-                          <span className="text-xs font-bold text-white">${loan.amount_usdt?.toFixed(2)}</span>
-                          <span className="text-[10px] text-slate-500 ml-1.5">{new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${loan.status === 'settled' ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30'}`}>
-                            {loan.status === 'settled' ? '✓ Settled' : 'Unpaid'}
-                          </span>
-                          <button
-                            onClick={() => { setEditingLoan(loan); setEditLoanAmount(String(loan.amount_usdt)); setEditLoanStatus(loan.status); }}
-                            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white rounded transition-colors"
-                          >
-                            <FiEdit2 size={11} />
-                          </button>
-                        </div>
-                      </div>
-                      {editingLoan?.loan_id === loan.loan_id && (
-                        <div className="mt-1 p-2 bg-slate-900 rounded-lg border border-slate-600 space-y-2 animate-in zoom-in-95 duration-200">
-                          <div className="text-[10px] text-slate-400 font-bold uppercase">Edit Loan</div>
-                          <div className="flex gap-2">
-                            <input
-                              type="number"
-                              value={editLoanAmount}
-                              onChange={e => setEditLoanAmount(e.target.value)}
-                              placeholder="Amount USDT"
-                              min="0.01"
-                              step="0.01"
-                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
-                            />
-                            <select
-                              value={editLoanStatus}
-                              onChange={e => setEditLoanStatus(e.target.value)}
-                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
-                            >
-                              <option value="unpaid">Unpaid</option>
-                              <option value="settled">Settled</option>
-                            </select>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleSaveLoan}
-                              disabled={savingLoan}
-                              className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
-                            >
-                              {savingLoan ? '…' : 'Save'}
-                            </button>
-                            <button
-                              onClick={() => setEditingLoan(null)}
-                              className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded-lg transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                  {foundUser.role === "admin" && (
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-700/60">
+                      <FiLock size={11} className="text-amber-400 flex-shrink-0" />
+                      <input
+                        type="password"
+                        placeholder={`2FA password${foundUser.has_admin_password ? ' (set ✓)' : ''}`}
+                        value={newAdminPassword}
+                        onChange={e => setNewAdminPassword(e.target.value)}
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-amber-500"
+                      />
+                      <button
+                        onClick={handleSetAdminPassword}
+                        disabled={settingAdminPwd || !newAdminPassword.trim()}
+                        className="px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 text-amber-400 text-[11px] font-bold rounded-lg border border-amber-500/30 transition-colors"
+                      >
+                        {settingAdminPwd ? '…' : 'Set'}
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
 
-              {userTickets.length > 0 && (
-                <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700 space-y-1.5">
-                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Tickets ({userTickets.length})</div>
-                  {userTickets.map(ticket => (
-                    <div key={ticket.ticket_id} className="p-2 bg-slate-800/50 rounded-lg border border-slate-700/50 flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-medium text-white">{ticket.title || `#${ticket.ticket_id.slice(0, 8)}`}</span>
-                        <span className="text-[10px] text-slate-500 ml-1.5">{ticket.category}</span>
-                      </div>
-                      <Badge variant={ticket.status === 'open' ? 'danger' : ticket.status === 'closed' ? 'info' : 'warning'}>
-                        {ticket.status}
-                      </Badge>
+                {/* Balance editor */}
+                <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                    <FiZap size={10} className="text-emerald-400" /> Set balance
+                  </div>
+                  <div className="flex gap-2 items-stretch">
+                    <div className="flex rounded-lg border border-slate-700 overflow-hidden text-[11px] font-bold flex-shrink-0">
+                      <button onClick={() => setChargeType('wallet')} className={`px-2.5 transition-colors ${chargeType === 'wallet' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>$</button>
+                      <button onClick={() => setChargeType('traffic')} className={`px-2.5 transition-colors ${chargeType === 'traffic' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}>GB</button>
                     </div>
-                  ))}
+                    <input
+                      type="number"
+                      value={chargeAmount}
+                      onChange={e => setChargeAmount(e.target.value)}
+                      placeholder={chargeType === 'wallet' ? '0.00' : '0.0'}
+                      min="0"
+                      step="0.01"
+                      className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <Button onClick={handleCharge} variant="primary" disabled={chargeAmount === ''} className="px-3 py-1.5 text-xs flex-shrink-0">Set</Button>
+                  </div>
+                  <div className="text-[10px] text-slate-500 leading-tight">Sets exact balance — below current decreases, above increases.</div>
+                </div>
+              </div>
+
+              {/* ── Message + Loan allocation — two-column compact ─────── */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Send Message */}
+                <div className="rounded-xl border border-blue-500/25 bg-slate-900/60 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                    <FiMessageSquare size={10} /> Message
+                  </div>
+                  <textarea
+                    value={sendMsgText}
+                    onChange={e => setSendMsgText(e.target.value)}
+                    placeholder="Type a message to send to this user…"
+                    rows={2}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 resize-none"
+                  />
+                  {sendMsgResult && (
+                    <div className={`text-[11px] px-2 py-1.5 rounded-lg border ${
+                      sendMsgResult.ok
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {sendMsgResult.msg}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={sendingMsg || !sendMsgText.trim()}
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-slate-700 hover:bg-slate-600 text-white"
+                  >
+                    {sendingMsg ? <FiRefreshCw size={12} className="animate-spin" /> : <FiSend size={12} />}
+                    {sendingMsg ? 'Sending…' : 'Send'}
+                  </button>
+                </div>
+
+                {/* Loan Allocation */}
+                <div className="rounded-xl border border-rose-500/25 bg-slate-900/60 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
+                    <FiZap size={10} className="rotate-45" /> Allocate loan
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={loanAmount}
+                      onChange={e => setLoanAmount(e.target.value)}
+                      placeholder="USDT"
+                      min="0"
+                      step="0.01"
+                      className="w-20 flex-shrink-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-rose-500"
+                    />
+                    <input
+                      value={loanNote}
+                      onChange={e => setLoanNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAllocateLoan}
+                    disabled={allocatingLoan || !loanAmount}
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 bg-rose-500 hover:bg-rose-600 text-white"
+                  >
+                    {allocatingLoan ? <FiRefreshCw size={12} className="animate-spin" /> : null}
+                    {allocatingLoan ? 'Allocating…' : 'Allocate loan'}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Loans + Tickets — side-by-side when both present ───── */}
+              {(userLoans.length > 0 || userTickets.length > 0) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Loans list with edit */}
+                  {userLoans.length > 0 && (
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Loans</div>
+                        <span className="text-[10px] text-slate-600 font-mono">{userLoans.length}</span>
+                      </div>
+                      {userLoans.map(loan => (
+                        <div key={loan.loan_id}>
+                          <div className={`p-2 rounded-lg border flex items-center justify-between gap-2 ${loan.status === 'settled' ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-rose-500/5 border-rose-500/25'}`}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-white font-mono">${loan.amount_usdt?.toFixed(2)}</span>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${loan.status === 'settled' ? 'text-emerald-400 border-emerald-500/30' : 'text-rose-400 border-rose-500/30'}`}>
+                                  {loan.status === 'settled' ? 'settled' : 'unpaid'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                                {new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => { setEditingLoan(loan); setEditLoanAmount(String(loan.amount_usdt)); setEditLoanStatus(loan.status); }}
+                                className="p-1.5 hover:bg-slate-700 text-slate-400 hover:text-white rounded transition-colors flex-shrink-0"
+                                title="Edit loan"
+                              >
+                                <FiEdit2 size={11} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteLoan(loan)}
+                                disabled={deletingLoanId === loan.loan_id}
+                                className="p-1.5 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded transition-colors flex-shrink-0 disabled:opacity-40"
+                                title="Delete loan"
+                              >
+                                {deletingLoanId === loan.loan_id ? <FiRefreshCw size={11} className="animate-spin" /> : <FiTrash2 size={11} />}
+                              </button>
+                            </div>
+                          </div>
+                          {editingLoan?.loan_id === loan.loan_id && (
+                            <div className="mt-1.5 p-2 bg-slate-900 rounded-lg border border-slate-600 space-y-2 animate-in zoom-in-95 duration-200">
+                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Edit loan</div>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  value={editLoanAmount}
+                                  onChange={e => setEditLoanAmount(e.target.value)}
+                                  placeholder="USDT"
+                                  min="0.01"
+                                  step="0.01"
+                                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                                />
+                                <select
+                                  value={editLoanStatus}
+                                  onChange={e => setEditLoanStatus(e.target.value)}
+                                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                >
+                                  <option value="unpaid">Unpaid</option>
+                                  <option value="settled">Settled</option>
+                                </select>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleSaveLoan}
+                                  disabled={savingLoan}
+                                  className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
+                                >
+                                  {savingLoan ? <FiRefreshCw size={11} className="animate-spin" /> : <FiCheck size={11} />}
+                                  {savingLoan ? '…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => setEditingLoan(null)}
+                                  className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <FiX size={11} /> Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tickets list */}
+                  {userTickets.length > 0 && (
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Tickets</div>
+                        <span className="text-[10px] text-slate-600 font-mono">{userTickets.length}</span>
+                      </div>
+                      {userTickets.map(ticket => (
+                        <div key={ticket.ticket_id} className="p-2 bg-slate-800/40 rounded-lg border border-slate-700/40 flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-white truncate">{ticket.title || `#${ticket.ticket_id.slice(0, 8)}`}</div>
+                            <div className="text-[10px] text-slate-500 truncate mt-0.5">{ticket.category}</div>
+                          </div>
+                          <Badge variant={ticket.status === 'open' ? 'danger' : ticket.status === 'closed' ? 'info' : 'warning'}>
+                            {ticket.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

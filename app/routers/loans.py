@@ -224,3 +224,22 @@ async def admin_update_loan(
     )
     result.pop("_id", None)
     return LoanModel(**result)
+
+
+@router.delete(
+    "/admin/{loan_id}",
+    summary="Delete a loan (admin)",
+)
+async def admin_delete_loan(
+    loan_id: str,
+    _admin: UserModel = Depends(require_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict:
+    loan_doc = await db.loans.find_one_and_delete({"loan_id": loan_id})
+    if not loan_doc:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    logger.info(
+        "Admin deleted loan %s ($%.2f, user %d)",
+        loan_id, loan_doc.get("amount_usdt", 0), loan_doc.get("telegram_id", 0),
+    )
+    return {"deleted": True, "loan_id": loan_id}
