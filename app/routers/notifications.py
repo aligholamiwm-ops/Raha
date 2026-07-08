@@ -192,23 +192,28 @@ async def create_announcement(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     """Create and broadcast an announcement to target users.
-    Payload: { title, message, target, also_send_telegram }
+    Payload: { title, message, target, send_as_notification, send_via_telegram }
     """
     title = payload.get("title", "Announcement")
     message = payload.get("message", "")
     target = payload.get("target", "all")
-    also_send_telegram = payload.get("also_send_telegram", True)
+    send_as_notification = payload.get("send_as_notification", True)
+    send_via_telegram = payload.get("send_via_telegram", True)
 
     if not message:
         raise HTTPException(status_code=400, detail="Message is required")
 
-    bot_token = settings.BOT_TOKEN if also_send_telegram else None
+    if not send_as_notification and not send_via_telegram:
+        raise HTTPException(status_code=400, detail="At least one delivery channel must be selected")
+
+    bot_token = settings.BOT_TOKEN if send_via_telegram else None
 
     result = await broadcast_service(
         db, bot_token,
         title=title,
         message=message,
         target=target,
-        also_send_telegram=also_send_telegram,
+        send_as_notification=send_as_notification,
+        send_via_telegram=send_via_telegram,
     )
     return result

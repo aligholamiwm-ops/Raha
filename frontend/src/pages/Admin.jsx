@@ -401,7 +401,8 @@ export default function Admin() {
   // Broadcast
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [broadcastTitle, setBroadcastTitle] = useState('')
-  const [alsoSendTelegram, setAlsoSendTelegram] = useState(true)
+  const [sendAsNotification, setSendAsNotification] = useState(true)
+  const [sendViaTelegram, setSendViaTelegram] = useState(true)
   const [broadcastTarget, setBroadcastTarget] = useState('all');
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
@@ -464,12 +465,13 @@ export default function Admin() {
     setBroadcasting(true);
     setBroadcastResult(null);
     try {
-      const data = await postAnnouncement({
-        title: broadcastTitle.trim() || 'Announcement',
-        message: broadcastMsg.trim(),
-        target: broadcastTarget,
-        also_send_telegram: alsoSendTelegram,
-      });
+const data = await postAnnouncement({
+          title: broadcastTitle.trim() || 'Announcement',
+          message: broadcastMsg.trim(),
+          target: broadcastTarget,
+          send_as_notification: sendAsNotification,
+          send_via_telegram: sendViaTelegram,
+        });
       setBroadcastResult({ ok: true, data });
       setBroadcastMsg('');
       setBroadcastTitle('');
@@ -1673,15 +1675,26 @@ export default function Admin() {
                 rows={4}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500 resize-none"
               />
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={alsoSendTelegram}
-                  onChange={e => setAlsoSendTelegram(e.target.checked)}
-                  className="w-4 h-4 accent-emerald-500"
-                />
-                <span className="text-sm text-slate-300">Also send via Telegram</span>
-              </label>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendAsNotification}
+                    onChange={e => setSendAsNotification(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500"
+                  />
+                  <span className="text-sm text-slate-300">Send as in-app notification</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendViaTelegram}
+                    onChange={e => setSendViaTelegram(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500"
+                  />
+                  <span className="text-sm text-slate-300">Send via Telegram</span>
+                </label>
+              </div>
               {broadcastResult && (
                 <div className={`p-3 rounded-xl border text-sm ${
                   broadcastResult.ok
@@ -1702,7 +1715,7 @@ export default function Admin() {
               )}
               <Button
                 onClick={handleBroadcast}
-                disabled={broadcasting || !broadcastMsg.trim()}
+                disabled={broadcasting || !broadcastMsg.trim() || (!sendAsNotification && !sendViaTelegram)}
                 icon={FiSend}
                 variant="primary"
                 className="w-full"

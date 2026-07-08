@@ -1,0 +1,600 @@
+================================================================================
+RAHA VPN — FULL MULTILINGUAL (i18n) IMPLEMENTATION PLAN
+================================================================================
+Audience: A coding agent that will execute this plan.
+Stack:     React 18 + Vite 5 + TailwindCSS 3.4 + HashRouter + Axios (frontend)
+           FastAPI + MongoDB/Motor + Celery (backend)
+           Telegram Mini App (TMA).
+Goal:      Make the app fully multilingual. Initial languages: English (LTR) and
+           Persian/Farsi (RTL). Architecture must make adding ANY future language
+           "a piece of cake".
+
+--------------------------------------------------------------------------------
+0. CONFIRMED DECISIONS (do not deviate)
+--------------------------------------------------------------------------------
+- i18n library ............ react-i18next + i18next (install both).
+- Locale file structure ... Namespaced per feature:
+                             src/locales/{en,fa}/{namespace}.json
+- Digits .................. Latin numerals everywhere (1234). NO Persian digits.
+                             Only UI text translates; numbers stay Latin.
+- Calendar ................ Shamsi (Jalaali) for ALL dates when lng=fa;
+                             Gregorian (Intl) when lng=en. jalaali-js is already
+                             a dependency.
+- Persian font ............ Vazirmatn, SELF-HOSTED in /public/fonts (NOT CDN).
+                             Reason: this is a VPN app used in restricted networks.
+- Persian translations .... LEAVE fa/*.json WITH ENGLISH PLACEHOLDER VALUES
+                             (mirror the en keys). A human translator will replace
+                             them later. Do NOT author Persian strings yourself.
+- Backend ................. MINIMAL. Only add a `language` field to the user
+                             model + update schema. NO Accept-Language header,
+                             NO supported-languages validator, NO new endpoints,
+                             NO server-side message translation in this phase.
+- Language switch UI ...... Remove the globe icon next to the notification bell;
+                             integrate language switching into the Profile "Me"
+                             sub-tab (NOT a global header control).
+
+--------------------------------------------------------------------------------
+1. VERIFIED CURRENT-STATE FACTS (file:line references are authoritative)
+--------------------------------------------------------------------------------
+Frontend root: /root/Raha/frontend  (src/ is /root/Raha/frontend/src)
+
+- No i18n infrastructure exists anywhere. All UI strings are inline English.
+- Entry: src/main.jsx (10 lines) renders <App/> in StrictMode. No providers here.
+- App.jsx:
+    * Provider nesting at App.jsx:144-150 -> AppProvider > NotificationsProvider > AppShell.
+    * Header() at App.jsx:73-85. Title "Raha VPN" (:76) + <NotificationBell/> + a
+      dead globe <button> at App.jsx:79-81 (NO onClick). FiGlobe imported at :13.
+    * NicknameModal() at App.jsx:15-71. The ONLY onboarding UI. Triggered when
+      user.nickname == null (App.jsx:91-95). PUT /api/v1/users/me/nickname at :30.
+      handleNicknameSaved at App.jsx:97-100 -> closes modal + refreshUser().
+    * AppShell() at App.jsx:87-131. "Access Restricted" gate at :102-109.
+      HashRouter routes at :117-125 (/, /store, /referral, /profile, /support->redirect,
+      /admin [admin-only], * -> /).
+- context/AppContext.jsx (92 lines): createContext + useState. Holds user/configs/
+  plans/loading/error. fetchUser() -> getUser() -> GET /api/v1/users/me.
+  Telegram gate at :56-64 (reads window.Telegram?.WebApp?.initData). ZERO persistence.
+  refreshUser alias at :77.
+- context/NotificationsContext.jsx (176 lines): depends on useApp() for user (:8);
+  polls every 30s (:138).
+- api/client.js (165 lines): single axios instance, baseURL = VITE_API_BASE_URL || ''
+  (:8-11). Request interceptor :12-27 adds Authorization: 'tma '+initData, init-data
+  header, and X-Referrer-Id from tg.initDataUnsafe.start_param. getUser at :35.
+- BottomNav.jsx: tabs at :34-43 (Dashboard/Referral/Profile + Admin if admin).
+  NOTE: there is NO "Me" bottom tab. "Me" is a SUB-TAB inside /profile.
+- pages/Profile.jsx (1467 lines):
+    * Profile component :1417-1467. TopTabs at :122-152 (Account/Support/Me).
+    * MeTab component :1239-1414. Sections: user card (:1305-1319), nickname editor
+      (:1322-1403), role badge (:1405-1411). NO language/settings section exists.
+      MeTab receives props { user, refreshUser }.
+    * handleSave pattern (nickname PUT + refreshUser) at :1279-1291 — mirror this for
+      saving language.
+    * Existing UI patterns to match:
+        - Card row:  bg-slate-800 border border-slate-700 rounded-2xl p-4
+        - Native select: Profile.jsx:963-968 and :1081-1088
+        - Segmented tabs: TopTabs :122-152
+        - Toast: ConfigCard.jsx:268-272
+- components/NotificationBell.jsx: bell button :67-82; dropdown panel :84-173;
+  detail modal :185-258. Icons from react-icons/fi (:2).
+- components/UsageHistogram.jsx: uses jalaali-js (:5) for Shamsi X-axis labels
+  (:33-36); hardcodes Tehran tz via Intl.DateTimeFormat('en-US', ...) (:24).
+- index.html:2 -> <html lang="en"> (hardcoded, no dir). telegram-web-app.js at :8.
+- src/index.css (96 lines): body font-family is a system stack (:19). No rtl/dir rules.
+- tailwind.config.js: Tailwind 3.4. Logical properties (ms-/me-/ps-/pe-/start-/end-/
+  text-start/text-end) and the rtl: variant are supported OUT OF THE BOX. Just set
+  `dir` on <html>. No config change required.
+- react-icons used: sets react-icons/fi (Feather, primary) and react-icons/md (Material).
+  FiGlobe currently imported only in App.jsx.
+- ZERO localStorage / sessionStorage usage anywhere in frontend/src.
+
+Backend root: /root/Raha/app
+
+- models/user.py:
+    * UserModel :65-84. NO language/locale field. telegram_info (TelegramInfo :19-29)
+      has language_code (:26) but that is Telegram-provided and OVERWRITTEN on every
+      login (dependencies.py:142, bot.py:55) -> NOT a stable user preference.
+    * UserUpdate :94-105. to_dict() uses exclude_none=True (:105) -> adding an
+      optional field auto-flows through PUT /me.
+    * UserCreate :87-92 (NOT used by either creation path).
+- routers/users.py:
+    * GET /me  -> get_my_profile (:22-30), response_model=UserModel.
+    * PUT /me  -> update_my_profile (:81-122). Strips wallet/traffic/role; persists
+      via $set. Adding `language` to UserUpdate needs NO handler change.
+    * PUT /me/nickname (:53-78).
+- dependencies.py: get_current_user (:96-215). Auto-CREATES the user doc on first
+  authenticated request if it doesn't exist (:147-200, insert_one at :168). This is
+  the de-facto "signup" moment. x_referrer_id header (:121) is the precedent for
+  accepting extra client headers.
+- bot.py: start() :41-119 — second user-creation path (insert_one at :84).
+- database.py: Motor client; db name default "raha_vpn"; collection accessed as
+  db.users. Indexes on users: telegram_id (unique), nickname, telegram_info.username,
+  telegram_info.phone_number (:30-33).
+- main.py:82 registers users router at prefix /api/v1/users.
+
+Tests:
+- Frontend (vitest + jsdom, vite.config.js test block at :7-11):
+    * setup file: src/__tests__/setup.js — ONLY imports '@testing-library/jest-dom/vitest'.
+    * NotificationBell.test.jsx: mocks NotificationsContext; renders NotificationBell
+      directly; asserts getByRole('button'). WILL NEED i18n init once components use t().
+    * NotificationsContext.test.jsx: mocks api/client + AppContext; renders provider+child.
+    * NotificationsContext.race.test.jsx: race-condition tests; mocks api/client + AppContext.
+- Backend (pytest, asyncio_mode=auto, pyproject.toml): tests/ has conftest.py +
+  test_free_trial.py, test_notifications.py, test_purchase_history.py, test_config_service.py,
+  test_links.py, test_traffic_chart_fixes.py, test_celery_bridge.py, test_xui_api.py,
+  test_xui_integration.py. (Stale .pyc for deleted test_events_* / test_websocket_* exist;
+  ignore them.)
+
+================================================================================
+2. ARCHITECTURE DESIGN
+================================================================================
+
+2.1 LANGUAGE REGISTRY — the "piece of cake" scalability centerpiece
+--------------------------------------------------------------------------------
+Create src/i18n/languages.js. Single source of truth. Adding a future language =
+(1) add an entry here, (2) drop a src/locales/<code>/ folder with the namespace
+JSONs, (3) optionally add a font. Nothing else changes anywhere.
+
+  export const LANGUAGES = {
+    en: { code:'en', dir:'ltr', englishName:'English',  nativeName:'English', fontClass:'font-en', calendar:'gregorian' },
+    fa: { code:'fa', dir:'rtl', englishName:'Persian',  nativeName:'فارسی',   fontClass:'font-fa', calendar:'shamsi'   },
+  }
+  export const DEFAULT_LANGUAGE = 'en'
+  export const SUPPORTED_LANGUAGES = Object.values(LANGUAGES)
+  export function getLangMeta(code){ return LANGUAGES[code] || LANGUAGES[DEFAULT_LANGUAGE] }
+
+NOTE on nativeName: the registry itself MAY contain the native script name of each
+language (e.g. "فارسی") because that is UI chrome needed to let users pick their
+language BEFORE translations are loaded — it is NOT a translated UI string. This is
+the single intentional exception to "do not author Persian strings". All OTHER fa
+strings in the JSON files must be English placeholders for the human translator.
+
+2.2 i18n INIT — src/i18n/index.js
+--------------------------------------------------------------------------------
+- import i18n from 'i18next' and { initReactI18next } from 'react-i18next'.
+- Bundle ALL namespaces for BOTH languages at init (only 2 langs, small payload).
+  Import each JSON explicitly so Vite bundles them. (Future scalability: switching to
+  i18next-http-backend + lazy chunks requires NO call-site changes because all access
+  is via useTranslation('ns') / t('key').)
+- Namespaces (create every file for both en and fa):
+    common, nav, dashboard, profile, store, referral, admin, support,
+    notifications, onboarding
+- Determine initial lng SYNCHRONOUSLY (no flash):
+    1. localStorage.getItem('raha.lang')
+    2. else detect: window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code
+       -> if it startswith 'fa' use 'fa', else 'en'
+    3. else DEFAULT_LANGUAGE ('en')
+- fallbackLng: 'en'. interpolation.escapeValue: false (React escapes).
+- defaultNS: 'common'.
+- Export the initialized i18n instance (default + named).
+
+2.3 LOCALE FILE CONTENT RULES
+--------------------------------------------------------------------------------
+- en/*.json: real English strings (the source of truth for keys).
+- fa/*.json: SAME KEYS, but values are the ENGLISH string copied verbatim as a
+  PLACEHOLDER, prefixed with nothing special. (Human translator replaces later.)
+  Example:
+    en/common.json:  { "save": "Save", "cancel": "Cancel" }
+    fa/common.json:  { "save": "Save", "cancel": "Cancel" }   <- placeholder English
+- Use nested keys for organization, e.g. { "nicknameModal": { "title": "...", "placeholder": "..." } }.
+- Keep keys stable and semantic (not the English text).
+
+2.4 LanguageProvider + useLanguage() — src/context/LanguageContext.jsx
+--------------------------------------------------------------------------------
+Mirror the existing AppContext/NotificationsContext pattern (createContext + Provider
++ useContext hook). Responsibilities:
+- State: lng, dir, meta (= getLangMeta(lng)).
+- changeLanguage(code):
+    1. await i18n.changeLanguage(code)
+    2. update state (lng, dir, meta)
+    3. document.documentElement.lang = code
+    4. document.documentElement.dir = meta.dir
+    5. toggle body font class: remove 'font-en'/'font-fa', add meta.fontClass
+    6. localStorage.setItem('raha.lang', code)
+    7. if user is logged in (see coordination with AppContext) -> fire-and-forget
+       PUT /api/v1/users/me { language: code } via updateMyLanguage(code)
+       (do not block UI; swallow errors silently or log).
+- A reconciliation mechanism for "server wins" (see 2.5). Expose a function
+  applyServerLanguage(code) that switches WITHOUT re-PUTting to the server (to avoid
+  loops). This is called from AppContext after fetchUser resolves when user.language
+  is non-null and differs from current.
+- Apply DOM side-effects (dir/lang/font class) ALSO on initial mount so the very
+  first paint is correct (in addition to the synchronous seed in main.jsx).
+- Export: { LanguageProvider, useLanguage }.
+
+2.5 LANGUAGE PRECEDENCE & RECONCILIATION (data flow)
+--------------------------------------------------------------------------------
+  Boot (before React mounts, in main.jsx via i18n/index.js seed):
+      lng = localStorage('raha.lang') ?? detect(tg.language_code) ?? 'en'
+      -> no flash.
+  First launch (no 'raha.lang' in localStorage):
+      LanguageSelector overlay shown (localStorage-only; works before user record
+      exists). On select -> changeLanguage(code) persists locally.
+  After AppContext.fetchUser() resolves:
+      if user.language is non-null AND user.language !== current lng:
+          -> SERVER WINS: applyServerLanguage(user.language) (also updates localStorage)
+             [cross-device sync]
+      else if user.language is null (new user):
+          -> keep current localStorage lng; it will be synced to DB after registration.
+  After NicknameModal save (handleNicknameSaved in App.jsx):
+      -> PUT /api/v1/users/me { language: currentLng }   (sync per requirement)
+  Profile "Me" language change:
+      -> changeLanguage(code): i18n + DOM + localStorage + PUT /me {language}
+
+  Implementation note: To let LanguageContext know when the user loads, have it
+  consume useApp() (user) and run the reconciliation in a useEffect on `user`.
+  Provider order in App.jsx MUST be: LanguageProvider OUTSIDE AppProvider is NOT
+  possible (it needs user). So order is:
+      AppProvider -> LanguageProvider -> NotificationsProvider -> AppShell
+  (LanguageProvider consumes useApp(); AppShell consumes useLanguage() and
+  useNotifications()). This keeps the "Access Restricted" + onboarding screens
+  translated because they live inside AppShell which is under LanguageProvider.
+
+2.6 RTL / LTR STRATEGY
+--------------------------------------------------------------------------------
+- Set <html dir> and <html lang> reactively (overrides static index.html:2).
+- PRIMARY technique: convert directional Tailwind utilities to LOGICAL properties
+  so they auto-flip with dir:
+      ml-/mr-   -> ms-/me-
+      pl-/pr-   -> ps-/pe-
+      left-/right- (positioning) -> start-/end-
+      text-left/text-right -> text-start/text-end
+      space-x / -space-x -> keep but verify; prefer gap- where possible
+- IRREDUCIBLE cases (directional icons like back chevrons, arrows): use the
+  rtl: variant, e.g. className="rtl:rotate-180" on the icon.
+- Do NOT add a tailwind.config change; 3.4 supports all of this natively.
+- Fonts: add @font-face for Vazirmatn in index.css; define body.font-en (system
+  stack) and body.font-fa (Vazirmatn) and toggle via LanguageProvider.
+
+2.7 FONT SETUP (self-hosted Vazirmatn)
+--------------------------------------------------------------------------------
+- Download Vazirmatn variable/static woff2 files into /root/Raha/frontend/public/fonts/
+  (e.g. Vazirmatn-Regular.woff2, Vazirmatn-Bold.woff2). If offline, use the
+  google/fonts GitHub Vazirmatn package files. If those assets cannot be fetched in
+  the environment, document the exact filenames expected and add @font-face rules
+  that reference /fonts/Vazirmatn-*.woff2 so the agent/human can drop them in.
+- Add to src/index.css:
+    @font-face { font-family:'Vazirmatn'; src:url('/fonts/Vazirmatn-Regular.woff2') format('woff2'); font-weight:400; font-display:swap; }
+    @font-face { font-family:'Vazirmatn'; src:url('/fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight:700; font-display:swap; }
+    body.font-en { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; }
+    body.font-fa { font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+- Keep the existing body base styles; just gate font-family by the class.
+
+2.8 DATE FORMATTING HELPER — src/utils/dates.js
+--------------------------------------------------------------------------------
+Create ONE locale-aware formatter; route ALL date rendering through it.
+  export function formatDate(ts, opts) {
+    // uses current i18n language + registry calendar (shamsi for fa, gregorian for en)
+    // fa: convert via jalaali-js to jY/jM/jD and render Latin digits (per decision)
+    // en: new Date(ts).toLocaleDateString('en-US', {...opts})
+  }
+- Provide variants as needed (formatDateTime, formatDateShort).
+- Replace the scattered sites (see Workstream B list).
+- Keep numbers Latin even in fa.
+
+2.9 BACKEND CHANGES (MINIMAL)
+--------------------------------------------------------------------------------
+File: app/models/user.py
+- Add to UserModel (after :69 nickname or wherever clean):
+    language: Optional[str] = Field(default=None, description="User-selected UI language preference")
+- Add to UserUpdate (after :97 nickname):
+    language: Optional[str] = Field(default=None, description="User-selected UI language preference")
+- That is ALL. Because UserUpdate.to_dict() uses exclude_none=True and PUT /me only
+  strips wallet/traffic/role, the new field auto-persists via $set and auto-returns
+  via GET /me (response_model=UserModel). No router edits. No DB migration. No index.
+- Do NOT add: Accept-Language header parsing, supported-languages validator, server-
+  side message translation, or seeding at user-creation. (Kept minimal per decision.)
+- Telegram_info.language_code stays as-is (Telegram-provided, unstable).
+
+================================================================================
+3. SUB-AGENT WORKSTREAM BREAKDOWN  (USE SUB-AGENTS WISELY)
+================================================================================
+GUIDANCE FOR THE COORDINATOR AGENT:
+- You are the coordinator. Do NOT do everything yourself. Dispatch focused sub-agents
+  (Task tool, subagent_type "general") per workstream, with a detailed prompt and the
+  exact files/line refs from this plan.
+- Execution order is strict for the FIRST wave, then parallel:
+    WAVE 1:  Workstream A (foundation). MUST finish and pass lint+build+tests before
+             any other wave starts. Everything depends on A.
+    WAVE 2:  Workstreams B, C, D, E may run IN PARALLEL after A (they touch disjoint
+             files). Launch them as concurrent sub-agents in a single message.
+    WAVE 3:  Final integration sweep + full lint/build/test (coordinator does this).
+- Give each sub-agent: the exact scope, the file:line refs, the acceptance criteria,
+  and the instruction to NOT touch files outside its scope (avoid merge conflicts).
+- After each sub-agent returns, the coordinator MUST run: `npm run lint`, `npm run build`,
+  `npm test` (in frontend) and `pytest` (in backend) before accepting the work.
+- Keep sub-agent prompts self-contained (they start with a fresh context).
+
+--------------------------------------------------------------------------------
+WORKSTREAM A — Core i18n foundation  (BLOCKING; first & alone)
+--------------------------------------------------------------------------------
+SCOPE:
+1. Install deps:  npm install i18next react-i18next   (run in /root/Raha/frontend)
+2. Create src/i18n/languages.js  (registry, see 2.1).
+3. Create src/i18n/index.js      (init, see 2.2).
+4. Create the full locale skeleton:
+     src/locales/en/{common,nav,dashboard,profile,store,referral,admin,support,
+                     notifications,onboarding}.json
+     src/locales/fa/{...same 10 files...}
+   - en files: populate with the REAL English strings you can see today for the
+     onboarding + nav + common namespaces (the rest can be filled incrementally in
+     Workstream E). At minimum, fully populate: common, nav, onboarding.
+   - fa files: SAME KEYS, English placeholder values (see 2.3).
+5. Create src/context/LanguageContext.jsx  (LanguageProvider + useLanguage, see 2.4,
+   2.5). Consume useApp() for reconciliation. Expose applyServerLanguage().
+6. Wire providers in App.jsx:144-150 in this order:
+       AppProvider -> LanguageProvider -> NotificationsProvider -> AppShell
+7. Import the i18n instance in src/main.jsx BEFORE <App/> (so it's initialized pre-render).
+8. Add updateMyLanguage(code) helper to api/client.js:
+       export const updateMyLanguage = (language) => api.put('/api/v1/users/me', { language })
+   (Reuse the existing axios instance; the interceptor already attaches auth headers.)
+9. Font setup: add /public/fonts/Vazirmatn-*.woff2 + @font-face + body.font-en/font-fa
+   rules in src/index.css (see 2.7). If woff2 files cannot be downloaded in this
+   environment, create the @font-face rules anyway and add a short note in the plan
+   output that the human must drop the font files in /public/fonts.
+10. Apply dir/lang/font-class on initial mount in LanguageProvider (see 2.6).
+DO NOT in this workstream: remove the globe icon, build the LanguageSelector, edit
+MeTab, or convert all strings (those are B/C/D/E).
+
+ACCEPTANCE:
+- `npm run lint` clean. `npm run build` succeeds. `npm test` green (existing tests
+  still pass — you may need to add i18n init to src/__tests__/setup.js; see §4).
+- App boots in en by default; calling useLanguage().changeLanguage('fa') flips
+  <html dir>, <html lang>, and body font class with no reload.
+- fa/*.json exist with English placeholder values.
+
+--------------------------------------------------------------------------------
+WORKSTREAM B — RTL/layout & typography adaptation  (PARALLEL after A)
+--------------------------------------------------------------------------------
+SCOPE: Convert directional utilities to logical properties; mirror directional icons;
+unify dates through src/utils/dates.js. TOUCH ONLY these files (besides the new helper):
+- New file: src/utils/dates.js  (see 2.8).
+- src/App.jsx                 (Header, NicknameModal, AppShell container :113)
+- src/components/BottomNav.jsx          (:47 and tab item layout)
+- src/components/NotificationBell.jsx   (dropdown panel :84-88, detail modal)
+- src/components/ConfigCard.jsx
+- src/components/NumberFields.jsx
+- src/components/QRModal.jsx
+- src/components/UsageHistogram.jsx     (route the Shamsi logic through dates.js)
+- src/pages/Dashboard.jsx
+- src/pages/Store.jsx
+- src/pages/Referral.jsx
+- src/pages/Profile.jsx
+- src/pages/Admin.jsx
+- src/pages/Support.jsx
+RULES:
+- ml-/mr-/pl-/pr-/left-/right-/text-left/text-right -> logical equivalents (see 2.6).
+- Directional icons (back chevrons in Profile.jsx / Referral.jsx, etc.): add rtl:rotate-180.
+- Replace date formatting sites:
+    Profile.jsx:112, Support.jsx:11, UsageHistogram.jsx:24, NotificationBell.jsx:222,
+    ConfigCard.jsx:198, Admin.jsx:1096 & :1498, Referral.jsx:355, Store.jsx:718 & :756,
+    Profile.jsx:760 & :784  -> all via formatDate/formatDateTime from src/utils/dates.js.
+- DO NOT convert Persian digits (keep Latin per decision).
+- DO NOT change page text content to t() here UNLESS trivially adjacent — string
+  extraction is Workstream E's job. (B only fixes layout/dates/icons.) If a date string
+  is inline with text, leave the text for E and only swap the date call.
+ACCEPTANCE: Toggling fa mirrors paddings/margins/icons correctly; every page renders
+without overflow; all dates render Shamsi in fa and Gregorian in en. lint+build+test green.
+
+--------------------------------------------------------------------------------
+WORKSTREAM C — Auth/Onboarding flow  (PARALLEL after A)
+--------------------------------------------------------------------------------
+SCOPE:
+1. Create src/components/LanguageSelector.jsx:
+   - Full-screen clean overlay (fixed inset-0, bg-black/70, centered card) — match the
+     NicknameModal visual style (App.jsx:40-41: bg-dark-card border border-white/10
+     rounded-2xl p-6 max-w-sm).
+   - Iterate SUPPORTED_LANGUAGES from the registry (scalable) -> render one button per
+     language showing nativeName (and englishName subtitle). Highlight/pre-select the
+     one matching the detected Telegram language_code.
+   - On select: call useLanguage().changeLanguage(code) then onClose().
+   - All its own UI strings via t('onboarding.*').
+2. Modify App.jsx AppShell onboarding gate ordering:
+       if (error && !user)               -> Access Restricted (translated)
+       else if (!localStorage.getItem('raha.lang')) -> <LanguageSelector/>
+       else if (user && user.nickname == null)      -> <NicknameModal/>
+       else                                          -> main app
+   (Keep the existing NicknameModal logic; just add the LanguageSelector gate BEFORE it.
+   LanguageSelector must render even if user is still loading — it is localStorage-only.)
+3. After NicknameModal save (handleNicknameSaved, App.jsx:97-100): also call
+   updateMyLanguage(currentLng) (best-effort) to sync language to DB per requirement.
+   Read currentLng from useLanguage().
+4. Reconciliation: LanguageProvider (created in A) already consumes useApp(); ensure its
+   useEffect on `user` does: if user.language non-null && !== lng -> applyServerLanguage.
+   If C needs to tweak LanguageContext for this, do it here (coordinate with A's author
+   mentally — same file, but A created the skeleton).
+5. Backend: app/models/user.py — add `language` field to UserModel and UserUpdate (2.9).
+TOUCH FILES: src/components/LanguageSelector.jsx (new), src/App.jsx, src/context/
+LanguageContext.jsx (reconciliation only, if not finished in A), app/models/user.py.
+ACCEPTANCE: Clearing localStorage('raha.lang') and loading as a new user shows the
+LanguageSelector first, then NicknameModal; after nickname save, db.users has
+language=<chosen>; a returning user's user.language overrides local on next launch.
+
+--------------------------------------------------------------------------------
+WORKSTREAM D — Profile "Me" settings + globe icon removal  (PARALLEL after A)
+--------------------------------------------------------------------------------
+SCOPE:
+1. REMOVE the globe <button> at App.jsx:79-81 and the FiGlobe import at App.jsx:13
+   (remove only if no longer used in App.jsx — it isn't).
+2. In src/pages/Profile.jsx MeTab (:1239-1414), append a new Language card AFTER the
+   role badge block (:1411), before the closing </div> (:1412). Match the existing card
+   pattern (bg-slate-800 border border-slate-700 rounded-2xl p-4). Layout:
+       row: [FiGlobe icon] "Language" label (t('profile.language.title'))
+            [current nativeName] + a <select> OR chevron picker listing
+            SUPPORTED_LANGUAGES by nativeName.
+   - Import FiGlobe into Profile.jsx (it is not currently imported there).
+   - On change: useLanguage().changeLanguage(code) (updates i18n+DOM+localStorage+PUT /me)
+     then show a toast (pattern ConfigCard.jsx:268-272) e.g. t('profile.language.updated').
+   - All strings via t('profile.language.*').
+TOUCH FILES: src/App.jsx (remove globe), src/pages/Profile.jsx (MeTab card).
+ACCEPTANCE: No globe icon next to bell. Changing language in Me tab flips the whole UI
+live, persists to localStorage + db.users.language. Adding a language to the registry
+auto-appears in the picker. lint+build+test green.
+
+--------------------------------------------------------------------------------
+WORKSTREAM E — Translation content extraction  (PARALLEL after A)
+--------------------------------------------------------------------------------
+SCOPE: Replace every hardcoded English UI literal with t('ns.key') and populate the
+en/*.json (real English) + fa/*.json (English PLACEHOLDERS). Split by surface; can be
+one sub-agent doing all, or several in parallel by file group (disjoint files).
+Surfaces:
+- src/App.jsx (Header title, NicknameModal copy :24/:33/:43-46/:53/:59/:65, Access
+  Restricted :105-106)
+- src/components/BottomNav.jsx (:35-42 tab labels)
+- src/components/NotificationBell.jsx (panel + detail modal strings)
+- src/components/ConfigCard.jsx
+- src/components/NumberFields.jsx
+- src/components/QRModal.jsx
+- src/components/UsageHistogram.jsx (labels/tooltips)
+- src/pages/Dashboard.jsx
+- src/pages/Store.jsx
+- src/pages/Referral.jsx
+- src/pages/Profile.jsx (Account/Support/Me tabs — coordinate with D on the language card)
+- src/pages/Admin.jsx
+- src/pages/Support.jsx
+- src/context/AppContext.jsx (:20 error msg, :59 Telegram gate msg)
+- src/context/NotificationsContext.jsx (any user-facing strings)
+RULES:
+- Every t() call must have a matching key in BOTH en and fa JSONs.
+- fa values = English placeholder (copy of en value). Do NOT write Persian.
+- Use namespaces matching the file's domain (dashboard keys -> dashboard.json, etc.).
+- `common` namespace for shared buttons/labels (Save, Cancel, Loading, Error, Retry...).
+- Backend notification messages (e.g. routers/tickets.py:71) stay English (out of scope).
+ACCEPTANCE: No remaining hardcoded English UI literals in the listed files; en/fa JSONs
+have identical key sets; `npm run build` succeeds (missing keys would still build, so
+also grep for leftover English in JSX text). lint+build+test green.
+
+================================================================================
+4. UNIT TESTS — EXTEND & MODIFY  (MANDATORY)
+================================================================================
+The agent MUST extend the test suite for the i18n changes and modify existing tests
+that would break. Treat this as a first-class part of each workstream, not an afterthought.
+
+4.1 FRONTEND TEST SETUP (do this in Workstream A)
+--------------------------------------------------------------------------------
+- File: src/__tests__/setup.js
+  Currently only:  import '@testing-library/jest-dom/vitest'
+  ADD: import '../i18n'   (so i18next is initialized for every test; t() works without
+  a provider wrapper). Also ensure a default document.documentElement.dir/lang reset
+  in a beforeEach if needed.
+- vite.config.js test block already sets environment:'jsdom', globals:true,
+  setupFiles:['./src/__tests__/setup.js'] — no change needed.
+
+4.2 EXISTING TESTS TO MODIFY
+--------------------------------------------------------------------------------
+- src/__tests__/NotificationBell.test.jsx:
+  * It renders <NotificationBell/> directly and asserts getByRole('button'). Once
+    NotificationBell uses useTranslation()/t(), the global i18n init from setup.js
+    covers it. If the test later asserts on visible English text, switch assertions
+    to language-agnostic queries (byRole, byTestId) OR keep them since en is the
+    default test language. Verify it still passes; update selectors if needed.
+- src/__tests__/NotificationsContext.test.jsx and NotificationsContext.race.test.jsx:
+  * They mock '../api/client' and '../context/AppContext'. If LanguageProvider now
+    wraps things, these tests render NotificationsProvider directly (not under
+    LanguageProvider). Since i18n is globally initialized in setup.js, t() will work
+    without LanguageProvider. If NotificationsContext starts calling useLanguage(),
+    either (a) avoid that coupling, or (b) mock '../context/LanguageContext' in these
+    tests. Prefer (a): keep LanguageContext consumption in components, not in
+    NotificationsContext. Update mocks only if a real dependency is added.
+- Any test that hardcodes an English string assertion: update to use the en resource
+  value (import the en JSON in the test) or use role/testid queries.
+
+4.3 NEW TESTS TO ADD
+--------------------------------------------------------------------------------
+Create src/__tests__/LanguageContext.test.jsx:
+- Test 1: default language is 'en' when localStorage empty; <html dir>='ltr',
+  <html lang>='en', body has 'font-en'.
+- Test 2: changeLanguage('fa') -> i18n.language==='fa', dir='rtl', lang='fa',
+  body class swaps to 'font-fa', localStorage('raha.lang')==='fa'.
+- Test 3: changeLanguage back to 'en' restores ltr + font-en.
+- Test 4: applyServerLanguage('fa') switches UI but does NOT call updateMyLanguage
+  (no PUT loop). Mock api/client.updateMyLanguage and assert not called.
+- Test 5: changeLanguage('fa') when a user is present DOES call updateMyLanguage('fa').
+  Mock useApp to return a user; mock api/client.updateMyLanguage; assert called.
+- Test 6: unknown language code falls back to DEFAULT_LANGUAGE meta (getLangMeta).
+
+Create src/__tests__/LanguageSelector.test.jsx:
+- Test 1: renders one button per SUPPORTED_LANGUAGES (iterate registry count).
+- Test 2: clicking a language calls changeLanguage + onClose (mock useLanguage).
+- Test 3: when no localStorage('raha.lang'), the gate in App shows LanguageSelector
+  (integration-lite: render AppShell with mocked providers, assert selector visible).
+
+Create src/__tests__/dates.test.jsx:
+- Test 1: formatDate with lng 'en' returns Gregorian month-short day format.
+- Test 2: formatDate with lng 'fa' returns Shamsi (jY/jM/jD) using jalaali-js,
+  Latin digits.
+- Test 3: invalid timestamp handled gracefully (returns '' or fallback, no throw).
+
+Extend src/__tests__/ (profile/me-tab language card):
+- src/__tests__/MeTabLanguage.test.jsx (or add to a Profile test):
+  * Renders MeTab with mocked useLanguage + mocked user; asserts the Language card
+    label is present (by t key) and the <select> lists SUPPORTED_LANGUAGES.
+  * Changing the select calls changeLanguage.
+
+4.4 BACKEND TESTS TO ADD
+--------------------------------------------------------------------------------
+File: tests/test_user_language.py (new) — follow the style of tests/test_free_trial.py
+and tests/test_purchase_history.py (use conftest.py fixtures; asyncio_mode=auto).
+- Test 1: UserModel with no language field defaults language to None.
+- Test 2: UserModel(language='fa') serializes language in to_dict()/model_dump().
+- Test 3: UserUpdate(language='fa').to_dict() == {'language':'fa'} (exclude_none works).
+- Test 4: UserUpdate().to_dict() == {} (None excluded -> PUT /me no-op safe).
+- Test 5 (integration, if the existing tests hit the router via TestClient): PUT
+  /api/v1/users/me {language:'fa'} persists and GET /api/v1/users/me returns
+  language='fa'. Mirror the auth mocking pattern already used in tests/conftest.py.
+
+================================================================================
+5. VERIFICATION COMMANDS (coordinator runs after each wave & at the end)
+================================================================================
+From /root/Raha/frontend:
+    npm run lint
+    npm run build
+    npm test
+From /root/Raha (backend):
+    pytest -q          (or: python -m pytest -q)
+    flake8 app tests   (max-line-length=120; ignore E221,E251)
+Final full sweep across both. Do not consider the task done until all are green.
+
+================================================================================
+6. RISKS & EDGE CASES
+================================================================================
+- Non-Telegram browser (no initData): Access Restricted screen. LanguageSelector must
+  still show FIRST (it is localStorage-only) so the restricted screen is translated.
+- First-paint flash: avoided by seeding i18n synchronously in main.jsx / i18n/index.js
+  BEFORE React renders, and by LanguageProvider applying dir/lang/font on mount.
+- Provider order: AppProvider -> LanguageProvider -> NotificationsProvider -> AppShell.
+  LanguageProvider needs useApp() (user) for reconciliation, so it cannot be outermost.
+- Existing tests: adding useTranslation() to components requires i18n init in setup.js
+  (§4.1). Do this in Workstream A to avoid breaking B/C/D/E tests.
+- fa placeholders: ensure NO Persian text leaks into fa/*.json except the registry
+  nativeName 'فارسی'. Everything else is English placeholder for the human translator.
+- Tailwind logical props + rtl: variant coexist fine; prefer logical props, use rtl:
+  only for icon flips.
+- Telegram WebApp header color (App.jsx:139) is solid -> fine for both dirs.
+- Stale .pyc for deleted test_events_* / test_websocket_* in tests/__pycache__ — ignore.
+
+================================================================================
+7. FINAL DELIVERABLE CHECKLIST
+================================================================================
+[ ] react-i18next + i18next installed
+[ ] src/i18n/{languages.js,index.js} created
+[ ] src/locales/en/*.json (10 namespaces) + src/locales/fa/*.json (English placeholders)
+[ ] src/context/LanguageContext.jsx (Provider + useLanguage + applyServerLanguage)
+[ ] Provider order fixed in App.jsx; i18n imported in main.jsx
+[ ] updateMyLanguage() added to api/client.js
+[ ] Vazirmatn self-hosted in /public/fonts + @font-face + font-en/font-fa body classes
+[ ] src/utils/dates.js created; all date sites routed through it
+[ ] Directional Tailwind classes converted to logical props; icons mirrored with rtl:
+[ ] Globe button removed from App.jsx Header; FiGlobe import removed from App.jsx
+[ ] LanguageSelector onboarding overlay created + gated before NicknameModal
+[ ] NicknameModal save syncs language to DB (PUT /me)
+[ ] MeTab Language card added (select over SUPPORTED_LANGUAGES) with toast
+[ ] app/models/user.py: `language` field on UserModel + UserUpdate
+[ ] All hardcoded English UI literals replaced with t() calls
+[ ] Tests: setup.js updated; existing tests pass; new LanguageContext / LanguageSelector
+    / dates / MeTab-language / backend user_language tests added
+[ ] npm run lint / npm run build / npm test  -> green
+[ ] pytest / flake8 -> green
+[ ] fa/*.json contain ONLY English placeholders (human translator handoff)
+
+================================================================================
+END OF PLAN
+================================================================================

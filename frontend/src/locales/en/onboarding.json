@@ -1,0 +1,19 @@
+{
+  "accessRestricted": {
+    "title": "Access Restricted",
+    "openFromTelegram": "Please open this app from Telegram."
+  },
+  "languageSelector": {
+    "title": "Choose your language",
+    "subtitle": "You can change this later in your profile settings."
+  },
+  "nickname": {
+    "title": "Choose Your Nickname",
+    "subtitle": "Pick a display name for your Raha VPN account.",
+    "placeholder": "Enter nickname...",
+    "save": "Save Nickname",
+    "saving": "Saving...",
+    "errorLength": "Nickname must be between 2 and 32 characters",
+    "errorFailed": "Failed to save nickname."
+  }
+}

@@ -92,9 +92,10 @@ async def broadcast(
     title: str,
     message: str,
     target: str,
-    also_send_telegram: bool = True,
+    send_as_notification: bool = True,
+    send_via_telegram: bool = True,
 ) -> dict:
-    """Fan-out an announcement as in-app notifications to target users.
+    """Fan-out an announcement via in-app notifications and/or Telegram.
 
     Returns { sent, failed, total }.
     """
@@ -133,23 +134,25 @@ async def broadcast(
 
     for tid in target_ids:
         try:
-            await db.users.update_one(
-                {"telegram_id": tid},
-                {"$push": {"notifications": notification_doc}},
-            )
-            await _prune_notifications(db, tid)
-            sent += 1
+            if send_as_notification:
+                await db.users.update_one(
+                    {"telegram_id": tid},
+                    {"$push": {"notifications": notification_doc}},
+                )
+                await _prune_notifications(db, tid)
 
-            if also_send_telegram and bot_token:
+            if send_via_telegram and bot_token:
                 try:
                     await send_telegram_message(bot_token, tid, message)
                 except Exception as exc:
                     logger.warning("Telegram broadcast failed for %d: %s", tid, exc)
+
+            sent += 1
         except Exception as exc:
             logger.warning("Broadcast push failed for user %d: %s", tid, exc)
             failed += 1
 
-    logger.info("Broadcast '%s' sent: %d/%d (failed: %d)", title, sent, len(target_ids), failed)
+    logger.info("Broadcast '%s' sent (notif=%s telegram=%s): %d/%d (failed: %d)", title, send_as_notification, send_via_telegram, sent, len(target_ids), failed)
     return {"sent": sent, "failed": failed, "total": len(target_ids)}
 
 

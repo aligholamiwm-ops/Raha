@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "Raha VPN"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "close": "Close",
+    "edit": "Edit",
+    "delete": "Delete",
+    "loading": "Loading...",
+    "saving": "Saving..."
+  },
+  "errors": {
+    "generic": "Something went wrong.",
+    "failedLoadProfile": "Failed to load user profile"
+  }
+}

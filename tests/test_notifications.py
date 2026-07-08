@@ -377,7 +377,8 @@ class TestBroadcast:
             title="System Update",
             message="Scheduled maintenance",
             target="all",
-            also_send_telegram=False,
+            send_as_notification=True,
+            send_via_telegram=False,
         )
 
         assert "announcement_id" not in result
@@ -515,6 +516,44 @@ class TestAPICreateAnnouncement:
             json={"title": "Test", "message": "", "target": "all"},
         )
         assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_rejects_when_no_channel_selected(self, client, mock_db):
+        resp = await client.post(
+            "/api/v1/admin/announcements",
+            json={
+                "title": "Test",
+                "message": "Hello",
+                "target": "all",
+                "send_as_notification": False,
+                "send_via_telegram": False,
+            },
+        )
+        assert resp.status_code == 400
+        assert "At least one" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_notification_only_no_telegram_bot(self, client, mock_db):
+        cursor = _AsyncCursor([
+            {"telegram_id": 100},
+        ])
+        mock_db.users.find = MagicMock(return_value=cursor)
+        mock_db.users.find_one = AsyncMock(return_value={"telegram_id": 100, "notifications": []})
+        mock_db.users.update_one = AsyncMock()
+
+        resp = await client.post(
+            "/api/v1/admin/announcements",
+            json={
+                "title": "Test",
+                "message": "Hello",
+                "target": "all",
+                "send_as_notification": True,
+                "send_via_telegram": False,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sent"] == 1
 
 
 
