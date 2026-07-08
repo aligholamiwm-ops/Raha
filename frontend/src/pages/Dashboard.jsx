@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import ConfigCard from '../components/ConfigCard'
@@ -79,6 +80,7 @@ function SkeletonConfigs() {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation('dashboard')
   const { user, configs, loading, configsError, setConfigsError, refreshConfigs, refreshUser } = useApp()
   const navigate = useNavigate()
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -102,14 +104,14 @@ export default function Dashboard() {
   const handleCreateConfig = async (e) => {
     e.preventDefault()
     setCreateError(null)
-    if (!createForm.name.trim()) { setCreateError('Config name is required'); return }
-    if (createForm.name.includes('-')) { setCreateError('Config name must not contain hyphens'); return }
-    if (!(createForm.total_gb > 0)) { setCreateError('Traffic must be greater than 0'); return }
+    if (!createForm.name.trim()) { setCreateError(t('createModal.nameRequired')); return }
+    if (createForm.name.includes('-')) { setCreateError(t('createModal.noHyphens')); return }
+    if (!(createForm.total_gb > 0)) { setCreateError(t('createModal.trafficPositive')); return }
     if (createForm.total_gb > trafficBalanceGB) {
-      setCreateError(`Insufficient traffic balance. You have ${trafficBalanceGB.toFixed(2)} GB available.`)
+      setCreateError(t('createModal.insufficientTraffic', { trafficBalance: trafficBalanceGB.toFixed(2) }))
       return
     }
-    if (createForm.duration_days < 0) { setCreateError('Duration must be 0 or more'); return }
+    if (createForm.duration_days < 0) { setCreateError(t('createModal.durationNonNegative')); return }
     setCreating(true)
     try {
       await createConfig({ ...createForm, name: createForm.name.trim() })
@@ -117,7 +119,7 @@ export default function Dashboard() {
       setCreateForm({ name: '', total_gb: 1, duration_days: 30 })
       await Promise.all([refreshConfigs(), refreshUser()])
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message || 'Failed to create config'
+      const detail = err.response?.data?.detail || err.message || t('createModal.failedCreate')
       setCreateError(detail)
     } finally {
       setCreating(false)
@@ -147,20 +149,20 @@ export default function Dashboard() {
         <>
           {/* Hero Card */}
           <div className="bg-dark-card rounded-card p-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute top-0 end-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
             <div className="relative z-10">
-              <p className="text-gray-500 text-[13px] font-medium mb-1">Available Traffic</p>
+              <p className="text-gray-500 text-[13px] font-medium mb-1">{t('hero.availableTraffic')}</p>
               <div className="flex items-end justify-between mb-4">
                 <p className="text-[32px] font-bold text-white leading-none tracking-tight">
                   {trafficBalanceGB.toFixed(2)}
-                  <span className="text-base font-medium text-gray-400 ml-1">GB</span>
+                  <span className="text-base font-medium text-gray-400 ms-1">GB</span>
                 </p>
                 <button
                   onClick={openCreateModal}
                   className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-[13px] font-semibold px-4 py-2.5 rounded-btn transition-all active:scale-[0.98] shadow-glow"
                 >
                   <FiPlus size={15} />
-                  New Config
+                  {t('hero.newConfig')}
                 </button>
               </div>
               {trafficBalanceGB <= 0 && (
@@ -169,20 +171,20 @@ export default function Dashboard() {
                   className="text-[11px] font-semibold text-amber-400 mb-3 flex items-center gap-1"
                 >
                   <FiAlertCircle size={12} />
-                  Buy traffic to create configs
+                  {t('hero.buyTraffic')}
                 </button>
               )}
               <div className="flex items-center gap-3 pt-3 border-t border-white/5">
                 <div className="flex items-center gap-1.5">
                   <FiActivity size={12} className="text-gray-500" />
                   <span className="text-[13px] font-semibold text-white">{totalUsedGB.toFixed(1)}</span>
-                  <span className="text-[11px] text-gray-500">used</span>
+                  <span className="text-[11px] text-gray-500">{t('hero.used')}</span>
                 </div>
                 <div className="w-px h-4 bg-white/10" />
                 <div className="flex items-center gap-1.5">
                   <FiServer size={12} className="text-gray-500" />
                   <span className="text-[13px] font-semibold text-white">{activeConfigs}</span>
-                  <span className="text-[11px] text-gray-500">active</span>
+                  <span className="text-[11px] text-gray-500">{t('hero.active')}</span>
                 </div>
                 <div className="w-px h-4 bg-white/10" />
                 <div className="flex items-center gap-1.5">
@@ -190,7 +192,7 @@ export default function Dashboard() {
                   <span className="text-[13px] font-semibold text-white">
                     {estDays !== null ? `~${estDays}` : '—'}
                   </span>
-                  <span className="text-[11px] text-gray-500">days</span>
+                  <span className="text-[11px] text-gray-500">{t('hero.days')}</span>
                 </div>
                 <div className="w-px h-4 bg-white/10" />
                 <div className="flex items-center gap-1.5">
@@ -212,7 +214,7 @@ export default function Dashboard() {
                 onClick={() => { setConfigsError(null); refreshConfigs(); refreshUser(); }}
                 className="text-rose-400 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 transition-colors"
               >
-                Retry
+                {t('hero.retry', { ns: 'common' })}
               </button>
             </div>
           )}
@@ -225,9 +227,9 @@ export default function Dashboard() {
           {/* Configs Section */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <h2 className="text-white text-[18px] font-bold">Configs</h2>
+              <h2 className="text-white text-[18px] font-bold">{t('configs.title')}</h2>
               {configs.length > 0 && (
-                <span className="text-[12px] text-gray-500 font-medium">{configs.length} total</span>
+                <span className="text-[12px] text-gray-500 font-medium">{t('configs.total', { count: configs.length })}</span>
               )}
             </div>
 
@@ -236,21 +238,21 @@ export default function Dashboard() {
                 <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
                   <FiServer size={24} className="text-emerald-400" />
                 </div>
-                <p className="text-white font-semibold text-[16px] mb-1">No configurations yet</p>
-                <p className="text-gray-500 text-[13px] mb-4">Create your first config to get started</p>
+                <p className="text-white font-semibold text-[16px] mb-1">{t('configs.noConfigs')}</p>
+                <p className="text-gray-500 text-[13px] mb-4">{t('configs.noConfigsDesc')}</p>
                 {trafficBalanceGB > 0 ? (
                   <button
                     onClick={openCreateModal}
                     className="bg-emerald-500 hover:bg-emerald-400 text-white text-[13px] font-semibold px-5 py-2.5 rounded-btn transition-all active:scale-[0.98]"
                   >
-                    Create your first config
+                    {t('configs.createFirst')}
                   </button>
                 ) : (
                   <button
                     onClick={() => navigate('/profile')}
                     className="bg-emerald-500 hover:bg-emerald-400 text-white text-[13px] font-semibold px-5 py-2.5 rounded-btn transition-all active:scale-[0.98]"
                   >
-                    Get a Plan
+                    {t('configs.getPlan')}
                   </button>
                 )}
               </div>
@@ -273,7 +275,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
           <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-4 pt-4 pb-2">
-              <h3 className="text-[15px] font-bold text-white">New Config</h3>
+              <h3 className="text-[15px] font-bold text-white">{t('createModal.title')}</h3>
               <button onClick={() => setShowCreateModal(false)} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
                 <FiX size={16} />
               </button>
@@ -286,19 +288,19 @@ export default function Dashboard() {
               )}
               <form onSubmit={handleCreateConfig} className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Name</label>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('createModal.name')}</label>
                   <input
                     type="text"
                     value={createForm.name}
                     onChange={e => setCreateForm({...createForm, name: e.target.value})}
-                    placeholder="e.g. myphone"
+                    placeholder={t('createModal.namePlaceholder')}
                     maxLength={32}
                     required
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-[13px] focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Traffic</label>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('createModal.traffic')}</label>
                   <TrafficField
                     value={createForm.total_gb}
                     onChange={(v) => setCreateForm({ ...createForm, total_gb: v })}
@@ -308,7 +310,7 @@ export default function Dashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">Duration</label>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('createModal.duration')}</label>
                   <DurationField
                     value={createForm.duration_days}
                     onChange={(v) => setCreateForm({ ...createForm, duration_days: v })}
@@ -323,7 +325,7 @@ export default function Dashboard() {
                   disabled={creating}
                   className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
                 >
-                  {creating ? 'Creating…' : 'Create'}
+                  {creating ? t('createModal.creating') : t('createModal.create')}
                 </button>
               </form>
             </div>

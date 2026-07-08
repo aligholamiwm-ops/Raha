@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { QRCodeSVG } from 'qrcode.react'
 import { sendConfigToBot } from '../api/client'
 
@@ -15,6 +16,7 @@ const TelegramIcon = () => (
 )
 
 export default function QRModal({ email, configName, subscriptionLink, onClose }) {
+  const { t } = useTranslation('common')
   const [zipPassword, setZipPassword] = useState('')
   const [showZipInput, setShowZipInput] = useState(false)
   const [sending, setSending] = useState(false)
@@ -28,11 +30,11 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
     setMessage(null)
     try {
       const res = await sendConfigToBot(email, zipPassword.trim())
-      setMessage(res.message || 'ZIP sent to your Telegram!')
+      setMessage(res.message || t('qrModal.sent'))
       setShowZipInput(false)
       setZipPassword('')
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to send ZIP')
+      setError(err?.response?.data?.detail || t('qrModal.failed'))
     } finally {
       setSending(false)
     }
@@ -46,7 +48,7 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
       <div className="bg-slate-800 rounded-2xl ring-1 ring-slate-700 w-full max-w-sm p-5 space-y-4 overflow-y-auto max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 className="text-white font-semibold text-base truncate pr-2">{configName || 'VPN Config'}</h3>
+          <h3 className="text-white font-semibold text-base truncate pe-2">{configName || t('qrModal.vpnConfig')}</h3>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700 transition-colors"
@@ -60,7 +62,7 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
           {subscriptionLink ? (
             <QRCodeSVG value={subscriptionLink} size={180} level="M" includeMargin={false} />
           ) : (
-            <div className="text-slate-500 text-sm text-center">No subscription link available</div>
+            <div className="text-slate-500 text-sm text-center">{t('qrModal.noLink')}</div>
           )}
         </div>
 
@@ -78,7 +80,7 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
             className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
           >
             <TelegramIcon />
-            Send All QR to Telegram (ZIP)
+            {t('qrModal.sendToTelegram')}
           </button>
         ) : (
           <div className="space-y-2">
@@ -87,7 +89,7 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
                 type="password"
                 value={zipPassword}
                 onChange={(e) => setZipPassword(e.target.value)}
-                placeholder="Set ZIP password"
+                placeholder={t('qrModal.setPassword')}
                 className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500"
                 onKeyDown={(e) => e.key === 'Enter' && handleSendToBot()}
                 autoFocus
@@ -100,7 +102,7 @@ export default function QRModal({ email, configName, subscriptionLink, onClose }
                 {sending ? (
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  'Send'
+                  t('qrModal.send')
                 )}
               </button>
               <button

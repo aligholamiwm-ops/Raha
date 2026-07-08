@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getUser, getMyConfigs, getPlans } from '../api/client'
 
 const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
+  const { t } = useTranslation()
   const [user, setUser] = useState(null)
   const [configs, setConfigs] = useState([])
   const [plans, setPlans] = useState([])
@@ -17,10 +19,10 @@ export function AppProvider({ children }) {
       setUser(data)
       return data
     } catch (e) {
-      setError('Failed to load user profile')
+      setError(t('errors.failedLoadProfile', { ns: 'common' }))
       return null
     }
-  }, [])
+  }, [t])
 
   const fetchConfigs = useCallback(async () => {
     setConfigsError(null)
@@ -29,12 +31,12 @@ export function AppProvider({ children }) {
       setConfigs(Array.isArray(data) ? data : [])
       return data
     } catch (e) {
-      const detail = e.response?.data?.detail || e.message || 'Failed to load configs'
+      const detail = e.response?.data?.detail || e.message || t('errors.failedLoadConfigs', { ns: 'common' })
       setConfigsError(detail)
       setConfigs([])
       return []
     }
-  }, [])
+  }, [t])
 
   const fetchPlans = useCallback(async () => {
     try {
@@ -53,15 +55,21 @@ export function AppProvider({ children }) {
     setLoading(false)
   }, [fetchUser, fetchConfigs, fetchPlans])
 
-  useEffect(() => {
+  const checkTelegram = useCallback(() => {
     const tg = window.Telegram?.WebApp
     if (!tg?.initData) {
-      setError('Please open this app from Telegram.')
+      setError(t('accessRestricted.openFromTelegram', { ns: 'onboarding' }))
       setLoading(false)
-      return
+      return false
     }
-    refreshAll()
-  }, [refreshAll])
+    return true
+  }, [t])
+
+  useEffect(() => {
+    if (checkTelegram()) {
+      refreshAll()
+    }
+  }, [checkTelegram, refreshAll])
 
   return (
     <AppContext.Provider

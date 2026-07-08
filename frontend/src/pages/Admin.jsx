@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 import client, { verifyAdminPassword, setAdminPasswordHeader, setAdminPasswordForUser, getAdminServerUsage, getAdminUserUsageHistory, getAvailableInbounds, getDefaultInboundIds, saveDefaultInboundIds, postAnnouncement, adminGetLinks, adminAddLinkSection, adminUpdateLinkSection, adminDeleteLinkSection } from '../api/client';
 import UsageHistogram from '../components/UsageHistogram';
+import { formatDateTime, formatDateShort } from '../utils/dates';
 import {
   FiServer, FiUsers, FiTag, FiBarChart2, FiPlus, FiTrash2,
   FiEdit2, FiRefreshCw, FiCheck, FiX, FiZap,
@@ -159,6 +161,7 @@ const InboundTooltip = ({ active, payload, label }) => {
 };
 
 function ServerUsageChart({ servers = [] }) {
+  const { t } = useTranslation('admin')
   const [timeframe, setTimeframe] = useState('H');
   const [window, setWindow] = useState('1D');
   const [selectedServer, setSelectedServer] = useState('');
@@ -173,7 +176,7 @@ function ServerUsageChart({ servers = [] }) {
       const points = await getAdminServerUsage(timeframe, window, selectedServer);
       setData(points);
     } catch {
-      setError('Failed to load server usage data');
+      setError(t('serverUsage.failedLoad'));
     } finally {
       setLoading(false);
     }
@@ -197,7 +200,7 @@ function ServerUsageChart({ servers = [] }) {
       <div className="flex items-center justify-between">
         <h3 className="text-slate-300 font-semibold text-sm flex items-center gap-2">
           <FiBarChart2 className="text-blue-400" size={14} />
-          Server Usage
+          {t('serverUsage.title')}
         </h3>
         <div className="flex items-center gap-2">
           {selectedServer && (
@@ -293,17 +296,17 @@ function ServerUsageChart({ servers = [] }) {
       {data.length > 0 && (
         <div className="flex items-center gap-4 pt-2.5 border-t border-slate-700/50">
           <div>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Peak</p>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{t('serverUsage.peak')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(maxGB)}</p>
           </div>
           <div className="w-px h-7 bg-slate-700/50" />
           <div>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Average</p>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{t('serverUsage.average')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(data.length > 0 ? totalGB / data.length : 0)}</p>
           </div>
           <div className="w-px h-7 bg-slate-700/50" />
           <div>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Total</p>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{t('serverUsage.total')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{inboundFormatGB(totalGB)}</p>
           </div>
         </div>
@@ -315,6 +318,7 @@ function ServerUsageChart({ servers = [] }) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default function Admin() {
+  const { t } = useTranslation('admin');
   const { user } = useApp();
   const [activeTab, setActiveTab] = useState("stats");
   const [stats, setStats] = useState(null);
@@ -961,13 +965,13 @@ const data = await postAnnouncement({
                 placeholder="Admin password"
                 value={adminPwdInput}
                 onChange={e => { setAdminPwdInput(e.target.value); setAdminPwdError(null); }}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm pr-10 focus:outline-none focus:border-emerald-500 transition-colors"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm pe-10 focus:outline-none focus:border-emerald-500 transition-colors"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setAdminPwdVisible(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
               >
                 {adminPwdVisible ? <FiEyeOff size={15} /> : <FiEye size={15} />}
               </button>
@@ -995,17 +999,17 @@ const data = await postAnnouncement({
       <Toast toasts={toasts} />
       <h1 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
         <FiBarChart2 className="text-emerald-500" />
-        Admin Dashboard
+        {t('dashboard.title')}
       </h1>
       
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
         {[
-          { id: "stats", label: "Stats", icon: FiBarChart2 },
-          { id: "servers", label: "Servers", icon: FiServer },
-          { id: "users", label: "Users", icon: FiUsers },
-          { id: "broadcast", label: "Broadcast", icon: FiRadio },
-          { id: "pricing", label: "Pricing", icon: FiTag },
-          { id: "links", label: "Links", icon: FiLink }
+          { id: "stats", label: t('tabs.stats'), icon: FiBarChart2 },
+          { id: "servers", label: t('tabs.servers'), icon: FiServer },
+          { id: "users", label: t('tabs.users'), icon: FiUsers },
+          { id: "broadcast", label: t('tabs.broadcast'), icon: FiRadio },
+          { id: "pricing", label: t('tabs.pricing'), icon: FiTag },
+          { id: "links", label: t('tabs.links'), icon: FiLink }
         ].map(tab => (
           <button
             key={tab.id}
@@ -1022,15 +1026,15 @@ const data = await postAnnouncement({
 
       {activeTab === "stats" && statsError && (
         <div className="p-6 text-center">
-          <p className="text-rose-400 text-sm mb-2">⚠ Failed to load stats</p>
+          <p className="text-rose-400 text-sm mb-2">{t('stats.failedLoad')}</p>
           <p className="text-slate-500 text-xs">{statsError}</p>
-          <button onClick={fetchStats} className="mt-3 px-4 py-2 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-600 transition-colors">Retry</button>
+          <button onClick={fetchStats} className="mt-3 px-4 py-2 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-600 transition-colors">{t('stats.retry')}</button>
         </div>
       )}
       {activeTab === "stats" && !stats && !statsError && (
         <div className="p-6 text-center">
           <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-slate-500 text-xs mt-3">Loading stats…</p>
+          <p className="text-slate-500 text-xs mt-3">{t('stats.loading')}</p>
         </div>
       )}
       {activeTab === "stats" && stats && !statsError && (
@@ -1085,17 +1089,17 @@ const data = await postAnnouncement({
                         <span className="text-[10px] font-bold text-slate-500 w-4">#{idx + 1}</span>
                         <div>
                           <span className="text-xs font-bold text-white">{u.display_name}</span>
-                          {u.username && <span className="text-[10px] text-slate-400 ml-1">@{u.username}</span>}
+                          {u.username && <span className="text-[10px] text-slate-400 ms-1">@{u.username}</span>}
                           <div className="text-[10px] text-slate-500">{u.telegram_id}</div>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <span className="text-xs font-bold text-emerald-400">
                           {topFilter === 'recently_joined' ? '' : u.value}
                           <span className="text-[10px] text-slate-500"> {u.metric}</span>
                         </span>
                         {topFilter === 'recently_joined' && u.value && (
-                          <div className="text-[9px] text-slate-400">{new Date(u.value).toLocaleString()}</div>
+                          <div className="text-[9px] text-slate-400">{formatDateTime(u.value)}</div>
                         )}
                       </div>
                     </div>
@@ -1261,13 +1265,13 @@ const data = await postAnnouncement({
                 <button
                   key={u.telegram_id}
                   onClick={() => loadUserDetails(u)}
-                  className="w-full p-2.5 bg-slate-900/50 rounded-xl border border-slate-700 text-left hover:border-emerald-500/50 transition-colors"
+                  className="w-full p-2.5 bg-slate-900/50 rounded-xl border border-slate-700 text-start hover:border-emerald-500/50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-bold text-white">
                         {u.nickname || u.telegram_info?.first_name || `ID: ${u.telegram_id}`}
-                        {u.telegram_info?.username && <span className="text-slate-400 font-normal ml-1">@{u.telegram_info.username}</span>}
+                        {u.telegram_info?.username && <span className="text-slate-400 font-normal ms-1">@{u.telegram_info.username}</span>}
                       </div>
                       <div className="text-[10px] text-slate-500">{u.telegram_id} · ${u.wallet_balance_usd?.toFixed(2)}</div>
                     </div>
@@ -1497,7 +1501,7 @@ const data = await postAnnouncement({
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                                {new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}
+                                {formatDateShort(loan.created_at)}{loan.note && ` · ${loan.note}`}
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
@@ -1613,7 +1617,7 @@ const data = await postAnnouncement({
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-xs font-bold text-white">{cfg.name}</span>
-                          <span className="text-[10px] text-slate-500 ml-1.5">{cfg.server_name}</span>
+                          <span className="text-[10px] text-slate-500 ms-1.5">{cfg.server_name}</span>
                         </div>
                         <span className={`text-[10px] font-bold ${statusColor}`}>{cfg.status}</span>
                       </div>
@@ -1649,7 +1653,7 @@ const data = await postAnnouncement({
                   <button
                     key={opt.value}
                     onClick={() => setBroadcastTarget(opt.value)}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                    className={`p-2.5 rounded-xl border text-start transition-all ${
                       broadcastTarget === opt.value
                         ? 'border-emerald-500/50 bg-emerald-500/10'
                         : 'border-slate-700 bg-slate-900/30 hover:border-slate-600'

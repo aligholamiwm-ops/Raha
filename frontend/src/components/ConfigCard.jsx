@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import {
   FiCopy, FiTrash2, FiToggleLeft, FiToggleRight,
@@ -9,6 +10,7 @@ import { toggleConfig, regenerateConfigKey, deleteConfig, editConfig } from '../
 import { useApp } from '../context/AppContext'
 import { TrafficField, DurationField } from './NumberFields'
 import QRModal from './QRModal'
+import { formatDateShort } from '../utils/dates'
 
 function daysLeft(dateStr) {
   if (!dateStr) return null
@@ -18,6 +20,7 @@ function daysLeft(dateStr) {
 }
 
 export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
+  const { t } = useTranslation('common')
   const { setConfigs, refreshConfigs, user, refreshUser } = useApp()
   const navigate = useNavigate()
   const [showQR, setShowQR] = useState(false)
@@ -69,7 +72,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   }
 
   const handleRegenerateKey = async () => {
-    if (!window.confirm('Regenerate UUID key? The old one will stop working immediately.')) return
+    if (!window.confirm(t('confirmDialogs.regenerateKey'))) return
     setBusy(true)
     try {
       await regenerateConfigKey(config.email)
@@ -82,7 +85,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this config? Unused traffic will be refunded.')) return
+    if (!window.confirm(t('confirmDialogs.deleteConfig'))) return
     setBusy(true)
     const targetUuid = config.uuid
     const deletedConfig = config
@@ -166,7 +169,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2 min-w-0">
             <span className={`w-2 h-2 rounded-full shrink-0 ${isEnabled ? 'bg-emerald-400' : 'bg-gray-500'}`} />
-            <span className="text-white font-semibold text-[14px] truncate">{config.name || 'Unnamed'}</span>
+            <span className="text-white font-semibold text-[14px] truncate">{config.name || t('config.unnamed')}</span>
           </div>
           <span className={`px-2 py-0.5 rounded-pill text-[10px] font-bold uppercase tracking-wider border ${statusColor} shrink-0`}>
             {config.status}
@@ -190,15 +193,15 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
             {config.expiry_date ? (
               expiryDays !== null && expiryDays > 0 ? (
                 <span className={expiryDays <= 3 ? 'text-amber-400 font-semibold' : ''}>
-                  {expiryDays} day{expiryDays !== 1 ? 's' : ''} left
+                  {expiryDays === 1 ? t('config.dayLeft', { days: expiryDays }) : t('config.daysLeft', { days: expiryDays })}
                 </span>
               ) : expiryDays !== null && expiryDays <= 0 ? (
-                <span className="text-red-400 font-semibold">Expired</span>
+                <span className="text-red-400 font-semibold">{t('config.expired')}</span>
               ) : (
-                <span>{new Date(config.expiry_date).toLocaleDateString()}</span>
+                <span>{formatDateShort(config.expiry_date)}</span>
               )
             ) : (
-              <span>No expiry</span>
+              <span>{t('config.noExpiry')}</span>
             )}
           </div>
           {config.inbound_names && config.inbound_names.length > 0 && (
@@ -216,14 +219,14 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
           <button
             onClick={() => setShowQR(true)}
             className="flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 text-white p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
-            title="Show QR"
+            title={t('config.showQR')}
           >
             <MdQrCode size={16} />
           </button>
           <button
             onClick={handleCopyLink}
             className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
-            title="Copy subscription link"
+            title={t('config.copyLink')}
           >
             <FiCopy size={14} />
           </button>
@@ -231,14 +234,14 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
             onClick={handleRegenerateKey}
             disabled={busy}
             className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1 disabled:opacity-30"
-            title="Regenerate key"
+            title={t('config.regenerateKey')}
           >
             <FiKey size={14} />
           </button>
           <button
             onClick={handleRecharge}
             className="flex items-center justify-center bg-white/10 hover:bg-white/15 text-gray-300 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1"
-            title="Edit traffic & duration"
+            title={t('config.editTrafficDuration')}
           >
             <FiZap size={14} />
           </button>
@@ -246,7 +249,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
             onClick={handleDelete}
             disabled={busy}
             className="flex items-center justify-center bg-white/10 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 p-2.5 rounded-icon-btn transition-all active:scale-[0.98] flex-1 disabled:opacity-30"
-            title="Delete"
+            title={t('actions.delete')}
           >
             <FiTrash2 size={14} />
           </button>
@@ -258,7 +261,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
                 ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
                 : 'bg-white/10 text-gray-500 hover:bg-white/15'
             }`}
-            title={isEnabled ? 'Disable' : 'Enable'}
+            title={isEnabled ? t('config.disable') : t('config.enable')}
           >
             {busy ? <FiLoader className="animate-spin" size={14} /> : isEnabled ? <FiToggleRight size={16} /> : <FiToggleLeft size={16} />}
           </button>
@@ -267,7 +270,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
 
       {copied && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] bg-emerald-600 text-white text-[12px] font-semibold px-4 py-2 rounded-pill shadow-lg animate-fade-in">
-          Copied to clipboard
+          {t('config.copied')}
         </div>
       )}
 
@@ -275,7 +278,7 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowRecharge(false) }}>
           <div className="w-full max-w-sm bg-dark-card border border-white/10 rounded-2xl animate-scale-in overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-4 pt-4 pb-2">
-              <h3 className="text-[15px] font-bold text-white">Edit Config</h3>
+              <h3 className="text-[15px] font-bold text-white">{t('config.editConfig')}</h3>
               <button onClick={() => setShowRecharge(false)} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
                 <FiMinus size={16} />
               </button>
@@ -286,34 +289,34 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
               )}
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1">Traffic</label>
-                <TrafficField
-                  value={rechargeValue}
-                  onChange={setRechargeValue}
-                  min={rechargeMin}
-                  max={rechargeMax}
-                  unit="GB"
-                />
-              </div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('config.traffic')}</label>
+                  <TrafficField
+                    value={rechargeValue}
+                    onChange={setRechargeValue}
+                    min={rechargeMin}
+                    max={rechargeMax}
+                    unit="GB"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1">Duration</label>
-                <DurationField
-                  value={durationValue}
-                  onChange={setDurationValue}
-                  min={0}
-                  allowInfinite
-                  unit="days"
-                />
-              </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('config.duration')}</label>
+                  <DurationField
+                    value={durationValue}
+                    onChange={setDurationValue}
+                    min={0}
+                    allowInfinite
+                    unit="days"
+                  />
+                </div>
 
-              <button
-                onClick={confirmRecharge}
-                disabled={busy}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
-              >
-                {busy ? 'Applying...' : 'Apply'}
-              </button>
+                <button
+                  onClick={confirmRecharge}
+                  disabled={busy}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] text-[13px]"
+                >
+                  {busy ? t('actions.applying') : t('actions.apply')}
+                </button>
             </div>
           </div>
         </div>

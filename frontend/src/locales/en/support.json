@@ -1,1 +1,59 @@
-{}
+{
+  "header": {
+    "title": "Support",
+    "dashboard": "Support Dashboard",
+    "manage": "Manage support tickets",
+    "hereToHelp": "We're here to help"
+  },
+  "newTicket": {
+    "title": "New Ticket",
+    "titleFieldLabel": "Title",
+    "titlePlaceholder": "Brief description of your issue",
+    "categoryLabel": "Category",
+    "messageLabel": "Message",
+    "messagePlaceholder": "Describe your issue in detail...",
+    "submit": "Submit Ticket",
+    "submitting": "Saving...",
+    "withdrawalAddressLabel": "USDT Wallet Address *",
+    "withdrawalAddressPlaceholder": "Your USDT wallet address",
+    "withdrawalNetworkLabel": "USDT Network *",
+    "withdrawalRequired": "USDT address is required for withdrawal tickets",
+    "withdrawalNetworkRequired": "USDT network is required for withdrawal tickets",
+    "warningInfo": "ℹ️ Please double-check your wallet address and network. Incorrect information may result in loss of funds.",
+    "failedCreate": "Failed to create ticket"
+  },
+  "thread": {
+    "close": "Close",
+    "confirmClose": "Close this ticket?",
+    "refresh": "Refresh",
+    "noMessages": "No messages",
+    "replyPlaceholder": "Type a reply...",
+    "failedLoad": "Failed to load ticket",
+    "failedReply": "Failed to send reply",
+    "failedClose": "Failed to close ticket",
+    "supportRole": "Support",
+    "adminRole": "Admin",
+    "ticketTitle": "Ticket #{{id}}"
+  },
+  "list": {
+    "new": "New Ticket",
+    "noTickets": "No tickets yet",
+    "openTicket": "Open a Ticket",
+    "filterStatusLabel": "Status",
+    "filterAll": "All",
+    "filterOpen": "Open",
+    "filterWaiting": "Waiting for User",
+    "filterClosed": "Closed",
+    "filterCategoryLabel": "Category",
+    "filterAllCategories": "All",
+    "sortByLabel": "Sort By",
+    "sortByCreated": "Created",
+    "sortByUpdated": "Updated",
+    "orderLabel": "Order",
+    "orderNewest": "Newest First",
+    "orderOldest": "Oldest First"
+  },
+  "errors": {
+    "loadFailed": "Failed to load tickets"
+  }
+}

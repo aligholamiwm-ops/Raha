@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppProvider, useApp } from './context/AppContext'
+import { LanguageProvider, useLanguage } from './context/LanguageContext'
 import BottomNav from './components/BottomNav'
 import Dashboard from './pages/Dashboard'
 import Store from './pages/Store'
 import Referral from './pages/Referral'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
-import api from './api/client'
+import api, { updateMyLanguage } from './api/client'
 import { NotificationsProvider } from './context/NotificationsContext'
 import NotificationBell from './components/NotificationBell'
-import { FiGlobe } from 'react-icons/fi'
+import LanguageSelector from './components/LanguageSelector'
 
 function NicknameModal({ onSave }) {
+  const { t } = useTranslation('onboarding')
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -21,7 +24,7 @@ function NicknameModal({ onSave }) {
     e.preventDefault()
     const trimmed = nickname.trim()
     if (trimmed.length < 2 || trimmed.length > 32) {
-      setError('Nickname must be between 2 and 32 characters')
+      setError(t('nickname.errorLength'))
       return
     }
     setSaving(true)
@@ -30,7 +33,7 @@ function NicknameModal({ onSave }) {
       await api.put('/api/v1/users/me/nickname', { nickname: trimmed })
       onSave(trimmed)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to save nickname.')
+      setError(err?.response?.data?.detail || t('nickname.errorFailed'))
     } finally {
       setSaving(false)
     }
@@ -40,9 +43,9 @@ function NicknameModal({ onSave }) {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
       <div className="bg-dark-card border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-4">
         <div className="text-center">
-          <h2 className="text-white font-bold text-[18px]">Choose Your Nickname</h2>
+          <h2 className="text-white font-bold text-[18px]">{t('nickname.title')}</h2>
           <p className="text-gray-400 text-[13px] mt-1">
-            Pick a display name for your Raha VPN account.
+            {t('nickname.subtitle')}
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -50,7 +53,7 @@ function NicknameModal({ onSave }) {
             type="text"
             value={nickname}
             onChange={e => setNickname(e.target.value)}
-            placeholder="Enter nickname..."
+            placeholder={t('nickname.placeholder')}
             minLength={2}
             maxLength={32}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] focus:outline-none focus:border-emerald-500"
@@ -62,7 +65,7 @@ function NicknameModal({ onSave }) {
             disabled={saving || nickname.trim().length < 2}
             className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-2.5 rounded-btn transition-colors text-[13px]"
           >
-            {saving ? 'Saving...' : 'Save Nickname'}
+            {saving ? t('nickname.saving') : t('nickname.save')}
           </button>
         </form>
       </div>
@@ -71,22 +74,30 @@ function NicknameModal({ onSave }) {
 }
 
 function Header() {
+  const { t } = useTranslation('common')
   return (
     <header className="flex items-center justify-between px-3 py-2.5">
-      <h1 className="text-white font-bold text-[18px] tracking-tight">Raha VPN</h1>
+      <h1 className="text-white font-bold text-[18px] tracking-tight">{t('app.name')}</h1>
       <div className="flex items-center gap-1">
         <NotificationBell />
-        <button className="p-2 text-gray-400 hover:text-white rounded-icon-btn hover:bg-white/5 transition-all active:scale-[0.98]">
-          <FiGlobe size={16} />
-        </button>
+
       </div>
     </header>
   )
 }
 
 function AppShell() {
+  const { t } = useTranslation('onboarding')
   const { error, user, refreshUser } = useApp()
+  const { lng } = useLanguage()
   const [showNicknameModal, setShowNicknameModal] = useState(false)
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false)
+
+  useEffect(() => {
+    if (!localStorage.getItem('raha.lang')) {
+      setShowLanguageSelector(true)
+    }
+  }, [])
 
   useEffect(() => {
     if (user && user.nickname === null || user && user.nickname === undefined) {
@@ -94,15 +105,16 @@ function AppShell() {
     }
   }, [user])
 
-  const handleNicknameSaved = (_nickname) => {
+  const handleNicknameSaved = async (_nickname) => {
     setShowNicknameModal(false)
-    refreshUser()
+    await refreshUser()
+    updateMyLanguage(lng).catch(() => {})
   }
 
   if (error && !user) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-dark-bg text-white p-8" style={{ maxWidth: 480, margin: '0 auto' }}>
-        <h1 className="text-xl font-semibold mb-3 text-center">Access Restricted</h1>
+        <h1 className="text-xl font-semibold mb-3 text-center">{t('accessRestricted.title')}</h1>
         <p className="text-gray-400 text-center text-[13px]">{error}</p>
       </div>
     )
@@ -111,6 +123,7 @@ function AppShell() {
   return (
     <HashRouter>
       <div className="flex flex-col h-full bg-dark-bg" style={{ maxWidth: 480, margin: '0 auto', position: 'relative' }}>
+        {showLanguageSelector && <LanguageSelector onClose={() => setShowLanguageSelector(false)} />}
         {showNicknameModal && user && <NicknameModal onSave={handleNicknameSaved} />}
         <Header />
         <main className="flex-1 overflow-y-auto pb-[72px]">
@@ -143,9 +156,11 @@ export default function App() {
 
   return (
     <AppProvider>
-      <NotificationsProvider>
-        <AppShell />
-      </NotificationsProvider>
+      <LanguageProvider>
+        <NotificationsProvider>
+          <AppShell />
+        </NotificationsProvider>
+      </LanguageProvider>
     </AppProvider>
   )
 }

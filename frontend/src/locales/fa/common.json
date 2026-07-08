@@ -3,17 +3,67 @@
     "name": "Raha VPN"
   },
   "actions": {
-    "save": "Save",
-    "cancel": "Cancel",
-    "retry": "Retry",
-    "close": "Close",
-    "edit": "Edit",
-    "delete": "Delete",
-    "loading": "Loading...",
-    "saving": "Saving..."
+    "save": "ذخیره",
+    "cancel": "لغو",
+    "retry": "تلاش مجدد",
+    "close": "بستن",
+    "edit": "ویرایش",
+    "delete": "حذف",
+    "loading": "در حال بارگذاری...",
+    "saving": "در حال ذخیره...",
+    "confirm": "تأیید",
+    "apply": "اعمال",
+    "applying": "در حال اعمال...",
+    "send": "ارسال",
+    "sending": "در حال ارسال...",
+    "create": "ایجاد",
+    "creating": "در حال ایجاد...",
+    "search": "جستجو",
+    "set": "تنظیم",
+    "back": "بازگشت",
+    "all": "همه"
+  },
+  "config": {
+    "unnamed": "بدون نام",
+    "noExpiry": "بدون انقضا",
+    "expired": "منقضی شده",
+    "dayLeft": "{{days}} روز باقی‌مانده",
+    "daysLeft": "{{days}} روز باقی‌مانده",
+    "showQR": "نمایش QR",
+    "copyLink": "کپی لینک اشتراک",
+    "regenerateKey": "تولید مجدد کلید",
+    "editTrafficDuration": "ویرایش ترافیک و مدت",
+    "disable": "غیرفعال",
+    "enable": "فعال",
+    "editConfig": "ویرایش کانفیگ",
+    "traffic": "ترافیک",
+    "duration": "مدت",
+    "failedUpdate": "به‌روزرسانی کانفیگ ناموفق بود",
+    "copied": "در کلیپ‌بورد کپی شد"
+  },
+  "numberFields": {
+    "confirm": "تأیید",
+    "unlimited": "نامحدود"
+  },
+  "qrModal": {
+    "vpnConfig": "کانفیگ VPN",
+    "noLink": "لینک اشتراک در دسترس نیست",
+    "sendToTelegram": "ارسال همه QR به تلگرام (ZIP)",
+    "setPassword": "تنظیم رمز ZIP",
+    "send": "ارسال",
+    "sent": "ZIP به تلگرام شما ارسال شد!",
+    "failed": "ارسال ZIP ناموفق بود"
+  },
+  "confirmDialogs": {
+    "deleteConfig": "این کانفیگ حذف شود؟ ترافیک استفاده‌نشده بازگردانده می‌شود.",
+    "regenerateKey": "کلید UUID دوباره تولید شود؟ کلید قدیمی بلافاصله از کار می‌افتد."
   },
   "errors": {
-    "generic": "Something went wrong.",
-    "failedLoadProfile": "Failed to load user profile"
+    "generic": "مشکلی پیش آمد.",
+    "failedLoadProfile": "بارگذاری پروفایل کاربر ناموفق بود",
+    "failedLoadConfigs": "بارگذاری کانفیگ‌ها ناموفق بود"
+  },
+  "success": {
+    "copied": "در کلیپ‌بورد کپی شد"
   }
 }

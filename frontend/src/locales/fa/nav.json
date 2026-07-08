@@ -1,8 +1,8 @@
 {
   "tabs": {
-    "dashboard": "Dashboard",
-    "referral": "Referral",
-    "profile": "Profile",
-    "admin": "Admin"
+    "dashboard": "داشبورد",
+    "referral": "دعوت از دوستان",
+    "profile": "پروفایل",
+    "admin": "مدیریت"
   }
 }

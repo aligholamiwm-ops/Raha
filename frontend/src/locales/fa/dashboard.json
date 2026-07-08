@@ -1,1 +1,48 @@
-{}
+{
+  "hero": {
+    "availableTraffic": "ترافیک قابل استفاده",
+    "buyTraffic": "برای ایجاد کانفیگ ترافیک بخرید",
+    "used": "مصرف شده",
+    "active": "فعال",
+    "days": "روز",
+    "newConfig": "کانفیگ جدید"
+  },
+  "configs": {
+    "title": "کانفیگ‌ها",
+    "total": "مجموع {{count}}",
+    "noConfigs": "هنوز کانفیگی ندارید",
+    "noConfigsDesc": "اولین کانفیگ خود را ایجاد کنید",
+    "createFirst": "ایجاد اولین کانفیگ",
+    "getPlan": "دریافت پلن"
+  },
+  "createModal": {
+    "title": "کانفیگ جدید",
+    "name": "نام",
+    "traffic": "ترافیک",
+    "duration": "مدت",
+    "creating": "در حال ایجاد...",
+    "create": "ایجاد",
+    "namePlaceholder": "مثلاً myphone",
+    "nameRequired": "نام کانفیگ الزامی است",
+    "noHyphens": "نام کانفیگ نباید شامل خط تیره باشد",
+    "trafficPositive": "ترافیک باید بیشتر از 0 باشد",
+    "insufficientTraffic": "موجودی ترافیک ناکافی است. شما {{trafficBalance}} گیگابایت در دسترس دارید.",
+    "durationNonNegative": "مدت باید 0 یا بیشتر باشد",
+    "failedCreate": "ایجاد کانفیگ ناموفق بود"
+  },
+  "usageHistogram": {
+    "title": "نمای کلی ترافیک",
+    "all": "همه",
+    "day": "روز",
+    "week": "هفته",
+    "month": "ماه",
+    "loadFailed": "بارگذاری داده‌های مصرف ناموفق بود",
+    "noData": "داده‌ای برای این دوره وجود ندارد",
+    "peak": "اوج",
+    "average": "میانگین",
+    "total": "مجموع"
+  },
+  "errors": {
+    "loadFailed": "بارگذاری داده‌های مصرف ناموفق بود"
+  }
+}

@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus } from '../api/client'
+import { formatDateTime } from '../utils/dates'
 
 const CATEGORIES = ['connection', 'help', 'withdrawal', 'cooperation']
-
-function formatDate(d) {
-  if (!d) return ''
-  const date = new Date(d)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 function StatusBadge({ status }) {
   const styles = {
@@ -25,7 +21,7 @@ function StatusBadge({ status }) {
 }
 
 const BackIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 rtl:rotate-180">
     <polyline points="15 18 9 12 15 6" />
   </svg>
 )
@@ -45,6 +41,7 @@ const SendIcon = () => (
 
 // ─── New Ticket Form ─────────────────────────────────────────────────────────
 function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
+  const { t } = useTranslation('support')
   const [category, setCategory] = useState(initialCategory || CATEGORIES[0])
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
@@ -60,11 +57,11 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
     // Validate withdrawal fields
     if (category === 'withdrawal') {
       if (!usdtAddress.trim()) {
-        setError('USDT address is required for withdrawal tickets')
+        setError(t('newTicket.withdrawalRequired'))
         return
       }
       if (!usdtNetwork) {
-        setError('USDT network is required for withdrawal tickets')
+        setError(t('newTicket.withdrawalNetworkRequired'))
         return
       }
     }
@@ -86,7 +83,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
       const ticket = await createTicket(payload)
       onCreated(ticket)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create ticket')
+      setError(err?.response?.data?.detail || t('newTicket.failedCreate'))
     } finally {
       setSubmitting(false)
     }
@@ -98,7 +95,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
         <button onClick={onCancel} className="text-slate-400 hover:text-white p-1">
           <BackIcon />
         </button>
-        <h2 className="text-white font-semibold text-base">New Ticket</h2>
+        <h2 className="text-white font-semibold text-base">{t('newTicket.title')}</h2>
       </div>
 
       {error && (
@@ -109,19 +106,19 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-slate-400 text-xs mb-1.5 font-medium">Title</label>
+          <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('newTicket.titleFieldLabel')}</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Brief description of your issue"
+            placeholder={t('newTicket.titlePlaceholder')}
             className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
             required
           />
         </div>
 
         <div>
-          <label className="block text-slate-400 text-xs mb-1.5 font-medium">Category</label>
+          <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('newTicket.categoryLabel')}</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -137,19 +134,19 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
         {category === 'withdrawal' && (
           <>
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">USDT Wallet Address *</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('newTicket.withdrawalAddressLabel')}</label>
               <input
                 type="text"
                 value={usdtAddress}
                 onChange={(e) => setUsdtAddress(e.target.value)}
-                placeholder="Your USDT wallet address"
+                placeholder={t('newTicket.withdrawalAddressPlaceholder')}
                 className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">USDT Network *</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('newTicket.withdrawalNetworkLabel')}</label>
               <select
                 value={usdtNetwork}
                 onChange={(e) => setUsdtNetwork(e.target.value)}
@@ -164,19 +161,19 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
 
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3">
               <p className="text-blue-300 text-xs">
-                ℹ️ Please double-check your wallet address and network. Incorrect information may result in loss of funds.
+                {t('newTicket.warningInfo')}
               </p>
             </div>
           </>
         )}
 
         <div>
-          <label className="block text-slate-400 text-xs mb-1.5 font-medium">Message</label>
+          <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('newTicket.messageLabel')}</label>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={5}
-            placeholder="Describe your issue in detail..."
+            placeholder={t('newTicket.messagePlaceholder')}
             className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
             required
           />
@@ -192,7 +189,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
           ) : (
             <>
               <SendIcon />
-              Submit Ticket
+              {t('newTicket.submit')}
             </>
           )}
         </button>
@@ -203,6 +200,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
 
 // ─── Ticket Thread View ───────────────────────────────────────────────────────
 function TicketThread({ ticketId, onBack, isStaff }) {
+  const { t } = useTranslation('support')
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(true)
   const [replyText, setReplyText] = useState('')
@@ -215,11 +213,11 @@ function TicketThread({ ticketId, onBack, isStaff }) {
       const data = await getTicket(ticketId)
       setTicket(data)
     } catch {
-      setError('Failed to load ticket')
+      setError(t('thread.failedLoad'))
     } finally {
       setLoading(false)
     }
-  }, [ticketId])
+  }, [ticketId, t])
 
   useEffect(() => {
     loadTicket()
@@ -239,19 +237,19 @@ function TicketThread({ ticketId, onBack, isStaff }) {
       setReplyText('')
       await loadTicket()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to send reply')
+      setError(err?.response?.data?.detail || t('thread.failedReply'))
     } finally {
       setSending(false)
     }
   }
 
   const handleCloseTicket = async () => {
-    if (!window.confirm('Close this ticket?')) return
+    if (!window.confirm(t('thread.confirmClose'))) return
     try {
       await updateTicketStatus(ticketId, 'closed')
       await loadTicket()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to close ticket')
+      setError(err?.response?.data?.detail || t('thread.failedClose'))
     }
   }
 
@@ -280,11 +278,11 @@ function TicketThread({ ticketId, onBack, isStaff }) {
         <div className="flex items-center gap-2">
           {isStaff && ticket?.status !== 'closed' && (
             <button onClick={handleCloseTicket} className="text-rose-400 text-xs hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10">
-              Close
+              {t('thread.close')}
             </button>
           )}
           <button onClick={loadTicket} className="text-emerald-400 text-xs hover:text-emerald-300">
-            Refresh
+            {t('thread.refresh')}
           </button>
         </div>
       </div>
@@ -300,7 +298,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
             {error}
           </div>
         ) : messages.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">No messages</p>
+          <p className="text-slate-500 text-sm text-center py-8">{t('thread.noMessages')}</p>
         ) : (
           messages.map((msg, idx) => {
             const isUser = msg.sender_role === 'user' || msg.sender === 'user'
@@ -315,12 +313,12 @@ function TicketThread({ ticketId, onBack, isStaff }) {
                 >
                   {!isUser && (
                     <p className="text-xs font-semibold text-emerald-400">
-                      {msg.sender_role === 'support' ? 'Support' : 'Admin'}
+                      {msg.sender_role === 'support' ? t('thread.supportRole') : t('thread.adminRole')}
                     </p>
                   )}
                   <p className="text-sm leading-relaxed">{msg.text || ''}</p>
-                  <p className={`text-xs ${isUser ? 'text-blue-300' : 'text-slate-500'} text-right`}>
-                    {formatDate(msg.created_at)}
+                  <p className={`text-xs ${isUser ? 'text-blue-300' : 'text-slate-500'} text-end`}>
+                    {formatDateTime(msg.created_at)}
                   </p>
                 </div>
               </div>
@@ -339,7 +337,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
           <textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Type a reply..."
+            placeholder={t('thread.replyPlaceholder')}
             rows={2}
             className="flex-1 bg-slate-700 border border-slate-600 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
             onKeyDown={(e) => {
@@ -368,6 +366,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
 
 // ─── Main Support Page ────────────────────────────────────────────────────────
 export default function Support() {
+  const { t } = useTranslation('support')
   const { user } = useApp()
   const location = useLocation()
   const [tickets, setTickets] = useState([])
@@ -409,12 +408,12 @@ export default function Support() {
       }
       setTickets(Array.isArray(data) ? data : [])
     } catch {
-      setError('Failed to load tickets')
+      setError(t('errors.loadFailed'))
       setTickets([])
     } finally {
       setLoading(false)
     }
-  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder])
+  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder, t])
 
   useEffect(() => {
     loadTickets()
@@ -457,8 +456,8 @@ export default function Support() {
     <div className="px-4 py-5 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">{isStaff ? 'Support Dashboard' : 'Support'}</h1>
-          <p className="text-slate-400 text-sm">{isStaff ? 'Manage support tickets' : "We're here to help"}</p>
+          <h1 className="text-xl font-bold text-white">{isStaff ? t('header.dashboard') : t('header.title')}</h1>
+          <p className="text-slate-400 text-sm">{isStaff ? t('header.manage') : t('header.hereToHelp')}</p>
         </div>
         {!isStaff && (
           <button
@@ -466,7 +465,7 @@ export default function Support() {
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
           >
             <PlusIcon />
-            New Ticket
+            {t('list.new')}
           </button>
         )}
       </div>
@@ -475,26 +474,26 @@ export default function Support() {
         <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Status</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('list.filterStatusLabel')}</label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
               >
-                <option value="">All</option>
-                <option value="open">Open</option>
-                <option value="waiting_for_user">Waiting for User</option>
-                <option value="closed">Closed</option>
+                <option value="">{t('list.filterAll')}</option>
+                <option value="open">{t('list.filterOpen')}</option>
+                <option value="waiting_for_user">{t('list.filterWaiting')}</option>
+                <option value="closed">{t('list.filterClosed')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Category</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('list.filterCategoryLabel')}</label>
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500 capitalize"
               >
-                <option value="">All</option>
+                <option value="">{t('list.filterAllCategories')}</option>
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c} className="capitalize">{c}</option>
                 ))}
@@ -503,25 +502,25 @@ export default function Support() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Sort By</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('list.sortByLabel')}</label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
               >
-                <option value="created_at">Created</option>
-                <option value="updated_at">Updated</option>
+                <option value="created_at">{t('list.sortByCreated')}</option>
+                <option value="updated_at">{t('list.sortByUpdated')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-slate-400 text-xs mb-1.5 font-medium">Order</label>
+              <label className="block text-slate-400 text-xs mb-1.5 font-medium">{t('list.orderLabel')}</label>
               <select
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
               >
-                <option value="desc">Newest First</option>
-                <option value="asc">Oldest First</option>
+                <option value="desc">{t('list.orderNewest')}</option>
+                <option value="asc">{t('list.orderOldest')}</option>
               </select>
             </div>
           </div>
@@ -541,13 +540,13 @@ export default function Support() {
           ))
         ) : tickets.length === 0 ? (
           <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-8 text-center space-y-3">
-            <p className="text-slate-400 text-sm">No tickets yet</p>
+            <p className="text-slate-400 text-sm">{t('list.noTickets')}</p>
             {!isStaff && (
               <button
                 onClick={() => setView('new')}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
-                Open a Ticket
+                {t('list.openTicket')}
               </button>
             )}
           </div>
@@ -557,7 +556,7 @@ export default function Support() {
               <button
                 key={ticket.ticket_id}
                 onClick={() => { setSelectedTicketId(ticket.ticket_id); setView('thread') }}
-                className="w-full text-left bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-4 space-y-2 transition-all"
+                className="w-full text-start bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-4 space-y-2 transition-all"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-white font-medium text-sm">{ticket.title || `Ticket #${ticket.ticket_id?.slice(0, 8)}`}</span>
@@ -584,7 +583,7 @@ export default function Support() {
                   <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">
                     {ticket.category}
                   </span>
-                  <span className="text-slate-500 text-xs">{formatDate(ticket.created_at)}</span>
+                  <span className="text-slate-500 text-xs">{formatDateTime(ticket.created_at)}</span>
                 </div>
                 {ticket.messages?.[0]?.text && (
                   <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">

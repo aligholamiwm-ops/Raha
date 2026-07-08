@@ -1,1 +1,45 @@
-{}
+{
+  "header": {
+    "title": "Referral Program",
+    "subtitle": "Earn bonus by inviting friends"
+  },
+  "leaderboard": {
+    "title": "Referral Leaderboard",
+    "empty": "No referrals yet. Be the first to invite friends!",
+    "rank": "#",
+    "user": "User",
+    "referred": "Referred",
+    "bonuses": "Bonuses"
+  },
+  "link": {
+    "title": "Your Referral Link",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "share": "Share with Friends",
+    "unavailable": "Referral sharing is unavailable because this app is not fully configured. Please contact support."
+  },
+  "rewardType": {
+    "title": "Reward Type",
+    "traffic": "Earn bonus as GB traffic",
+    "usdt": "Earn bonus as USDT wallet balance"
+  },
+  "summary": {
+    "usersReferred": "Users Referred:",
+"usersReferredCount": "{{count}}",
+    "pendingBonuses": "Pending Referral Bonuses",
+    "usdtBonus": "USDT Bonus",
+    "trafficBonus": "Traffic Bonus",
+    "charge": "Charge my balances",
+    "charging": "Charging…"
+  },
+  "yourReferrals": {
+    "title": "Your Referrals",
+    "empty": "No referral bonuses yet. Share your link to earn!",
+    "user": "User",
+    "layer": "Layer",
+    "type": "Type",
+    "amount": "Amount",
+    "date": "Date"
+  },
+  "shareText": "Join Raha VPN and get premium VPN service!"
+}

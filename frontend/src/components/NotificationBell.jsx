@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FiBell, FiX, FiRadio, FiArrowDown, FiArrowUp, FiCreditCard, FiShoppingCart, FiUsers, FiMessageSquare, FiClock } from 'react-icons/fi'
 import { useNotifications } from '../context/NotificationsContext'
+import { formatDateTime } from '../utils/dates'
 
 const CATEGORY_ICONS = {
   announcement:    { icon: FiRadio,       color: 'text-violet-400' },
@@ -16,22 +18,23 @@ const CATEGORY_ICONS = {
 
 const DEFAULT_ICON = { icon: FiBell, color: 'text-slate-400' }
 
-function relativeTime(dateStr) {
+function relativeTime(dateStr, t) {
   if (!dateStr) return ''
   const now = Date.now()
   const then = new Date(dateStr).getTime()
   const diff = now - then
   const seconds = Math.floor(diff / 1000)
-  if (seconds < 60) return 'now'
+  if (seconds < 60) return t('relativeTime.now')
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60) return t('relativeTime.minutesAgo', { minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('relativeTime.hoursAgo', { hours })
   const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return t('relativeTime.daysAgo', { days })
 }
 
 export default function NotificationBell() {
+  const { t } = useTranslation('notifications')
   const { notifications, unreadCount, loading, fetchList, markRead, markAllRead, removeNotification } = useNotifications()
   const [open, setOpen] = useState(false)
   const [detailId, setDetailId] = useState(null)
@@ -72,8 +75,8 @@ export default function NotificationBell() {
           <FiBell size={16} />
           {unreadCount > 0 && (
             <>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
-              <span className="absolute -top-0.5 -right-0.5 bg-rose-500 text-white text-[8px] font-bold min-w-[14px] h-[14px] flex items-center justify-center rounded-full px-0.5">
+              <span className="absolute top-1 end-1 w-2 h-2 bg-rose-500 rounded-full" />
+              <span className="absolute -top-0.5 -end-0.5 bg-rose-500 text-white text-[8px] font-bold min-w-[14px] h-[14px] flex items-center justify-center rounded-full px-0.5">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             </>
@@ -88,8 +91,8 @@ export default function NotificationBell() {
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0">
             <h3 className="text-white font-bold text-sm">
-              Notifications
-              {unreadCount > 0 && <span className="text-rose-400 ml-1.5 text-[11px]">({unreadCount} new)</span>}
+              {t('panel.title')}
+              {unreadCount > 0 && <span className="text-rose-400 ms-1.5 text-[11px]">{t('panel.newCount', { count: unreadCount })}</span>}
             </h3>
             <div className="flex items-center gap-2">
               <button
@@ -97,7 +100,7 @@ export default function NotificationBell() {
                 disabled={unreadCount === 0}
                 className="text-[10px] text-emerald-400 hover:text-emerald-300 disabled:text-slate-600 disabled:cursor-not-allowed font-semibold"
               >
-                Mark all read
+                {t('panel.markAllRead')}
               </button>
               <button onClick={() => setOpen(false)} className="p-1 text-slate-400 hover:text-white transition-colors">
                 <FiX size={14} />
@@ -115,7 +118,7 @@ export default function NotificationBell() {
             {!loading && notifications.length === 0 && (
               <div className="flex flex-col items-center justify-center py-10 text-slate-500">
                 <FiBell size={28} className="mb-2 opacity-50" />
-                <p className="text-xs">No notifications yet</p>
+                <p className="text-xs">{t('panel.empty')}</p>
               </div>
             )}
 
@@ -129,8 +132,8 @@ export default function NotificationBell() {
                     <button
                       key={n.notification_id}
                       onClick={() => handleRowClick(n)}
-                      className={`w-full text-left px-4 py-3 hover:bg-white/[0.03] transition-colors flex items-start gap-3 ${
-                        isUnread ? 'border-l-2 border-emerald-500' : 'opacity-70'
+                      className={`w-full text-start px-4 py-3 hover:bg-white/[0.03] transition-colors flex items-start gap-3 ${
+                        isUnread ? 'border-s-2 border-emerald-500' : 'opacity-70'
                       }`}
                     >
                       <div className={`mt-0.5 ${isUnread ? iconDef.color : 'text-slate-500'}`}>
@@ -143,7 +146,7 @@ export default function NotificationBell() {
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">{n.message}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <FiClock size={9} className="text-slate-600" />
-                          <span className="text-[9px] text-slate-600">{relativeTime(n.created_at)}</span>
+                          <span className="text-[9px] text-slate-600">{relativeTime(n.created_at, t)}</span>
                           {n.severity && (
                             <span className={`text-[8px] font-semibold uppercase ${
                               n.severity === 'success' ? 'text-emerald-500' :
@@ -151,7 +154,7 @@ export default function NotificationBell() {
                               n.severity === 'error' ? 'text-rose-500' :
                               'text-slate-500'
                             }`}>
-                              {n.severity}
+                              {t(`severity.${n.severity}`)}
                             </span>
                           )}
                         </div>
@@ -159,7 +162,7 @@ export default function NotificationBell() {
                       <button
                         onClick={(e) => { e.stopPropagation(); removeNotification(n.notification_id) }}
                         className="p-1 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        title="Delete"
+                        title={t('detail.delete')}
                       >
                         <FiX size={12} />
                       </button>
@@ -183,6 +186,7 @@ export default function NotificationBell() {
 }
 
 function NotificationDetail({ notification, onClose }) {
+  const { t } = useTranslation('notifications')
   const { markRead } = useNotifications()
   const iconDef = CATEGORY_ICONS[notification.category] || DEFAULT_ICON
   const Icon = iconDef.icon
@@ -196,13 +200,13 @@ function NotificationDetail({ notification, onClose }) {
   const metaLines = []
   if (notification.metadata) {
     const m = notification.metadata
-    if (m.amount_usd) metaLines.push(`Amount: $${m.amount_usd}`)
-    if (m.traffic_gb) metaLines.push(`Traffic: ${m.traffic_gb} GB`)
-    if (m.plan_name) metaLines.push(`Plan: ${m.plan_name}`)
-    if (m.loan_id) metaLines.push(`Loan ID: ${m.loan_id}`)
-    if (m.ticket_id) metaLines.push(`Ticket: ${m.ticket_id}`)
-    if (m.layer) metaLines.push(`Referral layer: ${m.layer}`)
-    if (m.payment_method) metaLines.push(`Method: ${m.payment_method}`)
+    if (m.amount_usd) metaLines.push(t('metadata.amount', { amount: m.amount_usd }))
+    if (m.traffic_gb) metaLines.push(t('metadata.traffic', { traffic: m.traffic_gb }))
+    if (m.plan_name) metaLines.push(t('metadata.plan', { plan: m.plan_name }))
+    if (m.loan_id) metaLines.push(t('metadata.loanId', { id: m.loan_id }))
+    if (m.ticket_id) metaLines.push(t('metadata.ticket', { id: m.ticket_id }))
+    if (m.layer) metaLines.push(t('metadata.referralLayer', { layer: m.layer }))
+    if (m.payment_method) metaLines.push(t('metadata.method', { method: m.payment_method }))
   }
 
   return (
@@ -219,15 +223,15 @@ function NotificationDetail({ notification, onClose }) {
             <div>
               <h3 className="text-white font-bold text-[15px]">{notification.title}</h3>
               <p className="text-[10px] text-slate-500">
-                {new Date(notification.created_at).toLocaleString()}
+                {formatDateTime(notification.created_at)}
                 {notification.severity && (
-                  <span className={`ml-2 font-semibold ${
+                  <span className={`ms-2 font-semibold ${
                     notification.severity === 'success' ? 'text-emerald-500' :
                     notification.severity === 'warning' ? 'text-amber-500' :
                     notification.severity === 'error' ? 'text-rose-500' :
                     'text-slate-500'
                   }`}>
-                    · {notification.severity.toUpperCase()}
+                    · {t(`severity.${notification.severity}`).toUpperCase()}
                   </span>
                 )}
               </p>
@@ -246,7 +250,7 @@ function NotificationDetail({ notification, onClose }) {
 
         {metaLines.length > 0 && (
           <div className="bg-white/[0.03] rounded-xl p-3.5 space-y-1">
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Details</p>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">{t('detail.details')}</p>
             {metaLines.map((line, i) => (
               <div key={i} className="text-[12px] text-slate-400">{line}</div>
             ))}

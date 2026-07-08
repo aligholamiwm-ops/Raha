@@ -1,1 +1,35 @@
-{}
+{
+  "panel": {
+    "title": "Notifications",
+    "newCount": "({{count}} new)",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications yet"
+  },
+  "detail": {
+    "details": "Details",
+    "delete": "Delete"
+  },
+  "relativeTime": {
+    "now": "now",
+    "minutesAgo": "{{minutes}}m ago",
+    "hoursAgo": "{{hours}}h ago",
+    "daysAgo": "{{days}}d ago"
+  },
+  "severity": {
+    "success": "success",
+    "warning": "warning",
+    "error": "error"
+  },
+  "metadata": {
+    "amount": "Amount: ${{amount}}",
+    "traffic": "Traffic: {{traffic}} GB",
+    "plan": "Plan: {{plan}}",
+    "loanId": "Loan ID: {{id}}",
+    "ticket": "Ticket: {{id}}",
+    "referralLayer": "Referral layer: {{layer}}",
+    "method": "Method: {{method}}"
+  },
+  "errors": {
+    "loadFailed": "Failed to load notifications"
+  }
+}

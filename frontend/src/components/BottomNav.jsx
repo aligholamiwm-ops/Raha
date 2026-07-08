@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
@@ -29,17 +30,18 @@ const ShieldIcon = () => (
 )
 
 export default function BottomNav() {
+  const { t } = useTranslation('nav')
   const { user } = useApp();
 
   const tabs = [
-    { to: '/', label: 'Dashboard', Icon: GridIcon },
-    { to: '/referral', label: 'Referral', Icon: UsersIcon },
-    { to: '/profile', label: 'Profile', Icon: ProfileIcon },
+    { to: '/', label: t('tabs.dashboard'), Icon: GridIcon },
+    { to: '/referral', label: t('tabs.referral'), Icon: UsersIcon },
+    { to: '/profile', label: t('tabs.profile'), Icon: ProfileIcon },
   ];
 
   const isAdmin = user?.role?.toLowerCase() === 'admin';
   if (isAdmin) {
-    tabs.push({ to: '/admin', label: 'Admin', Icon: ShieldIcon });
+    tabs.push({ to: '/admin', label: t('tabs.admin'), Icon: ShieldIcon });
   }
 
   return (

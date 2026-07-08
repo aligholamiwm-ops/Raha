@@ -1,1 +1,143 @@
-{}
+{
+  "tabs": {
+    "account": "Account",
+    "support": "Support",
+    "me": "Me"
+  },
+  "balance": {
+    "wallet": "Wallet",
+    "traffic": "Traffic",
+    "loan": "Loan"
+  },
+  "store": {
+    "plans": "Plans",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "loans": "Loans"
+  },
+  "plans": {
+    "buy": "Buy"
+  },
+  "buy": {
+    "confirmPurchase": "Confirm Purchase",
+    "plan": "Plan",
+    "traffic": "Traffic",
+    "basePrice": "Base Price",
+    "youPay": "You Pay",
+    "discountPlaceholder": "Discount code",
+    "apply": "Apply",
+    "insufficientBalance": "Insufficient wallet balance — will redirect to crypto payment",
+    "cancel": "Cancel",
+    "processing": "Processing…",
+    "confirm": "Confirm",
+    "discount": "Discount",
+    "off": "off",
+    "invalidCode": "Invalid discount code",
+    "available": "Available: ${{amount}} USDT",
+    "days": "Days"
+  },
+  "account": {
+    "paymentLinkOpened": "Payment link opened.",
+    "failedPayment": "Failed to create payment.",
+    "invoiceCreated": "Invoice created!",
+    "failedDepositInvoice": "Failed to create deposit invoice.",
+    "gbAdded": "+{{gb}} GB added to your balance.",
+    "invoiceCreatedOpen": "Invoice created! Complete payment in the opened window.",
+    "failedRequest": "Failed to process request.",
+    "availablePlans": "Available Plans",
+    "noPlans": "No plans available",
+    "initializing3d": "Initializing 3D Visualizer...",
+    "purchaseHistory": "Purchase History",
+    "purchaseDate": "Date",
+    "purchasePlan": "Plan",
+    "purchasePrice": "Price",
+    "purchaseTraffic": "Traffic",
+    "withdrawTitle": "Withdraw Balance",
+    "withdrawDesc": "Submit a withdrawal support ticket with your USDT wallet address and network.",
+    "createWithdrawTicket": "Create Withdrawal Ticket",
+    "freeTrial": "Free Trial"
+  },
+  "deposit": {
+    "title": "Deposit USDT",
+    "subtitle": "Add funds to your wallet",
+    "quickAmounts": "Quick amounts",
+    "customAmount": "Custom amount",
+    "button": "Deposit",
+    "info": "Payments processed in USDT via Plisio. Balance updates after confirmation."
+  },
+  "loans": {
+    "noLoans": "No Loans",
+    "noLoansDesc": "You have no outstanding loans",
+    "outstanding": "Outstanding Balance",
+    "unpaid": "Unpaid ({{count}})",
+    "settled": "Settled ({{count}})",
+    "payNow": "Pay Now",
+    "processing": "Processing…",
+    "settledBadge": "Settled",
+    "unpaidBadge": "Unpaid"
+  },
+  "me": {
+    "unknown": "Unknown",
+    "charLimit": "Must be 2–32 characters",
+    "failedSave": "Failed to save",
+    "username": "Username",
+    "edit": "Edit",
+    "notSet": "Not set",
+    "unique": "unique",
+    "placeholder": "Enter username…",
+    "available": "Available",
+    "taken": "Already taken",
+    "cancel": "Cancel",
+    "save": "Save",
+    "updated": "Username updated!",
+    "hint": "2–32 characters · must be unique across all users",
+    "account": "account",
+    "language": "Language",
+    "langUpdated": "Language updated"
+  },
+  "support": {
+    "dashboard": "Support Dashboard",
+    "title": "Support",
+    "manage": "Manage tickets",
+    "hereToHelp": "We're here to help",
+    "newTicket": "New",
+    "failedLoad": "Failed to load tickets",
+    "allStatus": "All Status",
+    "statusOpen": "Open",
+    "statusWaiting": "Waiting",
+    "statusClosed": "Closed",
+    "allCategories": "All Categories",
+    "byCreated": "By Created",
+    "byUpdated": "By Updated",
+    "newestFirst": "Newest First",
+    "oldestFirst": "Oldest First",
+    "noTickets": "No tickets yet",
+    "openTicket": "Open a Ticket"
+  },
+  "newTicket": {
+    "title": "New Ticket",
+    "titlePlaceholder": "Brief title…",
+    "withdrawalAddressPlaceholder": "USDT wallet address",
+    "withdrawalNetworkLabel": "USDT Network *",
+    "warningInfo": "Double-check your wallet address. Incorrect info may cause loss of funds.",
+    "messageLabel": "Message",
+    "messagePlaceholder": "Describe your issue…",
+    "submit": "Submit",
+    "usdtAddressRequired": "USDT address required",
+    "failedCreate": "Failed to create ticket"
+  },
+  "ticket": {
+    "failedLoad": "Failed to load ticket",
+    "failedReply": "Failed to send",
+    "confirmClose": "Close this ticket?",
+    "failedClose": "Failed to close",
+    "close": "Close",
+    "noMessages": "No messages",
+    "supportRole": "Support",
+    "adminRole": "Admin",
+    "replyPlaceholder": "Type a reply..."
+  },
+  "errors": {
+    "failedLoad": "Failed to load tickets"
+  }
+}

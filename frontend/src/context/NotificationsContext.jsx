@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getMyNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, clearReadNotifications } from '../api/client'
 import { useApp } from './AppContext'
 
 const NotificationsContext = createContext(null)
 
 export function NotificationsProvider({ children }) {
+  const { t } = useTranslation()
   const { user } = useApp()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -44,13 +46,13 @@ export function NotificationsProvider({ children }) {
       setUnreadCount(Math.max(0, (data.unread_count || 0) - staleRecentUnread))
       setTotal(data.total || 0)
     } catch (_e) {
-      setError('Failed to load notifications')
+      setError(t('errors.loadFailed', { ns: 'notifications' }))
       notificationsRef.current = []
       setNotifications([])
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, t])
 
   const markRead = useCallback(async (id) => {
     if (recentlyReadRef.current.has(id)) return

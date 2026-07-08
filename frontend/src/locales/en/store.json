@@ -1,1 +1,96 @@
-{}
+{
+  "header": {
+    "title": "Raha Store",
+    "subtitle": "High-speed VPN traffic & wallets",
+    "renew": "Renew Config",
+    "renewing": "Renewing: {{serverName}}"
+  },
+  "balance": {
+    "wallet": "Wallet Balance",
+    "traffic": "Traffic Active",
+    "topUp": "Top Up",
+    "available": "Available",
+    "safeEncrypted": "Safe & Encrypted",
+    "outstandingLoan": "Outstanding Loan",
+    "unpaid": "unpaid",
+    "settleNow": "Settle Now"
+  },
+  "tabs": {
+    "buyPlans": "Buy Plans",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "myLoans": "My Loans"
+  },
+  "plans": {
+    "highSpeedTraffic": "High-Speed Traffic",
+    "oneTime": "One-time checkout",
+    "savePerGb": "Save {{percent}}% / GB",
+    "baseTariff": "Base Tariff",
+    "perGb": "/ GB",
+    "selectPlan": "Select Plan"
+  },
+  "main": {
+    "selectPlanRenew": "Select Plan to Renew",
+    "availablePlans": "Available Traffic Plans",
+    "noPlans": "No plans available",
+    "initializing3d": "Initializing 3D Visualizer...",
+    "paymentLinkOpened": "Payment link opened. Complete the payment to settle your loan.",
+    "failedPayment": "Failed to create payment. Please try again.",
+    "planPurchased": "Plan \"{{planName}}\" purchased! +{{gb}} GB added to your balance.",
+    "invoiceCreated": "Invoice created! Complete payment in the opened window.",
+    "invoiceCreatedSuccess": "Invoice created successfully!",
+    "failedRequest": "Failed to process request. Please try again.",
+    "failedDeposit": "Failed to create deposit invoice."
+  },
+  "buy": {
+    "confirmOrder": "Confirm Order",
+    "selectedPlan": "Selected Plan",
+    "includedTraffic": "Included Traffic",
+    "regularPrice": "Regular Price",
+    "discount": "Discount",
+    "totalDue": "Total Amount Due",
+    "networkFeesIncluded": "All network fees included",
+    "promoCode": "Promo Code",
+    "promoPlaceholder": "Enter promo code",
+    "apply": "Apply",
+    "promoActive": "{{pct}}% Promo discount active",
+    "affordableWallet": "Affordable via Wallet Balance",
+    "balanceSufficient": "Your balance (${{balance}}) is sufficient. Instant delivery.",
+    "cryptoInvoiceRequired": "Crypto Invoice Payment Required",
+    "insufficientBalance": "Wallet balance (${{balance}}) is insufficient. We will generate a secure invoice via Plisio.",
+    "cancelOrder": "Cancel Order",
+    "processing": "Processing…",
+    "payWithWallet": "Pay with Wallet",
+    "payViaPlisio": "Pay via Plisio",
+    "invalidCode": "Invalid discount code"
+  },
+  "deposit": {
+    "title": "Deposit Funds",
+    "subtitle": "Top up your USDT wallet balance",
+    "selectPreset": "Select Preset Amount",
+    "clearsInstantly": "Clears instantly",
+    "customAmount": "Or enter custom amount",
+    "button": "Deposit",
+    "estimatedBalance": "Estimated New Balance",
+    "secureGateway": "Secure Plisio Gateway",
+    "secureDesc": "Payments are securely processed via Plisio. We support multiple USDT networks (TRC20, BEP20). Your balance updates automatically after blockchain confirmation."
+  },
+  "withdraw": {
+    "title": "Withdraw Wallet Balance",
+    "desc": "Securely withdraw your wallet balance. Standard settlement time is usually within 12–24 hours.",
+    "supportedNetworks": "Supported Networks",
+    "createTicket": "Create Withdrawal Ticket",
+    "info": "Withdrawal requests are processed via help tickets to verify destination wallets and ensure safety of funds."
+  },
+  "loans": {
+    "noLoans": "No Active Loans",
+    "noLoansDesc": "You have no outstanding or unpaid loans.",
+    "totalOutstanding": "Total Outstanding",
+    "unpaidLoans": "Unpaid Loans ({{count}})",
+    "unpaidBadge": "Unpaid",
+    "processing": "Processing…",
+    "payOutstanding": "Pay Outstanding Balance",
+    "paymentHistory": "Payment History ({{count}})",
+    "settledBadge": "Settled"
+  }
+}

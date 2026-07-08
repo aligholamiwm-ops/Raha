@@ -1,1 +1,96 @@
-{}
+{
+  "header": {
+    "title": "فروشگاه Raha",
+    "subtitle": "ترافیک پرسرعت VPN و کیف پول",
+    "renew": "تمدید کانفیگ",
+    "renewing": "در حال تمدید: {{serverName}}"
+  },
+  "balance": {
+    "wallet": "موجودی کیف پول",
+    "traffic": "ترافیک فعال",
+    "topUp": "شارژ",
+    "available": "موجود",
+    "safeEncrypted": "ایمن و رمزگذاری شده",
+    "outstandingLoan": "بدهی جاری",
+    "unpaid": "پرداخت نشده",
+    "settleNow": "تسویه کن"
+  },
+  "tabs": {
+    "buyPlans": "خرید پلن",
+    "deposit": "واریز",
+    "withdraw": "برداشت",
+    "myLoans": "وام‌های من"
+  },
+  "plans": {
+    "highSpeedTraffic": "ترافیک پرسرعت",
+    "oneTime": "پرداخت یکباره",
+    "savePerGb": "{{percent}}% تخفیف / گیگابایت",
+    "baseTariff": "تعرفه پایه",
+    "perGb": "/ گیگابایت",
+    "selectPlan": "انتخاب پلن"
+  },
+  "main": {
+    "selectPlanRenew": "پلن تمدید را انتخاب کنید",
+    "availablePlans": "پلن‌های ترافیکی موجود",
+    "noPlans": "پلنی موجود نیست",
+    "initializing3d": "در حال راه‌اندازی نمایشگر سه‌بعدی...",
+    "paymentLinkOpened": "لینک پرداخت باز شد. برای تسویه وام خود پرداخت را تکمیل کنید.",
+    "failedPayment": "ایجاد پرداخت ناموفق بود. لطفاً دوباره تلاش کنید.",
+    "planPurchased": "پلن \"{{planName}}\" خریداری شد! +{{gb}} گیگابایت به موجودی شما اضافه شد.",
+    "invoiceCreated": "فاکتور ایجاد شد! پرداخت را در پنجره باز شده تکمیل کنید.",
+    "invoiceCreatedSuccess": "فاکتور با موفقیت ایجاد شد!",
+    "failedRequest": "پردازش درخواست ناموفق بود. لطفاً دوباره تلاش کنید.",
+    "failedDeposit": "ایجاد فاکتور واریز ناموفق بود."
+  },
+  "buy": {
+    "confirmOrder": "تأیید سفارش",
+    "selectedPlan": "پلن انتخاب شده",
+    "includedTraffic": "ترافیک شامل",
+    "regularPrice": "قیمت عادی",
+    "discount": "تخفیف",
+    "totalDue": "مبلغ کل قابل پرداخت",
+    "networkFeesIncluded": "تمام هزینه‌های شبکه شامل است",
+    "promoCode": "کد تخفیف",
+    "promoPlaceholder": "کد تخفیف را وارد کنید",
+    "apply": "اعمال",
+    "promoActive": "تخفیف {{pct}}% فعال است",
+    "affordableWallet": "قابل پرداخت از کیف پول",
+    "balanceSufficient": "موجودی شما (${{balance}}) کافی است. تحویل فوری.",
+    "cryptoInvoiceRequired": "پرداخت از طریق فاکتور ارز دیجیتال الزامی است",
+    "insufficientBalance": "موجودی کیف پول (${{balance}}) کافی نیست. یک فاکتور امن از طریق Plisio ایجاد می‌کنیم.",
+    "cancelOrder": "لغو سفارش",
+    "processing": "در حال پردازش...",
+    "payWithWallet": "پرداخت با کیف پول",
+    "payViaPlisio": "پرداخت از طریق Plisio",
+    "invalidCode": "کد تخفیف نامعتبر"
+  },
+  "deposit": {
+    "title": "واریز وجه",
+    "subtitle": "موجودی کیف پول USDT خود را افزایش دهید",
+    "selectPreset": "مبلغ دلخواه را انتخاب کنید",
+    "clearsInstantly": "به‌صورت آنی واریز می‌شود",
+    "customAmount": "یا مبلغ دلخواه وارد کنید",
+    "button": "واریز",
+    "estimatedBalance": "موجودی تخمینی جدید",
+    "secureGateway": "درگاه امن Plisio",
+    "secureDesc": "پرداخت‌ها به صورت امن از طریق Plisio انجام می‌شود. ما از چندین شبکه USDT (TRC20، BEP20) پشتیبانی می‌کنیم. موجودی شما پس از تأیید بلاکچین به‌روز می‌شود."
+  },
+  "withdraw": {
+    "title": "برداشت موجودی کیف پول",
+    "desc": "موجودی کیف پول خود را به صورت امن برداشت کنید. زمان تسویه معمولاً بین 12 تا 24 ساعت است.",
+    "supportedNetworks": "شبکه‌های پشتیبانی شده",
+    "createTicket": "ایجاد تیکت برداشت",
+    "info": "درخواست‌های برداشت از طریق تیکت‌های پشتیبانی پردازش می‌شوند تا کیف پول مقصد تأیید شده و امنیت وجوه تضمین شود."
+  },
+  "loans": {
+    "noLoans": "وام فعالی وجود ندارد",
+    "noLoansDesc": "هیچ وام پرداخت‌نشده یا معوقی ندارید.",
+    "totalOutstanding": "مجموع بدهی",
+    "unpaidLoans": "وام‌های پرداخت‌نشده ({{count}})",
+    "unpaidBadge": "پرداخت نشده",
+    "processing": "در حال پردازش...",
+    "payOutstanding": "پرداخت بدهی",
+    "paymentHistory": "تاریخچه پرداخت ({{count}})",
+    "settledBadge": "تسویه شده"
+  }
+}

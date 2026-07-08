@@ -67,6 +67,7 @@ class UserModel(BaseModel):
 
     telegram_id: int = Field(..., description="Telegram user ID (primary key)")
     nickname: Optional[str] = Field(default=None, description="User-chosen display nickname")
+    language: Optional[str] = Field(default=None, description="User-selected UI language preference")
     wallet_balance_usd: float = Field(default=0.0, ge=0.0)
     traffic_balance_gb: float = Field(default=0.0, ge=0.0, description="Traffic balance in GB")
     has_used_free_trial: bool = Field(default=False)
@@ -95,6 +96,7 @@ class UserUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     nickname: Optional[str] = Field(default=None, min_length=2, max_length=32, description="User nickname")
+    language: Optional[str] = Field(default=None, description="User-selected UI language preference")
     wallet_balance_usd: Optional[float] = Field(default=None, ge=0.0)
     traffic_balance_gb: Optional[float] = Field(default=None, ge=0.0)
     has_used_free_trial: Optional[bool] = None

@@ -1,1 +1,59 @@
-{}
+{
+  "header": {
+    "title": "پشتیبانی",
+    "dashboard": "داشبورد پشتیبانی",
+    "manage": "مدیریت تیکت‌های پشتیبانی",
+    "hereToHelp": "ما برای کمک اینجا هستیم"
+  },
+  "newTicket": {
+    "title": "تیکت جدید",
+    "titleFieldLabel": "عنوان",
+    "titlePlaceholder": "توضیح مختصر مشکل خود",
+    "categoryLabel": "دسته‌بندی",
+    "messageLabel": "پیام",
+    "messagePlaceholder": "مشکل خود را به طور کامل توضیح دهید...",
+    "submit": "ارسال تیکت",
+    "submitting": "در حال ذخیره...",
+    "withdrawalAddressLabel": "آدرس کیف پول USDT *",
+    "withdrawalAddressPlaceholder": "آدرس کیف پول USDT شما",
+    "withdrawalNetworkLabel": "شبکه USDT *",
+    "withdrawalRequired": "آدرس USDT برای تیکت‌های برداشت الزامی است",
+    "withdrawalNetworkRequired": "شبکه USDT برای تیکت‌های برداشت الزامی است",
+    "warningInfo": "ℹ️ لطفاً آدرس کیف پول و شبکه را دوباره بررسی کنید. اطلاعات نادرست ممکن است منجر به از دست رفتن وجوه شود.",
+    "failedCreate": "ایجاد تیکت ناموفق بود"
+  },
+  "thread": {
+    "close": "بستن",
+    "confirmClose": "این تیکت بسته شود؟",
+    "refresh": "به‌روزرسانی",
+    "noMessages": "پیامی وجود ندارد",
+    "replyPlaceholder": "پاسخ خود را بنویسید...",
+    "failedLoad": "بارگذاری تیکت ناموفق بود",
+    "failedReply": "ارسال پاسخ ناموفق بود",
+    "failedClose": "بستن تیکت ناموفق بود",
+    "supportRole": "پشتیبانی",
+    "adminRole": "مدیر",
+    "ticketTitle": "تیکت #{{id}}"
+  },
+  "list": {
+    "new": "تیکت جدید",
+    "noTickets": "هنوز تیکتی وجود ندارد",
+    "openTicket": "ایجاد تیکت",
+    "filterStatusLabel": "وضعیت",
+    "filterAll": "همه",
+    "filterOpen": "باز",
+    "filterWaiting": "در انتظار کاربر",
+    "filterClosed": "بسته شده",
+    "filterCategoryLabel": "دسته‌بندی",
+    "filterAllCategories": "همه",
+    "sortByLabel": "مرتب‌سازی بر اساس",
+    "sortByCreated": "تاریخ ایجاد",
+    "sortByUpdated": "تاریخ به‌روزرسانی",
+    "orderLabel": "ترتیب",
+    "orderNewest": "جدیدترین",
+    "orderOldest": "قدیمی‌ترین"
+  },
+  "errors": {
+    "loadFailed": "بارگذاری تیکت‌ها ناموفق بود"
+  }
+}

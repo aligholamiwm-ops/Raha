@@ -88,6 +88,9 @@ export const checkNickname = (nickname) =>
 export const updateNickname = (nickname) =>
   api.put('/api/v1/users/me/nickname', { nickname }).then((r) => r.data)
 
+export const updateMyLanguage = (language) =>
+  api.put('/api/v1/users/me', { language }).then((r) => r.data)
+
 export const getUsageHistory = (timeframe = 'H', window = '1D', config = 'all') =>
   api.get('/api/v1/users/me/usage-history', { params: { timeframe, window, config } }).then((r) => r.data)
 

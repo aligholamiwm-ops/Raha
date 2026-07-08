@@ -1,1 +1,25 @@
-{}
+{
+  "dashboard": {
+    "title": "Admin Dashboard"
+  },
+  "tabs": {
+    "stats": "Stats",
+    "servers": "Servers",
+    "users": "Users",
+    "broadcast": "Broadcast",
+    "pricing": "Pricing",
+    "links": "Links"
+  },
+  "stats": {
+    "failedLoad": "⚠ Failed to load stats",
+    "retry": "Retry",
+    "loading": "Loading stats…"
+  },
+  "serverUsage": {
+    "title": "Server Usage",
+    "failedLoad": "Failed to load server usage data",
+    "peak": "Peak",
+    "average": "Average",
+    "total": "Total"
+  }
+}

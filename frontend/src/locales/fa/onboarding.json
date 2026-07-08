@@ -1,19 +1,19 @@
 {
   "accessRestricted": {
-    "title": "Access Restricted",
-    "openFromTelegram": "Please open this app from Telegram."
+    "title": "دسترسی محدود شده",
+    "openFromTelegram": "لطفاً این برنامه را از تلگرام باز کنید."
   },
   "languageSelector": {
-    "title": "Choose your language",
-    "subtitle": "You can change this later in your profile settings."
+    "title": "زبان خود را انتخاب کنید",
+    "subtitle": "می‌توانید بعداً در تنظیمات پروفایل آن را تغییر دهید."
   },
   "nickname": {
-    "title": "Choose Your Nickname",
-    "subtitle": "Pick a display name for your Raha VPN account.",
-    "placeholder": "Enter nickname...",
-    "save": "Save Nickname",
-    "saving": "Saving...",
-    "errorLength": "Nickname must be between 2 and 32 characters",
-    "errorFailed": "Failed to save nickname."
+    "title": "نام نمایشی خود را انتخاب کنید",
+    "subtitle": "یک نام نمایشی برای حساب Raha VPN خود انتخاب کنید.",
+    "placeholder": "نام نمایشی را وارد کنید...",
+    "save": "ذخیره نام",
+    "saving": "در حال ذخیره...",
+    "errorLength": "نام نمایشی باید بین 2 تا 32 کاراکتر باشد",
+    "errorFailed": "ذخیره نام نمایشی ناموفق بود."
   }
 }

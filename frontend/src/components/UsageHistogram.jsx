@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -6,9 +7,9 @@ import jalaali from 'jalaali-js'
 import { getUsageHistory } from '../api/client'
 
 const PERIODS = [
-  { id: '1D', label: 'Day', timeframe: 'H', window: '1D' },
-  { id: '7D', label: 'Week', timeframe: 'D', window: '7D' },
-  { id: '30D', label: 'Month', timeframe: 'D', window: '30D' },
+  { id: '1D', labelKey: 'usageHistogram.day', timeframe: 'H', window: '1D' },
+  { id: '7D', labelKey: 'usageHistogram.week', timeframe: 'D', window: '7D' },
+  { id: '30D', labelKey: 'usageHistogram.month', timeframe: 'D', window: '30D' },
 ]
 
 function parseUtc(ts) {
@@ -69,6 +70,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function UsageHistogram({ configs = [], fetchUsageHistory: customFetch }) {
+  const { t } = useTranslation('dashboard')
   const [period, setPeriod] = useState('1D')
   const [selectedConfig, setSelectedConfig] = useState('all')
   const [data, setData] = useState([])
@@ -85,7 +87,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
       const points = await fn(activePeriod.timeframe, activePeriod.window, selectedConfig)
       setData(points)
     } catch {
-      setError('Failed to load usage data')
+      setError(t('usageHistogram.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -115,7 +117,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
   return (
     <div className="bg-dark-card rounded-card p-4 animate-fade-in">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-white text-[16px] font-bold">Traffic Overview</h2>
+        <h2 className="text-white text-[16px] font-bold">{t('usageHistogram.title')}</h2>
         <div className="segmented-control">
           {PERIODS.map(p => (
             <button
@@ -123,7 +125,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
               onClick={() => setPeriod(p.id)}
               className={period === p.id ? 'active' : ''}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </div>
@@ -133,7 +135,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
         <div className="flex items-center gap-1.5 mb-2.5 overflow-x-auto scrollbar-none">
           {['all', ...configs.map(c => c.email)].map(key => {
             const c = key === 'all' ? null : configs.find(cfg => cfg.email === key)
-            const label = key === 'all' ? 'All' : (c?.name || key.slice(0, 12))
+            const label = key === 'all' ? t('usageHistogram.all') : (c?.name || key.slice(0, 12))
             return (
               <button
                 key={key}
@@ -159,7 +161,7 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
         ) : error ? (
           <div className="h-full flex items-center justify-center text-[12px] text-gray-500">{error}</div>
         ) : data.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[12px] text-gray-500">No data for this period</div>
+          <div className="h-full flex items-center justify-center text-[12px] text-gray-500">{t('usageHistogram.noData')}</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 4, right: 2, left: 2, bottom: 0 }} barCategoryGap="25%">
@@ -192,17 +194,17 @@ export default function UsageHistogram({ configs = [], fetchUsageHistory: custom
       {stats && !loading && (
         <div className="flex items-center gap-4 pt-2.5 border-t border-white/5">
           <div>
-            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Peak</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('usageHistogram.peak')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{formatGB(stats.peak)}</p>
           </div>
           <div className="w-px h-7 bg-white/5" />
           <div>
-            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Average</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('usageHistogram.average')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{formatGB(stats.avg)}</p>
           </div>
           <div className="w-px h-7 bg-white/5" />
           <div>
-            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Total</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('usageHistogram.total')}</p>
             <p className="text-[13px] font-bold text-white mt-0.5">{formatGB(stats.weekTotal)}</p>
           </div>
         </div>

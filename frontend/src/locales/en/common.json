@@ -10,10 +10,60 @@
     "edit": "Edit",
     "delete": "Delete",
     "loading": "Loading...",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "confirm": "Confirm",
+    "apply": "Apply",
+    "applying": "Applying...",
+    "send": "Send",
+    "sending": "Sending...",
+    "create": "Create",
+    "creating": "Creating…",
+    "search": "Search",
+    "set": "Set",
+    "back": "Back",
+    "all": "All"
+  },
+  "config": {
+    "unnamed": "Unnamed",
+    "noExpiry": "No expiry",
+    "expired": "Expired",
+    "dayLeft": "{{days}} day left",
+    "daysLeft": "{{days}} days left",
+    "showQR": "Show QR",
+    "copyLink": "Copy subscription link",
+    "regenerateKey": "Regenerate key",
+    "editTrafficDuration": "Edit traffic & duration",
+    "disable": "Disable",
+    "enable": "Enable",
+    "editConfig": "Edit Config",
+    "traffic": "Traffic",
+    "duration": "Duration",
+    "failedUpdate": "Failed to update config",
+    "copied": "Copied to clipboard"
+  },
+  "numberFields": {
+    "confirm": "Confirm",
+    "unlimited": "Unlimited"
+  },
+  "qrModal": {
+    "vpnConfig": "VPN Config",
+    "noLink": "No subscription link available",
+    "sendToTelegram": "Send All QR to Telegram (ZIP)",
+    "setPassword": "Set ZIP password",
+    "send": "Send",
+    "sent": "ZIP sent to your Telegram!",
+    "failed": "Failed to send ZIP"
+  },
+  "confirmDialogs": {
+    "deleteConfig": "Delete this config? Unused traffic will be refunded.",
+    "regenerateKey": "Regenerate UUID key? The old one will stop working immediately."
   },
   "errors": {
     "generic": "Something went wrong.",
-    "failedLoadProfile": "Failed to load user profile"
+    "failedLoadProfile": "Failed to load user profile",
+    "failedLoadConfigs": "Failed to load configs"
+  },
+  "success": {
+    "copied": "Copied to clipboard"
   }
 }

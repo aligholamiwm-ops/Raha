@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { FiDelete, FiCheck, FiX } from 'react-icons/fi'
 import { MdAllInclusive } from 'react-icons/md'
@@ -48,6 +49,7 @@ export function toAsciiDigits(str) {
 }
 
 export function NumericKeypad({ value, onConfirm, onClose, allowDecimal = false }) {
+  const { t } = useTranslation('common')
   const [draft, setDraft] = useState(value === null || value === undefined ? '' : String(value))
 
   const press = useCallback((key) => {
@@ -86,7 +88,7 @@ export function NumericKeypad({ value, onConfirm, onClose, allowDecimal = false 
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-xs bg-dark-card border border-white/10 rounded-t-2xl sm:rounded-2xl animate-scale-in overflow-hidden shadow-2xl mb-14 sm:mb-0">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <span className="text-white text-[20px] font-bold tracking-tight flex-1 text-right pr-1">
+          <span className="text-white text-[20px] font-bold tracking-tight flex-1 text-end pe-1">
             {draft === '' ? '0' : draft}
           </span>
           <button onClick={onClose} className="p-1.5 hover:bg-white/5 rounded-lg text-gray-400 shrink-0">
@@ -119,7 +121,7 @@ export function NumericKeypad({ value, onConfirm, onClose, allowDecimal = false 
           <button onClick={confirm}
             className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-2.5 rounded-btn transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-[14px]">
             <FiCheck size={16} />
-            Confirm
+            {t('actions.confirm')}
           </button>
         </div>
       </div>
@@ -129,6 +131,7 @@ export function NumericKeypad({ value, onConfirm, onClose, allowDecimal = false 
 }
 
 export function CommonPills({ values, current, onPick, infiniteLabel = false }) {
+  const { t } = useTranslation('common')
   return (
     <div className="flex flex-wrap gap-1.5">
       {values.map(v => {
@@ -157,7 +160,7 @@ export function CommonPills({ values, current, onPick, infiniteLabel = false }) 
               ? 'bg-emerald-500 text-white border-emerald-500'
               : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
           }`}
-          title="Unlimited"
+          title={t('numberFields.unlimited')}
         >
           <MdAllInclusive size={14} />
         </button>

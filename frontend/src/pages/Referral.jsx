@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useApp } from '../context/AppContext'
+import { useLanguage } from '../context/LanguageContext'
 import client from '../api/client'
+import { formatDateShort } from '../utils/dates'
 
 const CopyIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -45,7 +48,9 @@ const TrophyIcon = () => (
 )
 
 export default function Referral() {
+  const { t } = useTranslation('referral')
   const { user, loading, refreshUser } = useApp()
+  const { dir } = useLanguage()
   const [copied, setCopied] = useState(false)
   const [togglingType, setTogglingType] = useState(false)
   const [referrals, setReferrals] = useState(null)
@@ -108,7 +113,7 @@ export default function Referral() {
   const handleShare = () => {
     if (!user?.telegram_id || !hasBotUsername) return
     const tg = window.Telegram?.WebApp
-    const shareText = `Join Raha VPN and get premium VPN service!`
+    const shareText = t('shareText')
     const shareUrl = `https://t.me/${botUsername}?start=${user.telegram_id}`
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)
@@ -154,47 +159,47 @@ export default function Referral() {
     <div className="px-4 py-5 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-white">Referral Program</h1>
-        <p className="text-slate-400 text-sm">Earn bonus by inviting friends</p>
+        <h1 className="text-xl font-bold text-white">{t('header.title')}</h1>
+        <p className="text-slate-400 text-sm">{t('header.subtitle')}</p>
       </div>
 
       {/* Leaderboard */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
         <div className="flex items-center gap-2 text-amber-400">
           <TrophyIcon />
-          <span className="font-semibold text-sm">Referral Leaderboard</span>
+          <span className="font-semibold text-sm">{t('leaderboard.title')}</span>
         </div>
         {leaderboardLoading ? (
           <div className="skeleton h-20 w-full rounded-xl" />
         ) : leaderboard.length === 0 ? (
-          <p className="text-slate-500 text-xs text-center py-4">No referrals yet. Be the first to invite friends!</p>
+          <p className="text-slate-500 text-xs text-center py-4">{t('leaderboard.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-500 border-b border-slate-700">
-                  <th className="text-left pb-2 pr-3">#</th>
-                  <th className="text-left pb-2 pr-3">User</th>
-                  <th className="text-right pb-2 pr-3">Referred</th>
-                  <th className="text-right pb-2">Bonuses</th>
+                  <th className="text-start pb-2 pe-3">{t('leaderboard.rank')}</th>
+                  <th className="text-start pb-2 pe-3">{t('leaderboard.user')}</th>
+                  <th className="text-end pb-2 pe-3">{t('leaderboard.referred')}</th>
+                  <th className="text-end pb-2">{t('leaderboard.bonuses')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
                 {leaderboard.map((entry, i) => (
                   <tr key={entry.telegram_id} className="text-slate-300">
-                    <td className="py-2 pr-3">
-                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
-                        i === 0 ? 'bg-amber-500/20 text-amber-400' :
-                        i === 1 ? 'bg-slate-400/20 text-slate-300' :
-                        i === 2 ? 'bg-amber-700/20 text-amber-600' :
-                        'bg-slate-700/60 text-slate-500'
-                      }`}>
-                        {i + 1}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 truncate max-w-[100px]">{entry.username || entry.telegram_id}</td>
-                    <td className="py-2 pr-3 text-right font-medium">{entry.referred_count}</td>
-                    <td className="py-2 text-right text-[10px] whitespace-nowrap">
+                      <td className="py-2 pe-3">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
+                          i === 0 ? 'bg-amber-500/20 text-amber-400' :
+                          i === 1 ? 'bg-slate-400/20 text-slate-300' :
+                          i === 2 ? 'bg-amber-700/20 text-amber-600' :
+                          'bg-slate-700/60 text-slate-500'
+                        }`}>
+                          {i + 1}
+                        </span>
+                      </td>
+                      <td className="py-2 pe-3 truncate max-w-[100px]">{entry.username || entry.telegram_id}</td>
+                      <td className="py-2 pe-3 text-end font-medium">{entry.referred_count}</td>
+                      <td className="py-2 text-end text-[10px] whitespace-nowrap">
                       {entry.total_usdt_bonus > 0 && <span className="text-emerald-400">${entry.total_usdt_bonus.toFixed(2)}</span>}
                       {entry.total_usdt_bonus > 0 && entry.total_traffic_bonus > 0 && <span className="text-slate-600"> | </span>}
                       {entry.total_traffic_bonus > 0 && <span className="text-blue-400">{entry.total_traffic_bonus.toFixed(2)} GB</span>}
@@ -212,7 +217,7 @@ export default function Referral() {
       <div className="bg-gradient-to-br from-emerald-900/60 to-teal-900/60 rounded-2xl ring-1 ring-emerald-700/40 p-5 space-y-4">
         <div className="flex items-center gap-2 text-emerald-400">
           <GiftIcon />
-          <span className="font-semibold text-sm">Your Referral Link</span>
+          <span className="font-semibold text-sm">{t('link.title')}</span>
         </div>
 
         {loading ? (
@@ -227,7 +232,7 @@ export default function Referral() {
               className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors flex-shrink-0"
             >
               <CopyIcon />
-              {copied ? 'Copied!' : 'Copy'}
+              {copied ? t('link.copied') : t('link.copy')}
             </button>
           </div>
         )}
@@ -238,12 +243,12 @@ export default function Referral() {
           className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl transition-colors"
         >
           <ShareIcon />
-          Share with Friends
+          {t('link.share')}
         </button>
 
         {!hasBotUsername && (
           <p className="text-amber-300 text-xs">
-            Referral sharing is unavailable because this app is not fully configured. Please contact support.
+            {t('link.unavailable')}
           </p>
         )}
       </div>
@@ -252,9 +257,9 @@ export default function Referral() {
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-slate-300 text-sm font-semibold">Reward Type</p>
+            <p className="text-slate-300 text-sm font-semibold">{t('rewardType.title')}</p>
             <p className="text-slate-500 text-xs mt-0.5">
-              {isTraffic ? 'Earn bonus as GB traffic' : 'Earn bonus as USDT wallet balance'}
+              {isTraffic ? t('rewardType.traffic') : t('rewardType.usdt')}
             </p>
           </div>
           <button
@@ -266,7 +271,9 @@ export default function Referral() {
           >
             <span
               className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                isTraffic ? 'translate-x-8' : 'translate-x-1'
+                isTraffic
+                  ? (dir === 'rtl' ? '-translate-x-8' : 'translate-x-8')
+                  : (dir === 'rtl' ? '-translate-x-1' : 'translate-x-1')
               }`}
             />
           </button>
@@ -284,12 +291,12 @@ export default function Referral() {
       {/* Bonus summary */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
         <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">
-          Users Referred: <span className="text-white font-bold">{totalReferredUsers}</span>
+          {t('summary.usersReferred')} <span className="text-white font-bold">{t('summary.usersReferredCount', { count: totalReferredUsers })}</span>
         </p>
-        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Pending Referral Bonuses</p>
+        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">{t('summary.pendingBonuses')}</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
-            <p className="text-slate-500 text-[10px] mb-1">USDT Bonus</p>
+            <p className="text-slate-500 text-[10px] mb-1">{t('summary.usdtBonus')}</p>
             {referralsLoading ? (
               <div className="skeleton h-6 w-16" />
             ) : (
@@ -297,7 +304,7 @@ export default function Referral() {
             )}
           </div>
           <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
-            <p className="text-slate-500 text-[10px] mb-1">Traffic Bonus</p>
+            <p className="text-slate-500 text-[10px] mb-1">{t('summary.trafficBonus')}</p>
             {referralsLoading ? (
               <div className="skeleton h-6 w-16" />
             ) : (
@@ -311,48 +318,48 @@ export default function Referral() {
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
         >
           <ChargeIcon />
-          {charging ? 'Charging…' : 'Charge my balances'}
+          {charging ? t('summary.charging') : t('summary.charge')}
         </button>
       </div>
 
       {/* Referrals table */}
       <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-4 space-y-3">
-        <h3 className="text-slate-300 font-semibold text-sm">Your Referrals</h3>
+        <h3 className="text-slate-300 font-semibold text-sm">{t('yourReferrals.title')}</h3>
         {referralsLoading ? (
           <div className="skeleton h-20 w-full rounded-xl" />
         ) : !referrals || referrals.length === 0 ? (
-          <p className="text-slate-500 text-xs text-center py-4">No referral bonuses yet. Share your link to earn!</p>
+          <p className="text-slate-500 text-xs text-center py-4">{t('yourReferrals.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-500 border-b border-slate-700">
-                  <th className="text-left pb-2 pr-3">User</th>
-                  <th className="text-left pb-2 pr-3">Layer</th>
-                  <th className="text-left pb-2 pr-3">Type</th>
-                  <th className="text-right pb-2 pr-3">Amount</th>
-                  <th className="text-right pb-2">Date</th>
+                  <th className="text-start pb-2 pe-3">{t('yourReferrals.user')}</th>
+                  <th className="text-start pb-2 pe-3">{t('yourReferrals.layer')}</th>
+                  <th className="text-start pb-2 pe-3">{t('yourReferrals.type')}</th>
+                  <th className="text-end pb-2 pe-3">{t('yourReferrals.amount')}</th>
+                  <th className="text-end pb-2">{t('yourReferrals.date')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
                 {referrals.map((r, i) => (
                   <tr key={i} className="text-slate-300">
-                    <td className="py-2 pr-3 truncate max-w-[80px]">{r.username || r.referred_id}</td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2 pe-3 truncate max-w-[80px]">{r.username || r.referred_id}</td>
+                    <td className="py-2 pe-3">
                       <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-700/60 text-slate-400">
                         L{r.layer ?? 1}
                       </span>
                     </td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2 pe-3">
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${r.type === 'traffic' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
                         {r.type === 'traffic' ? 'GB' : 'USDT'}
                       </span>
                     </td>
-                    <td className="py-2 pr-3 text-right font-mono">
+                    <td className="py-2 pe-3 text-end font-mono">
                       {r.type === 'traffic' ? `${r.amount.toFixed(2)} GB` : `$${r.amount.toFixed(2)}`}
                     </td>
-                    <td className="py-2 text-right text-slate-500">
-                      {new Date(r.date).toLocaleDateString()}
+                    <td className="py-2 text-end text-slate-500">
+                      {formatDateShort(r.date)}
                     </td>
                   </tr>
                 ))}

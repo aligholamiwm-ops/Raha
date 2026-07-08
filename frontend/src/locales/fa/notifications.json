@@ -1,1 +1,35 @@
-{}
+{
+  "panel": {
+    "title": "اعلان‌ها",
+    "newCount": "({{count}} جدید)",
+    "markAllRead": "همه را به عنوان خوانده شده علامت بزن",
+    "empty": "هنوز اعلانی ندارید"
+  },
+  "detail": {
+    "details": "جزئیات",
+    "delete": "حذف"
+  },
+  "relativeTime": {
+    "now": "اکنون",
+    "minutesAgo": "{{minutes}} دقیقه پیش",
+    "hoursAgo": "{{hours}} ساعت پیش",
+    "daysAgo": "{{days}} روز پیش"
+  },
+  "severity": {
+    "success": "موفق",
+    "warning": "هشدار",
+    "error": "خطا"
+  },
+  "metadata": {
+    "amount": "مبلغ: ${{amount}}",
+    "traffic": "ترافیک: {{traffic}} گیگابایت",
+    "plan": "پلن: {{plan}}",
+    "loanId": "شناسه وام: {{id}}",
+    "ticket": "تیکت: {{id}}",
+    "referralLayer": "لایه دعوت: {{layer}}",
+    "method": "روش: {{method}}"
+  },
+  "errors": {
+    "loadFailed": "بارگذاری اعلان‌ها ناموفق بود"
+  }
+}

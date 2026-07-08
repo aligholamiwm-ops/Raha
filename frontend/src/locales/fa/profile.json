@@ -1,1 +1,143 @@
-{}
+{
+  "tabs": {
+    "account": "حساب",
+    "support": "پشتیبانی",
+    "me": "من"
+  },
+  "balance": {
+    "wallet": "کیف پول",
+    "traffic": "ترافیک",
+    "loan": "وام"
+  },
+  "store": {
+    "plans": "پلن‌ها",
+    "deposit": "واریز",
+    "withdraw": "برداشت",
+    "loans": "وام‌ها"
+  },
+  "plans": {
+    "buy": "خرید"
+  },
+  "buy": {
+    "confirmPurchase": "تأیید خرید",
+    "plan": "پلن",
+    "traffic": "ترافیک",
+    "basePrice": "قیمت پایه",
+    "youPay": "شما پرداخت می‌کنید",
+    "discountPlaceholder": "کد تخفیف",
+    "apply": "اعمال",
+    "insufficientBalance": "موجودی کیف پول ناکافی است — به پرداخت ارز دیجیتال هدایت می‌شوید",
+    "cancel": "لغو",
+    "processing": "در حال پردازش...",
+    "confirm": "تأیید",
+    "discount": "تخفیف",
+    "off": "تخفیف",
+    "invalidCode": "کد تخفیف نامعتبر",
+    "available": "موجودی: ${{amount}} USDT",
+    "days": "روز"
+  },
+  "account": {
+    "paymentLinkOpened": "لینک پرداخت باز شد.",
+    "failedPayment": "ایجاد پرداخت ناموفق بود.",
+    "invoiceCreated": "فاکتور ایجاد شد!",
+    "failedDepositInvoice": "ایجاد فاکتور واریز ناموفق بود.",
+    "gbAdded": "+{{gb}} گیگابایت به موجودی شما اضافه شد.",
+    "invoiceCreatedOpen": "فاکتور ایجاد شد! پرداخت را در پنجره باز شده تکمیل کنید.",
+    "failedRequest": "پردازش درخواست ناموفق بود.",
+    "availablePlans": "پلن‌های موجود",
+    "noPlans": "پلنی موجود نیست",
+    "initializing3d": "در حال راه‌اندازی نمایشگر سه‌بعدی...",
+    "purchaseHistory": "تاریخچه خرید",
+    "purchaseDate": "تاریخ",
+    "purchasePlan": "پلن",
+    "purchasePrice": "قیمت",
+    "purchaseTraffic": "ترافیک",
+    "withdrawTitle": "برداشت موجودی",
+    "withdrawDesc": "یک تیکت برداشت با آدرس کیف پول USDT و شبکه خود ثبت کنید.",
+    "createWithdrawTicket": "ایجاد تیکت برداشت",
+    "freeTrial": "هدیه بابانوئل"
+  },
+  "deposit": {
+    "title": "واریز USDT",
+    "subtitle": "به کیف پول خود اضافه کنید",
+    "quickAmounts": "مبالغ سریع",
+    "customAmount": "مبلغ دلخواه",
+    "button": "واریز",
+    "info": "پرداخت‌ها به صورت USDT از طریق Plisio انجام می‌شود. موجودی پس از تأیید به‌روز می‌شود."
+  },
+  "loans": {
+    "noLoans": "بدون وام",
+    "noLoansDesc": "هیچ وام پرداخت‌نشده‌ای ندارید",
+    "outstanding": "بدهی جاری",
+    "unpaid": "پرداخت‌نشده ({{count}})",
+    "settled": "تسویه‌شده ({{count}})",
+    "payNow": "پرداخت کن",
+    "processing": "در حال پردازش...",
+    "settledBadge": "تسویه شده",
+    "unpaidBadge": "پرداخت نشده"
+  },
+  "me": {
+    "unknown": "ناشناس",
+    "charLimit": "باید بین 2 تا 32 کاراکتر باشد",
+    "failedSave": "ذخیره ناموفق بود",
+    "username": "نام کاربری",
+    "edit": "ویرایش",
+    "notSet": "تنظیم نشده",
+    "unique": "یکتا",
+    "placeholder": "نام کاربری را وارد کنید...",
+    "available": "در دسترس",
+    "taken": "قبلاً گرفته شده",
+    "cancel": "لغو",
+    "save": "ذخیره",
+    "updated": "نام کاربری به‌روز شد!",
+    "hint": "2 تا 32 کاراکتر · باید در بین همه کاربران یکتا باشد",
+    "account": "حساب",
+    "language": "زبان",
+    "langUpdated": "زبان به‌روز شد"
+  },
+  "support": {
+    "dashboard": "داشبورد پشتیبانی",
+    "title": "پشتیبانی",
+    "manage": "مدیریت تیکت‌ها",
+    "hereToHelp": "ما برای کمک اینجا هستیم",
+    "newTicket": "جدید",
+    "failedLoad": "بارگذاری تیکت‌ها ناموفق بود",
+    "allStatus": "همه وضعیت‌ها",
+    "statusOpen": "باز",
+    "statusWaiting": "در انتظار",
+    "statusClosed": "بسته شده",
+    "allCategories": "همه دسته‌ها",
+    "byCreated": "بر اساس تاریخ ایجاد",
+    "byUpdated": "بر اساس تاریخ به‌روزرسانی",
+    "newestFirst": "جدیدترین",
+    "oldestFirst": "قدیمی‌ترین",
+    "noTickets": "هنوز تیکتی وجود ندارد",
+    "openTicket": "ایجاد تیکت"
+  },
+  "newTicket": {
+    "title": "تیکت جدید",
+    "titlePlaceholder": "عنوان مختصر...",
+    "withdrawalAddressPlaceholder": "آدرس کیف پول USDT",
+    "withdrawalNetworkLabel": "شبکه USDT *",
+    "warningInfo": "آدرس کیف پول خود را دوباره بررسی کنید. اطلاعات نادرست ممکن است منجر به از دست رفتن وجوه شود.",
+    "messageLabel": "پیام",
+    "messagePlaceholder": "مشکل خود را توضیح دهید...",
+    "submit": "ارسال",
+    "usdtAddressRequired": "آدرس USDT الزامی است",
+    "failedCreate": "ایجاد تیکت ناموفق بود"
+  },
+  "ticket": {
+    "failedLoad": "بارگذاری تیکت ناموفق بود",
+    "failedReply": "ارسال ناموفق بود",
+    "confirmClose": "این تیکت بسته شود؟",
+    "failedClose": "بستن ناموفق بود",
+    "close": "بستن",
+    "noMessages": "پیامی وجود ندارد",
+    "supportRole": "پشتیبانی",
+    "adminRole": "مدیر",
+    "replyPlaceholder": "پاسخ خود را بنویسید..."
+  },
+  "errors": {
+    "failedLoad": "بارگذاری تیکت‌ها ناموفق بود"
+  }
+}

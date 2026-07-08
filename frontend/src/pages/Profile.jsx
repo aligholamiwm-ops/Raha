@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { useLanguage } from '../context/LanguageContext'
+import { SUPPORTED_LANGUAGES } from '../i18n/languages'
 import {
   createInvoice, createDepositInvoice, getMyLoans, payLoan, validateDiscount,
   getMyTickets, getAllTickets, createTicket, getTicket, replyTicket, updateTicketStatus,
@@ -44,8 +47,21 @@ import {
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
   FiPackage, FiTag, FiX, FiUser, FiEdit2, FiSend,
   FiMessageSquare, FiPlus, FiChevronLeft, FiDollarSign, FiDatabase,
-  FiChevronDown, FiExternalLink,
+  FiChevronDown, FiExternalLink, FiGlobe,
 } from 'react-icons/fi'
+import { formatDate, formatDateTime, formatDateShort } from '../utils/dates'
+
+function formatGregorian(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  return `${y}-${mo}-${dd} ${h}:${mi}`
+}
 
 import androidIcon from '../../icons/android.png'
 import appleIcon from '../../icons/apple.png'
@@ -107,11 +123,6 @@ function VolumeCube({ side, color }) {
   )
 }
 
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
 const CATEGORIES = ['connection', 'help', 'withdrawal', 'cooperation']
 const COL_W = 108
 const MAX_SIDE = 64
@@ -120,10 +131,11 @@ const DEPOSIT_PRESETS = [5, 10, 20, 50]
 
 /* ─── Top Tab Bar ─────────────────────────────────────────────────── */
 function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
+  const { t } = useTranslation('profile')
   const tabs = [
-    { id: 'account', icon: FiDollarSign, label: 'Account' },
-    { id: 'support', icon: FiMessageSquare, label: 'Support', badge: ticketBadge },
-    { id: 'me',      icon: FiUser,         label: 'Me' },
+    { id: 'account', icon: FiDollarSign, label: t('tabs.account') },
+    { id: 'support', icon: FiMessageSquare, label: t('tabs.support'), badge: ticketBadge },
+    { id: 'me',      icon: FiUser,         label: t('tabs.me') },
   ]
   return (
     <div className="flex gap-1 bg-slate-800/80 border border-slate-700 rounded-2xl p-1">
@@ -140,10 +152,10 @@ function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
           <t.icon size={14} />
           <span>{t.label}</span>
           {t.badge && (
-            <span className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+            <span className="absolute top-1.5 end-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
           )}
           {t.id === 'account' && loanBadge && (
-            <span className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+            <span className="absolute top-1.5 end-2 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
           )}
         </button>
       ))}
@@ -153,12 +165,13 @@ function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
 
 /* ─── Balance Cards ───────────────────────────────────────────────── */
 function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
+  const { t } = useTranslation('profile')
   return (
     <div className="grid grid-cols-3 gap-2.5">
       <div className="bg-gradient-to-br from-emerald-900/60 to-emerald-800/40 border border-emerald-700/40 rounded-2xl p-3.5">
         <div className="flex items-center gap-1.5 mb-1.5">
           <FiDollarSign size={12} className="text-emerald-400" />
-          <p className="text-[10px] text-emerald-400 font-medium">Wallet</p>
+          <p className="text-[10px] text-emerald-400 font-medium">{t('balance.wallet')}</p>
         </div>
         <p className="text-lg font-bold text-white">${(walletUsd || 0).toFixed(2)}</p>
         <p className="text-[9px] text-emerald-600 mt-0.5">USDT</p>
@@ -166,7 +179,7 @@ function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
       <div className="bg-gradient-to-br from-blue-900/60 to-blue-800/40 border border-blue-700/40 rounded-2xl p-3.5">
         <div className="flex items-center gap-1.5 mb-1.5">
           <FiDatabase size={12} className="text-blue-400" />
-          <p className="text-[10px] text-blue-400 font-medium">Traffic</p>
+          <p className="text-[10px] text-blue-400 font-medium">{t('balance.traffic')}</p>
         </div>
         <p className="text-lg font-bold text-white">{(trafficGb || 0).toFixed(2)}</p>
         <p className="text-[9px] text-blue-600 mt-0.5">GB</p>
@@ -174,7 +187,7 @@ function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
       <div className="bg-gradient-to-br from-rose-900/60 to-rose-800/40 border border-rose-700/40 rounded-2xl p-3.5">
         <div className="flex items-center gap-1.5 mb-1.5">
           <FiAlertCircle size={12} className="text-rose-400" />
-          <p className="text-[10px] text-rose-400 font-medium">Loan</p>
+          <p className="text-[10px] text-rose-400 font-medium">{t('balance.loan')}</p>
         </div>
         <p className="text-lg font-bold text-white">${(unpaidLoan || 0).toFixed(2)}</p>
         <p className="text-[9px] text-rose-600 mt-0.5">USDT</p>
@@ -185,11 +198,12 @@ function BalanceCards({ walletUsd, trafficGb, unpaidLoan }) {
 
 /* ─── Store Sub-tabs ──────────────────────────────────────────────── */
 function StoreTabBar({ active, onChange, loanBadge }) {
+  const { t } = useTranslation('profile')
   const tabs = [
-    { id: 'plans',      icon: FiShoppingCart, label: 'Plans' },
-    { id: 'deposit',    icon: FiArrowUp,      label: 'Deposit' },
-    { id: 'withdrawal', icon: FiArrowDown,    label: 'Withdraw' },
-    { id: 'loans',      icon: FiCreditCard,   label: 'Loans', badge: loanBadge },
+    { id: 'plans',      icon: FiShoppingCart, label: t('store.plans') },
+    { id: 'deposit',    icon: FiArrowUp,      label: t('store.deposit') },
+    { id: 'withdrawal', icon: FiArrowDown,    label: t('store.withdraw') },
+    { id: 'loans',      icon: FiCreditCard,   label: t('store.loans'), badge: loanBadge },
   ]
   return (
     <div className="flex gap-1 bg-slate-900/60 border border-slate-700/60 rounded-xl p-1">
@@ -205,7 +219,7 @@ function StoreTabBar({ active, onChange, loanBadge }) {
         >
           <t.icon size={13} />
           {t.label}
-          {t.badge && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />}
+          {t.badge && <span className="absolute top-0.5 end-0.5 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />}
         </button>
       ))}
     </div>
@@ -214,6 +228,7 @@ function StoreTabBar({ active, onChange, loanBadge }) {
 
 /* ─── Plans Grid ──────────────────────────────────────────────────── */
 function PlansGrid({ plans, maxTrafficGb, onBuy, buying, selectedPlan, onSelectPlan }) {
+  const { t } = useTranslation('profile')
   const sorted = [...plans].sort((a, b) => (a.traffic_gb || 0) - (b.traffic_gb || 0))
   const n = sorted.length
   const max = maxTrafficGb || 1
@@ -281,7 +296,7 @@ function PlansGrid({ plans, maxTrafficGb, onBuy, buying, selectedPlan, onSelectP
                     busy ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white shadow-md'
                   }`}
                 >
-                  {busy ? <FiLoader size={9} className="animate-spin" /> : 'Buy'}
+                  {busy ? <FiLoader size={9} className="animate-spin" /> : t('plans.buy')}
                 </button>
               </div>
             </React.Fragment>
@@ -294,6 +309,7 @@ function PlansGrid({ plans, maxTrafficGb, onBuy, buying, selectedPlan, onSelectP
 
 /* ─── Buy Confirm Modal ───────────────────────────────────────────── */
 function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
+  const { t } = useTranslation('profile')
   const [discountCode, setDiscountCode] = useState('')
   const [validating, setValidating] = useState(false)
   const [appliedDiscount, setAppliedDiscount] = useState(null)
@@ -311,7 +327,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
       const result = await validateDiscount(discountCode.trim())
       setAppliedDiscount(result)
     } catch (e) {
-      setDiscountError(e?.response?.data?.detail || 'Invalid discount code')
+      setDiscountError(e?.response?.data?.detail || t('buy.invalidCode'))
     } finally { setValidating(false) }
   }
 
@@ -320,7 +336,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end justify-center px-4 pt-4 pb-24 animate-in fade-in duration-200">
       <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-3xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <h3 className="text-white font-bold text-base">Confirm Purchase</h3>
+          <h3 className="text-white font-bold text-base">{t('buy.confirmPurchase')}</h3>
           <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-700 text-slate-400">
             <FiX size={16} />
           </button>
@@ -328,25 +344,25 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
         <div className="px-5 pb-5 space-y-4">
           <div className="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 text-xs">Plan</span>
+              <span className="text-slate-400 text-xs">{t('buy.plan')}</span>
               <span className="text-white font-bold text-sm">{parseDuration(plan.plan_name)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 text-xs">Traffic</span>
+              <span className="text-slate-400 text-xs">{t('buy.traffic')}</span>
               <span className="text-emerald-400 font-bold text-sm">{plan.traffic_gb} GB</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 text-xs">Base Price</span>
+              <span className="text-slate-400 text-xs">{t('buy.basePrice')}</span>
               <span className="text-white text-sm">${basePrice.toFixed(2)}</span>
             </div>
             {appliedDiscount && (
               <div className="flex items-center justify-between text-emerald-400">
-                <span className="text-xs flex items-center gap-1"><FiTag size={10} /> Discount ({discountPct}%)</span>
+                <span className="text-xs flex items-center gap-1"><FiTag size={10} /> {t('buy.discount')} ({discountPct}%)</span>
                 <span className="text-sm font-bold">−${(basePrice - finalPrice).toFixed(2)}</span>
               </div>
             )}
             <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
-              <span className="text-slate-300 text-xs font-medium">You Pay</span>
+              <span className="text-slate-300 text-xs font-medium">{t('buy.youPay')}</span>
               <span className="text-white font-black text-base">${finalPrice.toFixed(2)} <span className="text-slate-400 text-xs font-normal">USDT</span></span>
             </div>
           </div>
@@ -355,7 +371,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Discount code"
+                  placeholder={t('buy.discountPlaceholder')}
                   value={discountCode}
                   onChange={e => { setDiscountCode(e.target.value); setDiscountError(null) }}
                   onKeyDown={e => e.key === 'Enter' && handleApplyDiscount()}
@@ -366,7 +382,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
                   disabled={!discountCode.trim() || validating}
                   className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl"
                 >
-                  {validating ? <FiLoader size={14} className="animate-spin" /> : 'Apply'}
+                  {validating ? <FiLoader size={14} className="animate-spin" /> : t('buy.apply')}
                 </button>
               </div>
               {discountError && <p className="text-rose-400 text-xs mt-1 flex items-center gap-1"><FiAlertCircle size={11} />{discountError}</p>}
@@ -376,7 +392,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
               <div className="flex items-center gap-2">
                 <FiTag className="text-emerald-400" size={14} />
                 <span className="text-emerald-400 font-bold text-sm">{appliedDiscount.code}</span>
-                <span className="text-emerald-300 text-xs">({discountPct}% off)</span>
+                <span className="text-emerald-300 text-xs">({discountPct}% {t('buy.off')})</span>
               </div>
               <button onClick={() => { setAppliedDiscount(null); setDiscountCode('') }} className="text-slate-400 hover:text-rose-400">
                 <FiX size={14} />
@@ -385,11 +401,11 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
           )}
           {!canAfford && (
             <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">
-              <FiInfo size={12} /> Insufficient wallet balance — will redirect to crypto payment
+              <FiInfo size={12} /> {t('buy.insufficientBalance')}
             </div>
           )}
           <div className="flex gap-3 pt-1">
-            <button onClick={onCancel} className="flex-1 py-3 rounded-2xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">Cancel</button>
+            <button onClick={onCancel} className="flex-1 py-3 rounded-2xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">{t('buy.cancel')}</button>
             <button
               onClick={() => onConfirm(plan, appliedDiscount?.code || null)}
               disabled={buying === plan.plan_name}
@@ -397,7 +413,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
                 buying === plan.plan_name ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25'
               }`}
             >
-              {buying === plan.plan_name ? <><FiLoader size={13} className="animate-spin" /> Processing…</> : <><FiCheck size={13} /> Confirm</>}
+              {buying === plan.plan_name ? <><FiLoader size={13} className="animate-spin" /> {t('buy.processing')}</> : <><FiCheck size={13} /> {t('buy.confirm')}</>}
             </button>
           </div>
         </div>
@@ -408,6 +424,7 @@ function BuyConfirmModal({ plan, walletBalance, onConfirm, onCancel, buying }) {
 
 /* ─── Account Tab ─────────────────────────────────────────────────── */
 function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewState, onWithdrawTicket }) {
+  const { t } = useTranslation('profile')
   const [storeTab, setStoreTab] = useState(renewState?.renewUuid ? 'plans' : 'plans')
   const [buyingPlan, setBuyingPlan] = useState(null)
   const [loans, setLoans] = useState([])
@@ -462,9 +479,9 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
       if (url) {
         const tg = window.Telegram?.WebApp
         tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
-        setSuccess('Payment link opened.')
+        setSuccess(t('account.paymentLinkOpened'))
       }
-    } catch (e) { setError(e?.response?.data?.detail || 'Failed to create payment.') }
+    } catch (e) { setError(e?.response?.data?.detail || t('account.failedPayment')) }
     finally { setPayingLoan(null) }
   }
 
@@ -476,9 +493,9 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
       if (url && typeof url === 'string') {
         const tg = window.Telegram?.WebApp
         tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
-        setSuccess('Invoice created!')
+        setSuccess(t('account.invoiceCreated'))
       }
-    } catch (e) { setError(e?.response?.data?.detail || 'Failed to create deposit invoice.') }
+    } catch (e) { setError(e?.response?.data?.detail || t('account.failedDepositInvoice')) }
     finally { setBuyingPlan(null) }
   }
 
@@ -488,17 +505,17 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
       const result = await createInvoice(plan.plan_name, 'USDT', discountCode)
       setConfirmPlan(null)
       if (result?.status === 'wallet_payment') {
-        setSuccess(`+${result.traffic_gb_added} GB added to your balance.`)
+        setSuccess(t('account.gbAdded', { gb: result.traffic_gb_added }))
         await refreshUser()
       } else {
         const url = result?.invoice_url || result?.url || result
         if (url && typeof url === 'string') {
           const tg = window.Telegram?.WebApp
           tg?.openLink ? tg.openLink(url) : window.open(url, '_blank')
-          setSuccess('Invoice created! Complete payment in the opened window.')
+          setSuccess(t('account.invoiceCreatedOpen'))
         }
       }
-    } catch (e) { setError(e?.response?.data?.detail || 'Failed to process request.') }
+    } catch (e) { setError(e?.response?.data?.detail || t('account.failedRequest')) }
     finally { setBuyingPlan(null) }
   }
 
@@ -526,7 +543,7 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-2 self-start">
             <FiShoppingCart className="text-emerald-400" size={14} />
-            <h2 className="text-slate-200 font-bold text-sm">Available Plans</h2>
+            <h2 className="text-slate-200 font-bold text-sm">{t('account.availablePlans')}</h2>
           </div>
           {plansLoading ? (
             <div className="flex gap-2 overflow-x-auto pb-1 w-full">
@@ -543,7 +560,7 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
           ) : plans.length === 0 ? (
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center w-full">
               <FiPackage className="text-slate-500 mx-auto mb-2" size={24} />
-              <p className="text-slate-400 text-sm">No plans available</p>
+              <p className="text-slate-400 text-sm">{t('account.noPlans')}</p>
             </div>
           ) : (
             <div className="space-y-4 w-full">
@@ -552,7 +569,7 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
                   <React.Suspense fallback={
                     <div className="flex flex-col items-center justify-center h-[180px] bg-slate-800/40 border border-slate-700/50 rounded-2xl animate-pulse w-full">
                       <FiLoader className="text-emerald-500 animate-spin mb-2" size={20} />
-                      <span className="text-xs text-slate-500 font-medium">Initializing 3D Visualizer...</span>
+                      <span className="text-xs text-slate-500 font-medium">{t('account.initializing3d')}</span>
                     </div>
                   }>
                     <PlanScene
@@ -580,23 +597,23 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2">
                 <FiPackage className="text-slate-400" size={14} />
-                <h3 className="text-slate-300 font-bold text-xs">Purchase History</h3>
+                <h3 className="text-slate-300 font-bold text-xs">{t('account.purchaseHistory')}</h3>
               </div>
               <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-slate-700/40">
-                        <th className="text-left text-slate-500 font-medium px-3 py-2">Date</th>
-                        <th className="text-left text-slate-500 font-medium px-3 py-2">Plan</th>
-                        <th className="text-left text-slate-500 font-medium px-3 py-2">Price</th>
-                        <th className="text-left text-slate-500 font-medium px-3 py-2">Traffic</th>
+                        <th className="text-start text-slate-500 font-medium px-3 py-2">{t('account.purchaseDate')}</th>
+                        <th className="text-start text-slate-500 font-medium px-3 py-2">{t('account.purchasePlan')}</th>
+                        <th className="text-start text-slate-500 font-medium px-3 py-2">{t('account.purchasePrice')}</th>
+                        <th className="text-start text-slate-500 font-medium px-3 py-2">{t('account.purchaseTraffic')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {[...(user?.purchase_history || [])].reverse().map((p, i) => (
                         <tr key={i} className="border-b border-slate-700/20 last:border-0">
-                          <td className="text-slate-300 px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
-                          <td className="text-slate-300 px-3 py-2">{p.plan_name || "—"}</td>
+                          <td className="text-slate-300 px-3 py-2 whitespace-nowrap">{formatGregorian(p.date)}</td>
+                          <td className="text-slate-300 px-3 py-2">{p.plan_name === 'Free Trial' ? t('account.freeTrial') : (p.plan_name || "—")}</td>
                           <td className="text-slate-300 px-3 py-2">${(p.price_usd || 0).toFixed(2)}</td>
                           <td className="text-slate-300 px-3 py-2">{(p.traffic_gb || 0).toFixed(1)} GB</td>
                         </tr>
@@ -619,9 +636,9 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
             <FiArrowDown className="text-amber-400" size={24} />
           </div>
           <div>
-            <h3 className="text-white font-bold text-sm mb-1.5">Withdraw Balance</h3>
+            <h3 className="text-white font-bold text-sm mb-1.5">{t('account.withdrawTitle')}</h3>
             <p className="text-slate-400 text-xs leading-relaxed">
-              Submit a withdrawal support ticket with your USDT wallet address and network.
+              {t('account.withdrawDesc')}
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
@@ -633,7 +650,7 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
             onClick={onWithdrawTicket}
             className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
           >
-            <FiChevronRight size={15} /> Create Withdrawal Ticket
+            <FiChevronRight size={15} className="rtl:rotate-180" /> {t('account.createWithdrawTicket')}
           </button>
         </div>
       )}
@@ -656,6 +673,7 @@ function AccountTab({ user, plans, loading: plansLoading, refreshUser, renewStat
 
 /* ─── Deposit Panel ───────────────────────────────────────────────── */
 function DepositPanel({ onDeposit, buying }) {
+  const { t } = useTranslation('profile')
   const [amount, setAmount] = useState('')
   return (
     <div className="space-y-3">
@@ -665,12 +683,12 @@ function DepositPanel({ onDeposit, buying }) {
             <FiArrowUp className="text-emerald-400" size={15} />
           </div>
           <div>
-            <h3 className="text-white font-bold text-sm">Deposit USDT</h3>
-            <p className="text-slate-400 text-xs">Add funds to your wallet</p>
+            <h3 className="text-white font-bold text-sm">{t('deposit.title')}</h3>
+            <p className="text-slate-400 text-xs">{t('deposit.subtitle')}</p>
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-400 mb-2">Quick amounts</p>
+          <p className="text-xs text-slate-400 mb-2">{t('deposit.quickAmounts')}</p>
           <div className="grid grid-cols-4 gap-2">
             {DEPOSIT_PRESETS.map(p => (
               <button
@@ -686,7 +704,7 @@ function DepositPanel({ onDeposit, buying }) {
           </div>
         </div>
         <div>
-          <p className="text-xs text-slate-400 mb-2">Custom amount</p>
+          <p className="text-xs text-slate-400 mb-2">{t('deposit.customAmount')}</p>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
@@ -695,7 +713,7 @@ function DepositPanel({ onDeposit, buying }) {
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-7 pr-3 py-3 text-white text-sm focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl ps-7 pe-3 py-3 text-white text-sm focus:outline-none focus:border-emerald-500"
                 min={1}
               />
             </div>
@@ -704,14 +722,14 @@ function DepositPanel({ onDeposit, buying }) {
               disabled={!amount || parseFloat(amount) <= 0 || !!buying}
               className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-5 rounded-xl"
             >
-              {buying ? <FiLoader size={16} className="animate-spin" /> : 'Deposit'}
+              {buying ? <FiLoader size={16} className="animate-spin" /> : t('deposit.button')}
             </button>
           </div>
         </div>
       </div>
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2.5 flex items-start gap-2">
         <FiInfo className="text-blue-400 flex-shrink-0 mt-0.5" size={12} />
-        <p className="text-xs text-blue-300">Payments processed in USDT via Plisio. Balance updates after confirmation.</p>
+        <p className="text-xs text-blue-300">{t('deposit.info')}</p>
       </div>
     </div>
   )
@@ -719,6 +737,7 @@ function DepositPanel({ onDeposit, buying }) {
 
 /* ─── Loans Panel ─────────────────────────────────────────────────── */
 function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
+  const { t } = useTranslation('profile')
   const unpaid = loans.filter(l => l.status === 'unpaid')
   const settled = loans.filter(l => l.status === 'settled')
   const totalUnpaid = unpaid.reduce((s, l) => s + (l.amount_usdt || 0), 0)
@@ -733,8 +752,8 @@ function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
       <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
         <FiCheck className="text-emerald-400" size={18} />
       </div>
-      <p className="text-white font-semibold text-sm">No Loans</p>
-      <p className="text-slate-400 text-xs mt-1">You have no outstanding loans</p>
+      <p className="text-white font-semibold text-sm">{t('loans.noLoans')}</p>
+      <p className="text-slate-400 text-xs mt-1">{t('loans.noLoansDesc')}</p>
     </div>
   )
   return (
@@ -743,30 +762,30 @@ function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
         <div className="bg-rose-900/30 border border-rose-700/40 rounded-2xl p-3.5 flex items-center gap-3">
           <FiAlertCircle className="text-rose-400 flex-shrink-0" size={18} />
           <div>
-            <p className="text-xs text-rose-400 font-medium">Outstanding Balance</p>
+            <p className="text-xs text-rose-400 font-medium">{t('loans.outstanding')}</p>
             <p className="text-base font-bold text-white">${totalUnpaid.toFixed(2)} USDT</p>
           </div>
         </div>
       )}
       {unpaid.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Unpaid ({unpaid.length})</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('loans.unpaid', { count: unpaid.length })}</p>
           <div className="space-y-2">
             {unpaid.map(loan => (
               <div key={loan.loan_id} className="bg-rose-900/20 border border-rose-700/30 rounded-2xl p-3.5">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <p className="text-white font-bold text-sm">${loan.amount_usdt?.toFixed(2)} USDT</p>
-                    <p className="text-[10px] text-slate-500">{new Date(loan.created_at).toLocaleDateString()}{loan.note && ` · ${loan.note}`}</p>
+                    <p className="text-[10px] text-slate-500">{formatDateShort(loan.created_at)}{loan.note && ` · ${loan.note}`}</p>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">Unpaid</span>
+                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">{t('loans.unpaidBadge')}</span>
                 </div>
                 <button
                   onClick={() => onPayLoan(loan)}
                   disabled={payingLoan === loan.loan_id}
                   className="w-full flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-400 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded-xl"
                 >
-                  {payingLoan === loan.loan_id ? <><FiLoader size={11} className="animate-spin" /> Processing…</> : <><FiCreditCard size={11} /> Pay Now</>}
+                  {payingLoan === loan.loan_id ? <><FiLoader size={11} className="animate-spin" /> {t('loans.processing')}</> : <><FiCreditCard size={11} /> {t('loans.payNow')}</>}
                 </button>
               </div>
             ))}
@@ -775,15 +794,15 @@ function LoansPanel({ loans, loading, onPayLoan, payingLoan }) {
       )}
       {settled.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Settled ({settled.length})</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('loans.settled', { count: settled.length })}</p>
           <div className="space-y-2">
             {settled.map(loan => (
               <div key={loan.loan_id} className="bg-emerald-900/20 border border-emerald-700/30 rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <p className="text-white font-medium text-sm">${loan.amount_usdt?.toFixed(2)} USDT</p>
-                  <p className="text-[10px] text-slate-500">{new Date(loan.created_at).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-slate-500">{formatDateShort(loan.created_at)}</p>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">✓ Settled</span>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">{t('loans.settledBadge')}</span>
               </div>
             ))}
           </div>
@@ -825,7 +844,7 @@ function LinksSection() {
       <div key={section.title} className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden">
         <button
           onClick={() => setExpandedIndex(expanded ? -1 : idx)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left text-white font-semibold text-sm hover:bg-slate-700/50 transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-start text-white font-semibold text-sm hover:bg-slate-700/50 transition-colors"
         >
           {section.title}
           <FiChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
@@ -847,7 +866,7 @@ function LinksSection() {
                       <button
                         key={i}
                         onClick={() => openLink(item.url)}
-                        className="w-full flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-xl text-xs text-slate-200 hover:bg-slate-700 hover:border-slate-600 transition-all text-left"
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-xl text-xs text-slate-200 hover:bg-slate-700 hover:border-slate-600 transition-all text-start"
                       >
                         <FiExternalLink size={12} className="text-emerald-400 flex-shrink-0" />
                         <span className="truncate">{item.label}</span>
@@ -866,11 +885,14 @@ function LinksSection() {
 
 /* ─── Support Tab ─────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
+  const { t } = useTranslation('profile')
   const styles = { open: 'bg-emerald-500/20 text-emerald-400', closed: 'bg-slate-600/50 text-slate-400', waiting_for_user: 'bg-yellow-500/20 text-yellow-400' }
-  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || styles.open}`}>{status.replace('_', ' ')}</span>
+  const labels = { open: t('support.statusOpen'), closed: t('support.statusClosed'), waiting_for_user: t('support.statusWaiting') }
+  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || styles.open}`}>{labels[status] || status.replace('_', ' ')}</span>
 }
 
 function SupportTab({ user, initialCategory, clearInitialCategory }) {
+  const { t } = useTranslation('profile')
   const [view, setView] = useState(initialCategory ? 'new' : 'list')
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
@@ -899,9 +921,9 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
         data = await getMyTickets()
       }
       setTickets(Array.isArray(data) ? data : [])
-    } catch { setError('Failed to load tickets'); setTickets([]) }
+    } catch { setError(t('support.failedLoad')); setTickets([]) }
     finally { setLoading(false) }
-  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder])
+  }, [isStaff, filterStatus, filterCategory, sortBy, sortOrder, t])
 
   useEffect(() => { loadTickets() }, [loadTickets])
 
@@ -944,15 +966,15 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
       <LinksSection />
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-white">{isStaff ? 'Support Dashboard' : 'Support'}</h2>
-          <p className="text-slate-400 text-xs">{isStaff ? 'Manage tickets' : "We're here to help"}</p>
+          <h2 className="text-base font-bold text-white">{isStaff ? t('support.dashboard') : t('support.title')}</h2>
+          <p className="text-slate-400 text-xs">{isStaff ? t('support.manage') : t('support.hereToHelp')}</p>
         </div>
         {!isStaff && (
           <button
             onClick={() => { setNewCategory(null); setView('new') }}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl"
           >
-            <FiPlus size={13} /> New
+            <FiPlus size={13} /> {t('support.newTicket')}
           </button>
         )}
       </div>
@@ -961,22 +983,22 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
         <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-3 space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
-              <option value="">All Status</option>
-              <option value="open">Open</option>
-              <option value="waiting_for_user">Waiting</option>
-              <option value="closed">Closed</option>
+              <option value="">{t('support.allStatus')}</option>
+              <option value="open">{t('support.statusOpen')}</option>
+              <option value="waiting_for_user">{t('support.statusWaiting')}</option>
+              <option value="closed">{t('support.statusClosed')}</option>
             </select>
             <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500 capitalize">
-              <option value="">All Categories</option>
+              <option value="">{t('support.allCategories')}</option>
               {CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
             </select>
             <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
-              <option value="created_at">By Created</option>
-              <option value="updated_at">By Updated</option>
+              <option value="created_at">{t('support.byCreated')}</option>
+              <option value="updated_at">{t('support.byUpdated')}</option>
             </select>
             <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500">
-              <option value="desc">Newest First</option>
-              <option value="asc">Oldest First</option>
+              <option value="desc">{t('support.newestFirst')}</option>
+              <option value="asc">{t('support.oldestFirst')}</option>
             </select>
           </div>
         </div>
@@ -990,10 +1012,10 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
         ) : tickets.length === 0 ? (
           <div className="bg-slate-800 rounded-xl ring-1 ring-slate-700 p-8 text-center space-y-3">
             <FiMessageSquare className="text-slate-500 mx-auto" size={24} />
-            <p className="text-slate-400 text-sm">No tickets yet</p>
+            <p className="text-slate-400 text-sm">{t('support.noTickets')}</p>
             {!isStaff && (
               <button onClick={() => { setNewCategory(null); setView('new') }} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-4 py-2 rounded-lg">
-                Open a Ticket
+                {t('support.openTicket')}
               </button>
             )}
           </div>
@@ -1002,7 +1024,7 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
             <button
               key={ticket.ticket_id}
               onClick={() => { setSelectedTicketId(ticket.ticket_id); setView('thread') }}
-              className="w-full text-left bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-3.5 space-y-1.5 transition-all"
+              className="w-full text-start bg-slate-800 rounded-xl ring-1 ring-slate-700 hover:ring-slate-500 p-3.5 space-y-1.5 transition-all"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-white font-medium text-sm truncate">{ticket.title || `Ticket #${ticket.ticket_id?.slice(0, 8)}`}</span>
@@ -1021,7 +1043,7 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
               )}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 capitalize">{ticket.category}</span>
-                <span className="text-slate-500 text-[10px]">{formatDate(ticket.created_at)}</span>
+                <span className="text-slate-500 text-[10px]">{formatDateTime(ticket.created_at)}</span>
               </div>
               {ticket.messages?.[0]?.text && (
                 <p className="text-slate-400 text-xs leading-relaxed line-clamp-2">{ticket.messages[0].text.slice(0, 100)}</p>
@@ -1036,6 +1058,7 @@ function SupportTab({ user, initialCategory, clearInitialCategory }) {
 
 /* ─── New Ticket Form ─────────────────────────────────────────────── */
 function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
+  const { t } = useTranslation('profile')
   const [category, setCategory] = useState(initialCategory || CATEGORIES[0])
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
@@ -1047,14 +1070,14 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!message.trim() || !title.trim()) return
-    if (category === 'withdrawal' && !usdtAddress.trim()) { setError('USDT address required'); return }
+    if (category === 'withdrawal' && !usdtAddress.trim()) { setError(t('newTicket.usdtAddressRequired')); return }
     setSubmitting(true); setError(null)
     try {
       const payload = { title: title.trim(), category, initial_message: message.trim() }
       if (category === 'withdrawal') { payload.usdt_address = usdtAddress.trim(); payload.usdt_network = usdtNetwork }
       const ticket = await createTicket(payload)
       onCreated(ticket)
-    } catch (err) { setError(err?.response?.data?.detail || 'Failed to create ticket') }
+    } catch (err) { setError(err?.response?.data?.detail || t('newTicket.failedCreate')) }
     finally { setSubmitting(false) }
   }
 
@@ -1062,9 +1085,9 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <button onClick={onCancel} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white">
-          <FiChevronLeft size={16} />
+          <FiChevronLeft size={16} className="rtl:rotate-180" />
         </button>
-        <h2 className="text-white font-bold text-base">New Ticket</h2>
+        <h2 className="text-white font-bold text-base">{t('newTicket.title')}</h2>
       </div>
 
       {error && <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-xs">{error}</div>}
@@ -1074,7 +1097,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
           type="text"
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder="Brief title…"
+          placeholder={t('newTicket.titlePlaceholder')}
           className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
           required
         />
@@ -1093,7 +1116,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
               type="text"
               value={usdtAddress}
               onChange={e => setUsdtAddress(e.target.value)}
-              placeholder="USDT wallet address"
+              placeholder={t('newTicket.withdrawalAddressPlaceholder')}
               className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 placeholder-slate-500"
               required
             />
@@ -1107,7 +1130,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
               <option value="TON">TON</option>
             </select>
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2.5">
-              <p className="text-blue-300 text-xs">Double-check your wallet address. Incorrect info may cause loss of funds.</p>
+              <p className="text-blue-300 text-xs">{t('newTicket.warningInfo')}</p>
             </div>
           </>
         )}
@@ -1116,7 +1139,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
           value={message}
           onChange={e => setMessage(e.target.value)}
           rows={5}
-          placeholder="Describe your issue…"
+          placeholder={t('newTicket.messagePlaceholder')}
           className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
           required
         />
@@ -1125,7 +1148,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
           disabled={submitting || !message.trim() || !title.trim()}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium text-sm py-3 rounded-xl"
         >
-          {submitting ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FiSend size={14} /> Submit</>}
+          {submitting ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><FiSend size={14} /> {t('newTicket.submit')}</>}
         </button>
       </form>
     </div>
@@ -1134,6 +1157,7 @@ function NewTicketForm({ onCreated, onCancel, initialCategory = null }) {
 
 /* ─── Ticket Thread ───────────────────────────────────────────────── */
 function TicketThread({ ticketId, onBack, isStaff }) {
+  const { t } = useTranslation('profile')
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(true)
   const [replyText, setReplyText] = useState('')
@@ -1143,9 +1167,9 @@ function TicketThread({ ticketId, onBack, isStaff }) {
 
   const loadTicket = useCallback(async () => {
     try { const data = await getTicket(ticketId); setTicket(data) }
-    catch { setError('Failed to load ticket') }
+    catch { setError(t('ticket.failedLoad')) }
     finally { setLoading(false) }
-  }, [ticketId])
+  }, [ticketId, t])
 
   useEffect(() => { loadTicket() }, [loadTicket])
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [ticket])
@@ -1155,14 +1179,14 @@ function TicketThread({ ticketId, onBack, isStaff }) {
     if (!replyText.trim()) return
     setSending(true); setError(null)
     try { await replyTicket(ticketId, replyText.trim()); setReplyText(''); await loadTicket() }
-    catch (err) { setError(err?.response?.data?.detail || 'Failed to send') }
+    catch (err) { setError(err?.response?.data?.detail || t('ticket.failedReply')) }
     finally { setSending(false) }
   }
 
   const handleClose = async () => {
-    if (!window.confirm('Close this ticket?')) return
+    if (!window.confirm(t('ticket.confirmClose'))) return
     try { await updateTicketStatus(ticketId, 'closed'); await loadTicket() }
-    catch (err) { setError(err?.response?.data?.detail || 'Failed to close') }
+    catch (err) { setError(err?.response?.data?.detail || t('ticket.failedClose')) }
   }
 
   const messages = ticket?.messages || []
@@ -1170,7 +1194,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
     <div className="flex flex-col" style={{ minHeight: '60vh' }}>
       <div className="flex items-center gap-2 mb-3">
         <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex-shrink-0">
-          <FiChevronLeft size={16} />
+          <FiChevronLeft size={16} className="rtl:rotate-180" />
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-white font-semibold text-sm truncate">
@@ -1185,7 +1209,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {isStaff && ticket?.status !== 'closed' && (
-            <button onClick={handleClose} className="text-rose-400 text-xs hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10">Close</button>
+            <button onClick={handleClose} className="text-rose-400 text-xs hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10">{t('ticket.close')}</button>
           )}
           <button onClick={loadTicket} className="text-emerald-400 text-xs hover:text-emerald-300">↻</button>
         </div>
@@ -1197,16 +1221,16 @@ function TicketThread({ ticketId, onBack, isStaff }) {
         ) : error ? (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2.5 text-red-400 text-xs">{error}</div>
         ) : messages.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-8">No messages</p>
+          <p className="text-slate-500 text-sm text-center py-8">{t('ticket.noMessages')}</p>
         ) : (
           messages.map((msg, idx) => {
             const isUser = msg.sender_role === 'user' || msg.sender === 'user'
             return (
               <div key={msg.id ?? idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 space-y-0.5 ${isUser ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-700 text-slate-200 rounded-bl-sm'}`}>
-                  {!isUser && <p className="text-[10px] font-semibold text-emerald-400">{msg.sender_role === 'support' ? 'Support' : 'Admin'}</p>}
+                  {!isUser && <p className="text-[10px] font-semibold text-emerald-400">{msg.sender_role === 'support' ? t('ticket.supportRole') : t('ticket.adminRole')}</p>}
                   <p className="text-sm leading-relaxed">{msg.text || ''}</p>
-                  <p className={`text-[10px] ${isUser ? 'text-blue-300' : 'text-slate-500'} text-right`}>{formatDate(msg.created_at)}</p>
+                  <p className={`text-[10px] ${isUser ? 'text-blue-300' : 'text-slate-500'} text-end`}>{formatDateTime(msg.created_at)}</p>
                 </div>
               </div>
             )
@@ -1219,7 +1243,7 @@ function TicketThread({ ticketId, onBack, isStaff }) {
         <textarea
           value={replyText}
           onChange={e => setReplyText(e.target.value)}
-          placeholder="Reply…"
+          placeholder={t('ticket.replyPlaceholder')}
           rows={2}
           className="flex-1 bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 resize-none placeholder-slate-500"
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(e) } }}
@@ -1238,8 +1262,11 @@ function TicketThread({ ticketId, onBack, isStaff }) {
 
 /* ─── Me Tab ──────────────────────────────────────────────────────── */
 function MeTab({ user, refreshUser }) {
+  const { t } = useTranslation('profile')
+  const { lng, changeLanguage } = useLanguage()
+  const [langSuccess, setLangSuccess] = useState(false)
   const tgInfo = user?.telegram_info || {}
-  const displayName = [tgInfo.first_name, tgInfo.last_name].filter(Boolean).join(' ') || 'Unknown'
+  const displayName = [tgInfo.first_name, tgInfo.last_name].filter(Boolean).join(' ') || t('me.unknown')
   const telegramUsername = tgInfo.username || null
 
   const [editing, setEditing] = useState(false)
@@ -1278,7 +1305,7 @@ function MeTab({ user, refreshUser }) {
 
   const handleSave = async () => {
     const trimmed = input.trim()
-    if (trimmed.length < 2 || trimmed.length > 32) { setSaveError('Must be 2–32 characters'); return }
+    if (trimmed.length < 2 || trimmed.length > 32) { setSaveError(t('me.charLimit')); return }
     setSaving(true); setSaveError(null)
     try {
       await updateNickname(trimmed)
@@ -1286,7 +1313,7 @@ function MeTab({ user, refreshUser }) {
       setSaveSuccess(true)
       setEditing(false)
     } catch (err) {
-      setSaveError(err?.response?.data?.detail || 'Failed to save')
+      setSaveError(err?.response?.data?.detail || t('me.failedSave'))
     } finally { setSaving(false) }
   }
 
@@ -1323,14 +1350,14 @@ function MeTab({ user, refreshUser }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FiUser size={14} className="text-slate-400" />
-            <span className="text-slate-300 text-sm font-medium">Username</span>
+            <span className="text-slate-300 text-sm font-medium">{t('me.username')}</span>
           </div>
           {!editing && (
             <button
               onClick={() => setEditing(true)}
               className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 text-xs font-medium px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 transition-colors"
             >
-              <FiEdit2 size={12} /> Edit
+              <FiEdit2 size={12} /> {t('me.edit')}
             </button>
           )}
         </div>
@@ -1338,9 +1365,9 @@ function MeTab({ user, refreshUser }) {
         {!editing ? (
           <div className="flex items-center gap-2">
             <span className="text-white font-semibold text-sm">
-              {user?.nickname || <span className="text-slate-500 italic">Not set</span>}
+              {user?.nickname || <span className="text-slate-500 italic">{t('me.notSet')}</span>}
             </span>
-            {user?.nickname && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">unique</span>}
+            {user?.nickname && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">{t('me.unique')}</span>}
           </div>
         ) : (
           <div className="space-y-2">
@@ -1349,10 +1376,10 @@ function MeTab({ user, refreshUser }) {
                 type="text"
                 value={input}
                 onChange={e => handleInputChange(e.target.value)}
-                placeholder="Enter username…"
+                placeholder={t('me.placeholder')}
                 minLength={2}
                 maxLength={32}
-                className={`w-full bg-slate-900 border rounded-xl px-3 py-2.5 pr-9 text-white text-sm focus:outline-none transition-colors ${
+                className={`w-full bg-slate-900 border rounded-xl px-3 py-2.5 pe-9 text-white text-sm focus:outline-none transition-colors ${
                   nicknameStatus === 'available' || nicknameStatus === 'same'
                     ? 'border-emerald-500'
                     : nicknameStatus === 'taken'
@@ -1361,7 +1388,7 @@ function MeTab({ user, refreshUser }) {
                 }`}
                 autoFocus
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="absolute end-3 top-1/2 -translate-y-1/2">
                 {nicknameStatus === 'checking' && <FiLoader size={13} className="text-slate-400 animate-spin" />}
                 {nicknameStatus === 'available' && <FiCheck size={13} className="text-emerald-400" />}
                 {nicknameStatus === 'same' && <FiCheck size={13} className="text-emerald-400" />}
@@ -1370,10 +1397,10 @@ function MeTab({ user, refreshUser }) {
             </div>
 
             {nicknameStatus === 'available' && input.trim() !== user?.nickname && (
-              <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> Available</p>
+              <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> {t('me.available')}</p>
             )}
             {nicknameStatus === 'taken' && (
-              <p className="text-rose-400 text-xs flex items-center gap-1"><FiX size={10} /> {availability?.reason || 'Already taken'}</p>
+              <p className="text-rose-400 text-xs flex items-center gap-1"><FiX size={10} /> {availability?.reason || t('me.taken')}</p>
             )}
             {saveError && <p className="text-rose-400 text-xs">{saveError}</p>}
 
@@ -1382,33 +1409,61 @@ function MeTab({ user, refreshUser }) {
                 onClick={() => setEditing(false)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-semibold"
               >
-                Cancel
+                {t('me.cancel')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || nicknameStatus === 'taken' || nicknameStatus === 'checking' || input.trim().length < 2}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-semibold flex items-center justify-center gap-1.5"
               >
-                {saving ? <FiLoader size={13} className="animate-spin" /> : <><FiCheck size={13} /> Save</>}
+                {saving ? <FiLoader size={13} className="animate-spin" /> : <><FiCheck size={13} /> {t('me.save')}</>}
               </button>
             </div>
           </div>
         )}
 
         {saveSuccess && !editing && (
-          <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> Username updated!</p>
+          <p className="text-emerald-400 text-xs flex items-center gap-1"><FiCheck size={10} /> {t('me.updated')}</p>
         )}
 
-        <p className="text-slate-500 text-[10px]">2–32 characters · must be unique across all users</p>
+        <p className="text-slate-500 text-[10px]">{t('me.hint')}</p>
       </div>
 
       {/* Role badge */}
       {user?.role && user.role !== 'user' && (
         <div className="bg-purple-900/30 border border-purple-700/40 rounded-xl px-4 py-2.5 flex items-center gap-2">
           <span className="text-purple-400 text-xs font-semibold capitalize">{user.role}</span>
-          <span className="text-purple-500 text-xs">account</span>
+          <span className="text-purple-500 text-xs">{t('me.account')}</span>
         </div>
       )}
+
+      {/* Language */}
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FiGlobe size={14} className="text-slate-400" />
+            <span className="text-slate-300 text-sm font-medium">{t('me.language')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={lng}
+              onChange={(e) => {
+                changeLanguage(e.target.value)
+                setLangSuccess(true)
+                setTimeout(() => setLangSuccess(false), 2000)
+              }}
+              className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-emerald-500"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName}
+                </option>
+              ))}
+            </select>
+            {langSuccess && <span className="text-emerald-400 text-xs">{t('me.langUpdated')}</span>}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

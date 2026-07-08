@@ -1,1 +1,48 @@
-{}
+{
+  "hero": {
+    "availableTraffic": "Available Traffic",
+    "buyTraffic": "Buy traffic to create configs",
+    "used": "used",
+    "active": "active",
+    "days": "days",
+    "newConfig": "New Config"
+  },
+  "configs": {
+    "title": "Configs",
+    "total": "{{count}} total",
+    "noConfigs": "No configurations yet",
+    "noConfigsDesc": "Create your first config to get started",
+    "createFirst": "Create your first config",
+    "getPlan": "Get a Plan"
+  },
+  "createModal": {
+    "title": "New Config",
+    "name": "Name",
+    "traffic": "Traffic",
+    "duration": "Duration",
+    "creating": "Creating…",
+    "create": "Create",
+    "namePlaceholder": "e.g. myphone",
+    "nameRequired": "Config name is required",
+    "noHyphens": "Config name must not contain hyphens",
+    "trafficPositive": "Traffic must be greater than 0",
+    "insufficientTraffic": "Insufficient traffic balance. You have {{trafficBalance}} GB available.",
+    "durationNonNegative": "Duration must be 0 or more",
+    "failedCreate": "Failed to create config"
+  },
+  "usageHistogram": {
+    "title": "Traffic Overview",
+    "all": "All",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "loadFailed": "Failed to load usage data",
+    "noData": "No data for this period",
+    "peak": "Peak",
+    "average": "Average",
+    "total": "Total"
+  },
+  "errors": {
+    "loadFailed": "Failed to load usage data"
+  }
+}
