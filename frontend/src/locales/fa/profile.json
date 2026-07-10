@@ -2,7 +2,8 @@
   "tabs": {
     "account": "حساب",
     "support": "پشتیبانی",
-    "me": "من"
+    "me": "من",
+    "referral": "دعوت"
   },
   "balance": {
     "wallet": "کیف پول",

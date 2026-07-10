@@ -47,7 +47,7 @@ const TrophyIcon = () => (
   </svg>
 )
 
-export default function Referral() {
+export default function ReferralTab() {
   const { t } = useTranslation('referral')
   const { user, loading, refreshUser } = useApp()
   const { dir } = useLanguage()
@@ -156,7 +156,7 @@ export default function Referral() {
   const hasPending = totalUsd > 0 || totalGb > 0
 
   return (
-    <div className="px-4 py-5 space-y-5">
+    <div className="space-y-4">
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-white">{t('header.title')}</h1>

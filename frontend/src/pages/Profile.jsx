@@ -47,9 +47,11 @@ import {
   FiCheck, FiLoader, FiChevronRight, FiAlertCircle, FiInfo,
   FiPackage, FiTag, FiX, FiUser, FiEdit2, FiSend,
   FiMessageSquare, FiPlus, FiChevronLeft, FiDollarSign, FiDatabase,
-  FiChevronDown, FiExternalLink, FiGlobe,
+  FiChevronDown, FiExternalLink, FiGlobe, FiUsers,
 } from 'react-icons/fi'
 import { formatDate, formatDateTime, formatDateShort } from '../utils/dates'
+
+import ReferralTab from './Referral'
 
 function formatGregorian(ts) {
   if (!ts) return ''
@@ -130,12 +132,12 @@ const SQ_ROW_H = MAX_SIDE + 28
 const DEPOSIT_PRESETS = [5, 10, 20, 50]
 
 /* ─── Top Tab Bar ─────────────────────────────────────────────────── */
-function TopTabs({ active, onChange, loanBadge, ticketBadge }) {
+function TopTabs({ active, onChange, loanBadge }) {
   const { t } = useTranslation('profile')
   const tabs = [
-    { id: 'account', icon: FiDollarSign, label: t('tabs.account') },
-    { id: 'support', icon: FiMessageSquare, label: t('tabs.support'), badge: ticketBadge },
-    { id: 'me',      icon: FiUser,         label: t('tabs.me') },
+    { id: 'account',  icon: FiDollarSign, label: t('tabs.account') },
+    { id: 'me',       icon: FiUser,        label: t('tabs.me') },
+    { id: 'referral', icon: FiUsers,       label: t('tabs.referral') },
   ]
   return (
     <div className="flex gap-1 bg-slate-800/80 border border-slate-700 rounded-2xl p-1">
@@ -1265,9 +1267,6 @@ function MeTab({ user, refreshUser }) {
   const { t } = useTranslation('profile')
   const { lng, changeLanguage } = useLanguage()
   const [langSuccess, setLangSuccess] = useState(false)
-  const tgInfo = user?.telegram_info || {}
-  const displayName = [tgInfo.first_name, tgInfo.last_name].filter(Boolean).join(' ') || t('me.unknown')
-  const telegramUsername = tgInfo.username || null
 
   const [editing, setEditing] = useState(false)
   const [input, setInput] = useState(user?.nickname || '')
@@ -1329,22 +1328,6 @@ function MeTab({ user, refreshUser }) {
 
   return (
     <div className="space-y-4">
-      {/* User card */}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 flex items-center gap-3.5">
-        {tgInfo.photo_url ? (
-          <img src={tgInfo.photo_url} alt="" className="w-14 h-14 rounded-2xl object-cover flex-shrink-0 ring-2 ring-slate-700" />
-        ) : (
-          <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl flex items-center justify-center flex-shrink-0 text-xl font-bold text-white">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-base leading-tight truncate">{displayName}</p>
-          {telegramUsername && <p className="text-slate-400 text-xs mt-0.5">@{telegramUsername}</p>}
-          <p className="text-slate-500 text-[10px] mt-1">ID: {user?.telegram_id}</p>
-        </div>
-      </div>
-
       {/* Username / nickname */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -1429,14 +1412,6 @@ function MeTab({ user, refreshUser }) {
         <p className="text-slate-500 text-[10px]">{t('me.hint')}</p>
       </div>
 
-      {/* Role badge */}
-      {user?.role && user.role !== 'user' && (
-        <div className="bg-purple-900/30 border border-purple-700/40 rounded-xl px-4 py-2.5 flex items-center gap-2">
-          <span className="text-purple-400 text-xs font-semibold capitalize">{user.role}</span>
-          <span className="text-purple-500 text-xs">{t('me.account')}</span>
-        </div>
-      )}
-
       {/* Language */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4">
         <div className="flex items-center justify-between">
@@ -1479,12 +1454,12 @@ export default function Profile() {
   // Handle incoming navigation state
   useEffect(() => {
     if (location.state?.createWithdrawal) {
-      setActiveTab('support')
+      setActiveTab('me')
       setWithdrawCategory('withdrawal')
       // Clear the state so it doesn't re-trigger
       navigate(location.pathname, { replace: true, state: {} })
     } else if (location.state?.tab) {
-      setActiveTab(location.state.tab)
+      setActiveTab(location.state.tab === 'support' ? 'me' : location.state.tab)
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location.state, navigate, location.pathname])
@@ -1493,7 +1468,7 @@ export default function Profile() {
 
   return (
     <div className="px-4 py-4 space-y-4 pb-24">
-      <TopTabs active={activeTab} onChange={setActiveTab} loanBadge={false} ticketBadge={false} />
+      <TopTabs active={activeTab} onChange={setActiveTab} loanBadge={false} />
 
       {activeTab === 'account' && (
         <AccountTab
@@ -1502,20 +1477,23 @@ export default function Profile() {
           loading={loading}
           refreshUser={refreshUser}
           renewState={null}
-          onWithdrawTicket={() => { setActiveTab('support'); setWithdrawCategory('withdrawal') }}
-        />
-      )}
-
-      {activeTab === 'support' && (
-        <SupportTab
-          user={user}
-          initialCategory={withdrawCategory}
-          clearInitialCategory={clearWithdrawCategory}
+          onWithdrawTicket={() => { setActiveTab('me'); setWithdrawCategory('withdrawal') }}
         />
       )}
 
       {activeTab === 'me' && (
-        <MeTab user={user} refreshUser={refreshUser} />
+        <>
+          <MeTab user={user} refreshUser={refreshUser} />
+          <SupportTab
+            user={user}
+            initialCategory={withdrawCategory}
+            clearInitialCategory={clearWithdrawCategory}
+          />
+        </>
+      )}
+
+      {activeTab === 'referral' && (
+        <ReferralTab />
       )}
     </div>
   )

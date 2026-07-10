@@ -6,7 +6,6 @@ import { LanguageProvider, useLanguage } from './context/LanguageContext'
 import BottomNav from './components/BottomNav'
 import Dashboard from './pages/Dashboard'
 import Store from './pages/Store'
-import Referral from './pages/Referral'
 import Profile from './pages/Profile'
 import Admin from './pages/Admin'
 import api, { updateMyLanguage } from './api/client'
@@ -130,9 +129,9 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/store" element={<Store />} />
-            <Route path="/referral" element={<Referral />} />
+            <Route path="/referral" element={<Navigate to="/profile" replace state={{ tab: 'referral' }} />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/support" element={<Navigate to="/profile" replace state={{ tab: 'support' }} />} />
+            <Route path="/support" element={<Navigate to="/profile" replace state={{ tab: 'me' }} />} />
             {user?.role?.toLowerCase() === 'admin' && <Route path="/admin" element={<Admin />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

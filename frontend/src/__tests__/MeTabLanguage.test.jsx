@@ -17,6 +17,11 @@ vi.mock('../api/client', () => ({
   checkNickname: () => Promise.resolve({ available: true }),
   updateNickname: () => Promise.resolve(),
   getLinks: () => Promise.resolve([]),
+  getMyTickets: () => Promise.resolve([]),
+  getTicket: () => Promise.resolve({ messages: [] }),
+  replyTicket: () => Promise.resolve(),
+  createTicket: () => Promise.resolve({}),
+  updateTicketStatus: () => Promise.resolve(),
 }))
 
 const mockNavigate = vi.fn()

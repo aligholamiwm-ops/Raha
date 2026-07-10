@@ -2,7 +2,8 @@
   "tabs": {
     "account": "Account",
     "support": "Support",
-    "me": "Me"
+    "me": "Me",
+    "referral": "Referral"
   },
   "balance": {
     "wallet": "Wallet",
