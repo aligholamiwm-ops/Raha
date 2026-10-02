@@ -6,7 +6,7 @@ import {
   FiLoader, FiClock, FiZap, FiKey, FiMinus, FiPlus
 } from 'react-icons/fi'
 import { MdQrCode } from 'react-icons/md'
-import { toggleConfig, regenerateConfigKey, deleteConfig, editConfig } from '../api/client'
+import { toggleConfig, regenerateConfigKey, deleteConfig, editConfig, getSubscriptionLink } from '../api/client'
 import { useApp } from '../context/AppContext'
 import { TrafficField, DurationField } from './NumberFields'
 import QRModal from './QRModal'
@@ -101,12 +101,23 @@ export default function ConfigCard({ config, onUpdate, onCharge, onRefresh }) {
   }
 
   const handleCopyLink = async () => {
-    if (config.subscription_link) {
+    let link = ''
+    try {
+      const data = await getSubscriptionLink(config.email)
+      link = data?.subscription_link || ''
+    } catch (err) {
+      console.error(err)
+    }
+    if (!link) link = config.subscription_link || ''
+    if (link) {
+      setConfigs(prev => prev.map(c =>
+        c.uuid === config.uuid ? { ...c, subscription_link: link } : c
+      ))
       try {
-        await navigator.clipboard.writeText(config.subscription_link)
+        await navigator.clipboard.writeText(link)
       } catch {
         const ta = document.createElement('textarea')
-        ta.value = config.subscription_link
+        ta.value = link
         document.body.appendChild(ta)
         ta.select()
         document.execCommand('copy')

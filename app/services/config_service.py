@@ -544,6 +544,21 @@ class ConfigService:
                 )
         return response
 
+    async def get_subscription_link(
+        self, email: str, telegram_id: int, role: str
+    ) -> str:
+        tid = _parse_telegram_id_from_email(email)
+        if tid != telegram_id and role != "admin":
+            raise PermissionError("Access denied")
+        client, server = await self.find_client_by_email(email)
+        if not client or not server:
+            raise ValueError("Config not found")
+        sub_id = client.get("subId", "")
+        if not sub_id:
+            return ""
+        xui = build_xui_client(server)
+        return await xui.build_subscription_link(sub_id)
+
     async def regenerate_key(
         self, email: str, telegram_id: int, role: str
     ) -> VpnConfigResponse:

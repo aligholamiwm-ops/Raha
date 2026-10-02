@@ -148,6 +148,27 @@ async def edit_config(
     return result
 
 
+@router.get("/{email}/subscription-link")
+async def get_subscription_link(
+    email: str,
+    current_user: UserModel = Depends(get_current_user),
+    service: ConfigService = Depends(_get_config_service),
+) -> dict:
+    try:
+        link = await service.get_subscription_link(
+            email=email,
+            telegram_id=current_user.telegram_id,
+            role=current_user.role,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Access denied")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Config not found")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"subscription_link": link}
+
+
 @router.post("/{email}/regenerate-key", response_model=VpnConfigResponse)
 async def regenerate_key(
     email: str,

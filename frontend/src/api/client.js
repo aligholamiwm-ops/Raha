@@ -39,6 +39,7 @@ export const getVlessUri = (uuid, isp_name = 'default') =>
 export const createConfig = (data) => api.post('/api/v1/configs/create', data).then((r) => r.data)
 export const toggleConfig = (email) => api.put(`/api/v1/configs/${encodeURIComponent(email)}/toggle`).then((r) => r.data)
 export const editConfig = (email, data) => api.put(`/api/v1/configs/${encodeURIComponent(email)}/edit`, data).then((r) => r.data)
+export const getSubscriptionLink = (email) => api.get(`/api/v1/configs/${encodeURIComponent(email)}/subscription-link`).then((r) => r.data)
 export const regenerateConfigKey = (email) => api.post(`/api/v1/configs/${encodeURIComponent(email)}/regenerate-key`).then((r) => r.data)
 export const deleteConfig = (email) => api.delete(`/api/v1/configs/${encodeURIComponent(email)}`).then((r) => r.data)
 export const getPlans = () => api.get('/api/v1/plans/').then((r) => r.data)
